@@ -874,6 +874,28 @@ local function traits()
             end
         end
         say(string.format("  %d nodes", n))
+        if P.traitNodes then
+            -- Every node: position, ranks, and its talent's name, sorted by x then y,
+            -- so the three Vanilla trees show up as column ranges.
+            local rows = {}
+            for _, nodeID in ipairs(nodes) do
+                local okI, node = pcall(C_Traits.GetNodeInfo, configID, nodeID)
+                if okI and node and node.ID and node.ID ~= 0 then
+                    local name = "?"
+                    local entry = node.entryIDs and node.entryIDs[1]
+                    local okE, e = pcall(C_Traits.GetEntryInfo, configID, entry or 0)
+                    if okE and e and e.definitionID then
+                        local okD, d = pcall(C_Traits.GetDefinitionInfo, e.definitionID)
+                        if okD and d then name = d.overrideName or (d.spellID and spellName(d.spellID)) or ("spell " .. show(d.spellID)) end
+                    end
+                    rows[#rows + 1] = { x = tonumber(node.posX) or 0, y = tonumber(node.posY) or 0,
+                        text = string.format("   x=%s y=%s rank=%s/%s %s", show(node.posX), show(node.posY),
+                            show(node.currentRank), show(node.maxRanks), name) }
+                end
+            end
+            table.sort(rows, function(r1, r2) if r1.x ~= r2.x then return r1.x < r2.x end return r1.y < r2.y end)
+            for _, r in ipairs(rows) do say(r.text) end
+        end
         for key, g in pairs(bySub) do
             local sub = key:match("^(%d+)/")
             local name = ""
@@ -996,7 +1018,7 @@ local HELP = {
     "hide - hide Blizzard's compact party/raid frames by reparenting",
     "fps - 5 s frame-time sample",
     "spec - what the spec/talent APIs return (role source for per-role settings)",
-    "traits - how the talent trees are laid out in the trait system (points per tree)",
+    "traits [nodes] - how the talent trees are laid out in the trait system (nodes: every talent)",
     "selfcast [none|alt] - show the self-cast modifier; none/alt changes it (a global setting)",
     "mocast [on|off] - the client's mouseover cast: support and CVars",
     "hoverkeys - toggle: hovering a tile binds key 8 to cast the test spell on it",
@@ -1031,7 +1053,7 @@ SlashCmdList.RAIDPROBE = function(msg)
     elseif cmd == "fps" then fps()
     elseif cmd == "selfcast" then selfCast(arg)
     elseif cmd == "spec" then spec()
-    elseif cmd == "traits" then traits()
+    elseif cmd == "traits" then P.traitNodes = arg == "nodes"; traits()
     elseif cmd == "mocast" then mouseoverCast(arg)
     elseif cmd == "hoverkeys" then hoverKeys()
     elseif cmd == "permkey" then permKey(arg)
