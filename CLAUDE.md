@@ -212,6 +212,12 @@ pwsh Tools\deploy.ps1 -Probe                                         # copy the 
   order is the load order.
 - Consumers reach client APIs through `GRF.API`, never by injecting globals into `_G`. Read the
   porting guide's "False friends" section before aliasing anything.
+- **IDs, never names (owner rule: support localized clients).** Spells, talents, cures and
+  auras are identified and stored by ID. Never compare against, or save, an English display
+  name. A name the client needs (a `/cast` line in a macro) is resolved at runtime from the ID
+  with `C_Spell.GetSpellName` (rank text with `C_Spell.GetSpellSubtext`), so it's always the
+  client's own localized string. Unit tokens, role tokens (`HEALER`), dispel-type keys
+  (`Magic`) and texture/atlas paths are API values, not display text, and are fine.
 - Keep a `_test` seam table at the bottom of a file to expose file-local internals to tests.
   Don't promote internals to globals.
 
