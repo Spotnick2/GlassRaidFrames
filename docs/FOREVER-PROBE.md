@@ -146,7 +146,21 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
   - The header's own restricted-free update code runs in combat, and our insecure
     `OnAttributeChanged` on its children fires in combat too.
   - Re-created after `/reload`, it spawned `raid1`/`raid2` again.
-- **Still open for the header** (the probe now tests all three):
+- **Third run: the header passes the full lifecycle.**
+  - All 40 children were precreated out of combat (`startingIndex = -39`, `Show`, then back to
+    `1`), each with its own debuff-row `AuraContainer`.
+  - In combat: the partner left (1 shown), rejoined (`party1`, 2 shown), and the group was
+    **converted party→raid** (`raid1`, `raid2`), all live.
+  - **`container:SetUnit(newUnit)` + `UpdateAllAuras()` succeeded in combat on every
+    reassignment.**
+  - No blocked actions.
+- **Decision: `SecureGroupHeaderTemplate`**, with no `initialConfigFunction`, the child
+  template in XML, and all 40 children precreated out of combat. Unlike manual buttons, it
+  keeps sorting and grouping in combat. Its aura containers follow each child's unit through
+  `OnAttributeChanged`.
+- Clicks on header children are still unlogged. Retest with the next run; clicks on manual
+  `SecureUnitButtonTemplate` tiles are already proven.
+- **Was open for the header** (resolved by the third run, except clicks):
   1. Children must be **precreated** out of combat (Cell's `startingIndex = -39` trick) so all
      40 exist before combat and can be configured.
   2. A child's unit changes in combat, so its **aura containers must follow with `SetUnit` in

@@ -407,6 +407,9 @@ function RaidProbe_HeaderChildAttribute(self, name, value)
             self.label:SetText(tostring(value))
         end
     end
+    -- Only log real changes: every roster update rewrites all 40 children.
+    if value == self.rpUnit then return end
+    self.rpUnit = value
     say("header child unit -> " .. show(value))
     -- A header moves tokens between its children, in combat too, so a child's
     -- aura container must follow: does SetUnit work on a secure child in combat?

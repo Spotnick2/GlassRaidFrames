@@ -54,7 +54,7 @@ The owner uses Cell today; this replaces it.
 ### Milestone 1: glass party and raid frames (issue #2)
 Files, in TOC order: `Compat.lua` → `Glass.lua` → `Engine.lua` → `Roster.lua` → `Frames.lua` → `Auras.lua` → `Blizzard.lua` → `Movers.lua` → `GlassRaidFrames.lua` → `Options.lua`.
 
-- **`Roster.lua`**: manual buttons, the DinoUF approach, unless the probe proves the header works.
+- **`Roster.lua`**: **`SecureGroupHeaderTemplate`** (decided by probe item 1, 2026-09-28: it follows joins, leaves and party→raid conversion in combat, and child aura containers can `SetUnit` in combat). No `initialConfigFunction`: the child template is XML, and all 40 children are precreated out of combat (`startingIndex = -39`), then configured (glass, bindings, containers). Header attributes (filters, sort, layout) change only out of combat. The manual-button notes below apply only as the fallback.
   - There are 5 party buttons (`player`, `party1-4`) and 40 raid buttons (`raid1-40`), pre-created at `ADDON_LOADED`.
   - On `GROUP_ROSTER_UPDATE` it works out the mode (solo/party/raid). It lays out raid buttons in 8 group columns by `GetRaidRosterInfo` subgroup, with sorting by index and optionally by role.
   - It applies visibility and anchors **only out of combat**, through the single `WhenOutOfCombat` queue (copied from `GlassUnitFrames.lua`).
