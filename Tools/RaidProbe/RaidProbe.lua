@@ -755,7 +755,7 @@ end
 -- c. A permanent binding: key "9" -> a hidden secure action button whose
 -- macro casts on the mouseover unit, rank-qualified if the client allows.
 local PERM_KEY = "9"
-local function permKey()
+local function permKey(arg)
     if InCombatLockdown() then say("out of combat only") return end
     if P.perm then
         ClearOverrideBindings(P.perm)
@@ -769,10 +769,14 @@ local function permKey()
     local b = CreateFrame("Button", "RaidProbeMouseoverKey", UIParent, "SecureActionButtonTemplate")
     b:RegisterForClicks("AnyUp", "AnyDown")   -- both edges: the template acts on one (measured)
     b:SetAttribute("type", "macro")
-    b:SetAttribute("macrotext", "/cast [@mouseover,help,nodead] " .. name)
+    -- "fallback": without a friendly mouseover, the key does what action
+    -- button 9 would (the dedicated-key mode should not eat the key).
+    local text = "/cast [@mouseover,help,nodead] " .. name
+    if arg == "fallback" then text = text .. "\n/click [nomouseover][@mouseover,harm][@mouseover,dead] ActionButton9" end
+    b:SetAttribute("macrotext", text)
     b:SetScript("PostClick", function() say("perm key " .. PERM_KEY .. " clicked (mouseover=" .. show(UnitExists("mouseover")) .. ")") end)
     local ok, err = pcall(SetOverrideBindingClick, b, true, PERM_KEY, b:GetName())
-    say("permanent key " .. PERM_KEY .. " -> /cast [@mouseover,help,nodead] " .. name .. ": " .. (ok and "ok" or tostring(err)))
+    say("permanent key " .. PERM_KEY .. " -> " .. (text:gsub("\n", " | ")) .. ": " .. (ok and "ok" or tostring(err)))
     P.perm = b
 end
 
@@ -882,7 +886,7 @@ local HELP = {
     "selfcast [none|alt] - show the self-cast modifier; none/alt changes it (a global setting)",
     "mocast [on|off] - the client's mouseover cast: support and CVars",
     "hoverkeys - toggle: hovering a tile binds key 8 to cast the test spell on it",
-    "permkey - toggle: key 9 always casts the test spell on @mouseover",
+    "permkey [fallback] - toggle: key 9 casts the test spell on @mouseover (fallback: else action button 9)",
     "enums - dump the enums the dispel box relies on",
     "log clear - empty RaidProbeDB.log",
 }
@@ -914,7 +918,7 @@ SlashCmdList.RAIDPROBE = function(msg)
     elseif cmd == "selfcast" then selfCast(arg)
     elseif cmd == "mocast" then mouseoverCast(arg)
     elseif cmd == "hoverkeys" then hoverKeys()
-    elseif cmd == "permkey" then permKey()
+    elseif cmd == "permkey" then permKey(arg)
     elseif cmd == "enums" then
         enumKeys("Enum.CustomAuraButtonDispelTypeTextureStyle", Enum.CustomAuraButtonDispelTypeTextureStyle)
         enumKeys("Enum.UnitAuraSoundTrigger", Enum.UnitAuraSoundTrigger)

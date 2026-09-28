@@ -119,6 +119,24 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
 
 ## Results
 
+### 8. Keyboard hover-casting (1.60.1.70009, 2026-09-28, priest, header children)
+- **The client's mouseover cast works on our frames, in combat.** `IsMouseoverCastSupported()` is
+  true. After `C_CVar.SetCVar("enableMouseoverCast", "1")`, Lesser Heal on an action-bar key,
+  pressed while hovering the partner's header child, cast on the partner out of combat and in
+  combat. There is no `mouseoverCastModifier` CVar (`GetCVar` threw), so no modifier gates it.
+- **A permanent override binding works in combat.** Key 9 → a hidden `SecureActionButtonTemplate`
+  (both edges registered; PostClick fires twice, one cast) with `macro /cast
+  [@mouseover,help,nodead] Lesser Heal` cast on the hovered partner, out of combat and in
+  combat. `SetOverrideBindingClick` was set out of combat.
+- Hover bindings (`OnEnter` → `SetOverrideBindingClick`) went untested: the probe hooked only
+  the manual tiles. They were expected to be refused in combat, and two routes already work,
+  so this is dropped.
+- **Owner's decision: both.** Mouseover cast is the default, with a checkbox for the CVar.
+  Optional dedicated keys use the permanent-binding route. Still to measure: what a dedicated
+  key does with **no** friendly mouseover, and whether a
+  `/click [nomouseover][@mouseover,harm][@mouseover,dead] ActionButton<n>` fallback line keeps
+  the key's action-bar action (`/rprobe permkey fallback`).
+
 ### 2. Click-cast attributes (1.60.1.70009, 2026-09-28, priest, header children)
 - **All five forms cast out of combat** on a header child: Lesser Heal (2050), logged
   `cast sent … spell=2050`, then `succeeded`.
