@@ -140,6 +140,11 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
     combat), so `/click ActionButtonN` works from a secure macro.
   - Hovering **nothing** did nothing, because `nomouseover` isn't a valid macro condition.
   - Retest with `[@mouseover,noexists]`.
+- **Fallback works.** The macro was `/cast [@mouseover,help,nodead] <spell>` then
+  `/click [@mouseover,noexists][@mouseover,harm][@mouseover,dead] ActionButton9`. With nothing
+  hovered, key 9 fired action button 9 (Smite on the target). A friendly frame gets the heal;
+  an enemy or nothing gets the key's own action. **A dedicated key never swallows the key.**
+  **Item 8 is complete.**
 - **Owner's decision: both.** Mouseover cast is the default, with a checkbox for the CVar.
   Optional dedicated keys use the permanent-binding route. Still to measure: what a dedicated
   key does with **no** friendly mouseover, and whether a
