@@ -119,6 +119,23 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
 
 ## Results
 
+### 2. Click-cast attributes (1.60.1.70009, 2026-09-28, priest, header children)
+- **All five forms cast out of combat** on a header child: Lesser Heal (2050), logged
+  `cast sent … spell=2050`, then `succeeded`.
+  - `shift-type1=spell` with `shift-spell1="Lesser Heal"` (name);
+  - `ctrl-spell1=2050` (numeric ID);
+  - `alt-spell1="Lesser Heal(Rank 1)"` (rank-qualified);
+  - `shift-type2=macro` with `/cast [@mouseover,help,nodead] Lesser Heal`;
+  - `*type3`/`*spell3` (wildcard).
+
+  Modifier-prefixed attributes resolve independently per button, and the `unit` attribute the
+  header set is used as the target.
+- **Still open:**
+  - the same clicks **in combat**;
+  - the fallback after clearing `shift-type1`;
+  - **downranking**, which needs a character with two ranks. Only rank 1 was known, so the ID
+    and `Name(Rank 1)` forms were accepted but didn't prove they choose a lower rank.
+
 ### 1. Group buttons (1.60.1.70009, 2026-09-28, party of 2, converted to a raid of 2)
 - **Manual buttons work, in and out of combat.** 45 `SecureUnitButtonTemplate` tiles with
   `RegisterUnitWatch` on `player`/`party1-4`/`raid1-40`, built out of combat, in 164 ms with
