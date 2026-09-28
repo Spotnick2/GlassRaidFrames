@@ -640,6 +640,87 @@ local function fps()
 end
 
 --------------------------------------------------------------------------------
+-- Keyboard hover-casting (probe item 8). The owner's Cell setup casts with
+-- keys 1-8 and shift-R while hovering a frame. Cell does that with restricted
+-- snippets (broken here), so three other routes are measured:
+--   a. the client's own mouseover cast (Retail's enableMouseoverCast CVar):
+--      action-bar keys cast on the hovered unit, frames included;
+--   b. an insecure OnEnter/OnLeave setting override bindings on the hovered
+--      tile (SetOverrideBindingClick is expected to be refused in combat);
+--   c. a permanent override binding to one hidden secure button whose macro
+--      casts on @mouseover (works in combat, but owns the key everywhere).
+--------------------------------------------------------------------------------
+
+local function cvar(name)
+    local ok, v = pcall(C_CVar.GetCVar, name)
+    return ok and v or "ERR"
+end
+
+local function mouseoverCast(arg)
+    local ok, supported = pcall(IsMouseoverCastSupported)
+    say("IsMouseoverCastSupported: ok=" .. show(ok) .. " " .. show(supported)
+        .. "  enableMouseoverCast=" .. show(cvar("enableMouseoverCast"))
+        .. " mouseoverCastModifier=" .. show(cvar("mouseoverCastModifier")))
+    if arg == "on" or arg == "off" then
+        local okS, err = pcall(C_CVar.SetCVar, "enableMouseoverCast", arg == "on" and "1" or "0")
+        say("SetCVar enableMouseoverCast " .. arg .. ": " .. (okS and "ok" or tostring(err))
+            .. " -> " .. show(cvar("enableMouseoverCast")))
+        say("now hover a tile and press an action-bar key with a helpful spell, in and out of combat")
+    end
+end
+
+-- b. Hover bindings: key "8" -> click the hovered tile as virtual button "key8".
+local HOVER_KEY = "8"
+local function hoverKeys()
+    if InCombatLockdown() then say("out of combat only") return end
+    P.hover = not P.hover
+    local name = spellName(testSpell() or 0)
+    for _, t in ipairs(order) do
+        t:SetAttribute("type-key8", name and "spell" or nil)
+        t:SetAttribute("spell-key8", name)
+        if not t.hoverHooked then
+            t:HookScript("OnEnter", function(self)
+                if not P.hover then return end
+                local okB, err = pcall(SetOverrideBindingClick, self, true, HOVER_KEY, self:GetName(), "key8")
+                say("OnEnter bind " .. HOVER_KEY .. " -> " .. self.unit .. ": " .. (okB and "ok" or tostring(err)))
+            end)
+            t:HookScript("OnLeave", function(self)
+                if not P.hover then return end
+                local okC, err = pcall(ClearOverrideBindings, self)
+                if not okC then say("OnLeave clear: " .. tostring(err)) end
+            end)
+            t.hoverHooked = true
+        end
+    end
+    say("hover keys " .. (P.hover and "on" or "off") .. ": hover a tile and press " .. HOVER_KEY
+        .. " (casts " .. show(name) .. "), out of combat, then in combat")
+end
+
+-- c. A permanent binding: key "9" -> a hidden secure action button whose
+-- macro casts on the mouseover unit, rank-qualified if the client allows.
+local PERM_KEY = "9"
+local function permKey()
+    if InCombatLockdown() then say("out of combat only") return end
+    if P.perm then
+        ClearOverrideBindings(P.perm)
+        P.perm = nil
+        say("permanent key " .. PERM_KEY .. " released")
+        return
+    end
+    local id = testSpell()
+    local name = id and spellName(id)
+    if not name then say("no test spell: /rprobe spell <id>") return end
+    local b = CreateFrame("Button", "RaidProbeMouseoverKey", UIParent, "SecureActionButtonTemplate")
+    b:RegisterForClicks("AnyUp", "AnyDown")   -- both edges: the template acts on one (measured)
+    b:SetAttribute("type", "macro")
+    b:SetAttribute("macrotext", "/cast [@mouseover,help,nodead] " .. name)
+    b:SetScript("PostClick", function() say("perm key " .. PERM_KEY .. " clicked (mouseover=" .. show(UnitExists("mouseover")) .. ")") end)
+    local ok, err = pcall(SetOverrideBindingClick, b, true, PERM_KEY, b:GetName())
+    say("permanent key " .. PERM_KEY .. " -> /cast [@mouseover,help,nodead] " .. name .. ": " .. (ok and "ok" or tostring(err)))
+    P.perm = b
+end
+
+--------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
 
@@ -724,6 +805,9 @@ local HELP = {
     "aurasound [spellID|clear] - try C_UnitAuras.AddAuraSound shapes on every group unit",
     "hide - hide Blizzard's compact party/raid frames by reparenting",
     "fps - 5 s frame-time sample",
+    "mocast [on|off] - the client's mouseover cast: support and CVars",
+    "hoverkeys - toggle: hovering a tile binds key 8 to cast the test spell on it",
+    "permkey - toggle: key 9 always casts the test spell on @mouseover",
     "enums - dump the enums the dispel box relies on",
     "log clear - empty RaidProbeDB.log",
 }
@@ -750,6 +834,9 @@ SlashCmdList.RAIDPROBE = function(msg)
     elseif cmd == "aurasound" then auraSound(arg)
     elseif cmd == "hide" then hide()
     elseif cmd == "fps" then fps()
+    elseif cmd == "mocast" then mouseoverCast(arg)
+    elseif cmd == "hoverkeys" then hoverKeys()
+    elseif cmd == "permkey" then permKey()
     elseif cmd == "enums" then
         enumKeys("Enum.CustomAuraButtonDispelTypeTextureStyle", Enum.CustomAuraButtonDispelTypeTextureStyle)
         enumKeys("Enum.UnitAuraSoundTrigger", Enum.UnitAuraSoundTrigger)

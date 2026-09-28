@@ -86,7 +86,7 @@ Files, in TOC order: `Compat.lua` → `Glass.lua` → `Engine.lua` → `Roster.l
   - It re-resolves on `SPELLS_CHANGED`.
   - It is applied to all 45 buttons out of combat, clearing old keys first (Cell's `ClearClickCastings` idea).
   - Defaults: `type1=target`, `type2=togglemenu`.
-- **Out of scope (explained to the owner):** mouse-wheel and keyboard bindings. Cell does those with restricted snippets plus `SetBindingClick`, and override bindings are protected in combat.
+- **Keyboard hover-casting is back in scope** (revised 2026-09-28): the owner's Cell data shows keys 1-8 and Shift-R while hovering are the main healing binds, with pinned ranks. The route (client mouseover cast, hover override bindings, or a permanent `@mouseover` binding) is picked by probe item 8. Mouse-wheel bindings stay out. Rank pinning ("Holy Light rank 7") is required, so probe item 2's rank forms decide how a binding stores a rank.
 - **Options**: a "Click-casting" page in a canvas panel, built GlassUF `Options.lua` style.
   - A binding row list and an "add binding" capture button. It captures the pressed mouse button and modifiers, and refuses duplicates.
   - A type picker using radio buttons (no `UIDropDownMenu`, per sibling rule).

@@ -87,6 +87,30 @@ left, blue for right, yellow for middle.
       Do they stay hidden?
 - [ ] Open and close Edit Mode: do they come back?
 
+### 8. Keyboard hover-casting (gates `ClickCast.lua` scope)
+The owner's Cell setup (Anniversary SavedVariables) casts mostly with **keys while hovering a
+frame**, not mouse clicks:
+- Paladin: 1 Holy Shock, 2 Flash of Light, 3/4/5 Holy Light ranks 7/9/max.
+- Priest: 1–8 including Greater Heal rank 2, Renew and Prayer of Healing.
+- Shaman: 1–4.
+- Resurrection on Shift-R (Alt-R on the druid).
+
+Ranks are pinned (`"635:7"`). Cell does hover keys with restricted snippets, which are broken
+here, so three other routes get measured, each out of and **in** combat. Use a helpful test
+spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
+- [ ] `/rprobe mocast`: is `IsMouseoverCastSupported()` true? Then `/rprobe mocast on`, put a
+      heal on an action-bar key, hover a probe tile and press the key. Does it cast on the
+      hovered member, in combat? What does `mouseoverCastModifier` do? This is the client's own
+      feature, so if it works it needs no binding code at all.
+- [ ] `/rprobe hoverkeys`: hover a tile and press **8**. Does the `OnEnter bind` line say `ok`
+      out of combat, and is it refused in combat (expected)?
+- [ ] `/rprobe permkey`: key **9** always runs `/cast [@mouseover,help,nodead] <spell>` from a
+      hidden secure button. Does it cast on a hovered tile in combat? What happens when you
+      press 9 while hovering nothing? `/rprobe permkey` again releases it.
+- **Decision:** keyboard hover-casting is back in scope for milestone 2, through whichever
+  route works in combat. With route (c), the addon owns the key only while you are in a group,
+  and the options have to say so.
+
 ### 7. Scale (gates the tile budget)
 - [ ] The `built … in … ms` line after `/rprobe build`.
 - [ ] `/rprobe fps` in a raid, out of combat and in combat, with debuffs going on and off.

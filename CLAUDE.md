@@ -22,8 +22,10 @@ a new idiom.
   mouse button that cures it. Clicking the box casts the cure, and a sound plays when there is
   something to dispel.
 - **Streamlined.** No Cell module zoo, layouts/profiles tree, Spotlight/NPC/Pet frames,
-  import/export or raid-debuff database. Mouse-wheel and keyboard click-casting are out: Cell
-  does them with restricted snippets, and those are broken here.
+  import/export or raid-debuff database. Mouse-wheel bindings are out.
+- **Keyboard hover-casting is in.** Keys pressed while hovering a frame are the owner's main
+  healing binds (keys 1–8, Shift-R to resurrect, pinned spell ranks, from their Cell data).
+  Cell does it with restricted snippets, which are broken here; probe item 8 picks the route.
 
 **Status: milestone 0 (scaffold and probe).** The approved plan has four milestones:
 1. Scaffold and probe.
