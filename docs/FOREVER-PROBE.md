@@ -23,7 +23,7 @@ your side so real cures exist. A training dummy or a low mob works for combat.
 ## Checklist
 
 ### 1. Group buttons: manual vs header (gates `Roster.lua`)
-- [ ] `/rprobe build` out of combat: 45 tiles appear, the player's tile shows, and the rest
+- [x] `/rprobe build` out of combat: 45 tiles appear, the player's tile shows, and the rest
       follow the roster.
 - [ ] Join and leave a party, out of combat and **in combat**. Check the `roster:` lines: the
       right tiles are shown, names are correct, and there is no `ADDON_ACTION_BLOCKED`.
@@ -158,8 +158,8 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
   template in XML, and all 40 children precreated out of combat. Unlike manual buttons, it
   keeps sorting and grouping in combat. Its aura containers follow each child's unit through
   `OnAttributeChanged`.
-- Clicks on header children are still unlogged. Retest with the next run; clicks on manual
-  `SecureUnitButtonTemplate` tiles are already proven.
+- Clicks on header children work: left-click `raid1` → `target`, right-click `raid2` →
+  `togglemenu` (fourth run). **Item 1 is complete.**
 - **Was open for the header** (resolved by the third run, except clicks):
   1. Children must be **precreated** out of combat (Cell's `startingIndex = -39` trick) so all
      40 exist before combat and can be configured.
