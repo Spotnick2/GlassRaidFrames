@@ -118,4 +118,24 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
 
 ## Results
 
-_Not measured yet._
+### 1. Group buttons (1.60.1.70009, 2026-09-28, party of 2, converted to a raid of 2)
+- **Manual buttons work, in and out of combat.** 45 `SecureUnitButtonTemplate` tiles with
+  `RegisterUnitWatch` on `player`/`party1-4`/`raid1-40`, built out of combat, in 164 ms with
+  glass.
+  - A member leaving **in combat**: the unit watch hid `party1` (`C roster: … shown tiles:
+    player`).
+  - Joining out of combat: `party1` showed. Party→raid: `raid1`, `raid2` showed. Raid→party:
+    they hid.
+  - In a raid in combat, the right tiles stayed shown.
+  - **No `ADDON_ACTION_BLOCKED`/`FORBIDDEN` anywhere.**
+- As designed, the probe never hides the party set in a raid. In a raid both sets showed
+  (`player,party1,raid1,raid2`), which confirms that party tokens stay valid in a raid. The
+  roster code has to unwatch the party set out of combat.
+- Right-click on a tile opened the menu (`togglemenu`). The one `-> nil` was a right-click on
+  the corner box, which has no second cure on that character. That's correct.
+- **`SecureGroupHeaderTemplate` spawns children without `initialConfigFunction`**, created out
+  of combat in a raid of 2: `child1 = raid1`, `child2 = raid2`, both shown, sized by the XML
+  template.
+- **Still unmeasured for the header:** roster changes (join, leave, token reuse, conversion)
+  **in combat**, surviving `/reload`, and clicks on its children. The header was built in only
+  one session, and no roster change followed it.
