@@ -378,10 +378,10 @@ local function build()
     local t0 = debugprofilestop()
     P.party = CreateFrame("Frame", "RaidProbeParty", UIParent)
     P.party:SetSize(TILE_W, 5 * (TILE_H + GAP))
-    P.party:SetPoint("LEFT", UIParent, "LEFT", 40, 60)
+    P.party:SetPoint("CENTER", UIParent, "CENTER", 0, 100)   -- clear of the action bars
     P.raid = CreateFrame("Frame", "RaidProbeRaid", UIParent)
     P.raid:SetSize(8 * (TILE_W + GAP), 5 * (TILE_H + GAP))
-    P.raid:SetPoint("LEFT", UIParent, "LEFT", 140, 60)
+    P.raid:SetPoint("CENTER", UIParent, "CENTER", 0, 100)    -- only one set shows at a time
     buildTile(P.party, "player", 1, false, slots, curve)
     for i = 1, 4 do buildTile(P.party, "party" .. i, i + 1, false, slots, curve) end
     for i = 1, 40 do buildTile(P.raid, "raid" .. i, i, true, slots, curve) end
@@ -456,7 +456,7 @@ local function header()
     h:SetAttribute("unitsPerColumn", 5)
     h:SetAttribute("columnSpacing", 4)
     h:SetAttribute("columnAnchorPoint", "LEFT")
-    h:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 40, -120)
+    h:SetPoint("TOPLEFT", UIParent, "CENTER", -300, 200)
     P.header = h
     -- Precreate all 40 children out of combat (Cell's trick): a child the
     -- header would otherwise create mid-combat could not be configured.
