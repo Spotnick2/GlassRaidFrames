@@ -25,6 +25,22 @@ for line in io.lines("GlassRaidFrames.toc") do
     if ext then check(deploy:find('"' .. ext .. '"', 1, true), "deploy.ps1 copies " .. ext .. " files (" .. line .. ")") end
 end
 
+-- The checked-in event list (the stub's fallback when the dump is absent, as
+-- on CI) must match the dump's documented events exactly.
+if WoW.dumpAvailable then
+    local listed, n = {}, 0
+    for line in io.lines("tests/events-70009.txt") do
+        local name = line:match("^([A-Z][A-Z0-9_]+)%s*$")
+        if name then listed[name] = true; n = n + 1 end
+    end
+    local missing, extra = {}, {}
+    for e in pairs(WoW.KNOWN_EVENTS) do if not listed[e] then missing[#missing + 1] = e end end
+    for e in pairs(listed) do if not WoW.KNOWN_EVENTS[e] then extra[#extra + 1] = e end end
+    eq(#missing, 0, "every dump event is in tests/events-70009.txt (regenerate it): " .. table.concat(missing, ","))
+    eq(#extra, 0, "no event in tests/events-70009.txt is missing from the dump: " .. table.concat(extra, ","))
+    check(n > 1000, "the fixture holds the full event list (" .. n .. ")")
+end
+
 -- Two places that must agree, never derived from each other (porting guide §0).
 loadAddon()
 eq(GlassRaidFrames.MEASURED_ON_BUILD, "1.60.1.70009", "MEASURED_ON_BUILD")

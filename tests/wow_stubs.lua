@@ -60,13 +60,15 @@ do
         WoW.dumpAvailable = next(WoW.KNOWN_EVENTS) ~= nil
     end
     if not WoW.dumpAvailable then
-        for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED",
-            "PLAYER_REGEN_ENABLED", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "UNIT_TARGET", "UNIT_PET", "UNIT_HEALTH",
-            "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER",
-            "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_LEVEL", "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED",
-            "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
-            "UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_UPDATE",
-            "UNIT_SPELLCAST_CHANNEL_STOP" }) do WoW.KNOWN_EVENTS[e] = true end
+        -- No dump (CI): the checked-in list generated from it, so validation
+        -- stays exactly as strict. test_toc fails if the two ever drift.
+        local fixture = io.open("tests/events-70009.txt", "r")
+        assert(fixture, "tests/events-70009.txt missing: event validation needs the dump or the fixture")
+        for line in fixture:lines() do
+            local name = line:match("^([A-Z][A-Z0-9_]+)%s*$")
+            if name then WoW.KNOWN_EVENTS[name] = true end
+        end
+        fixture:close()
     end
 end
 
