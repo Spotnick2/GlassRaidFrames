@@ -152,8 +152,13 @@ Classic API is usually stale. Spell IDs are Vanilla's, and so are ranks.
   contract.**
 - For a live check in game: `/api search <name>`, `/api system list`, `/api <system> list`
   (system names omit `C_`).
-- Use the Retail branch of `Gethe/wow-ui-source` for Blizzard FrameXML (`SecureTemplates.lua`,
-  `SecureGroupHeaders.lua`, `Blizzard_AuraContainer`).
+- **`C:\Projects\wow-ui-source` is Forever's own FrameXML** (branch `forever`, `version.txt` =
+  1.60.1.70009, the dump's build). Read Blizzard code there first (`SecureTemplates.lua`,
+  `SecureGroupHeaders.lua`, `Blizzard_AuraContainer`, …): line numbers in in-game error traces
+  match it, and they don't match Retail's. Fall back to the Retail branch of
+  `Gethe/wow-ui-source` only for what isn't there. For example, Forever's
+  `SecureUnitButton_OnClick` is where `C_ClickBindings` gets the first say on every
+  `SecureUnitButtonTemplate` frame, ours included.
 - `..\GlassUnitFrames\docs\GLASS-MATERIAL.md` is the write-up of the glass material.
 
 ## Reference addons
