@@ -35,12 +35,6 @@ local function plain(fn, ...)
 end
 Frames.plain = plain
 
-local function hasAtlas(name)
-    local tex = rawget(_G, "C_Texture")
-    if not (tex and tex.GetAtlasExists) then return false end
-    return plain(tex.GetAtlasExists, name) == true
-end
-
 local function icon(parent, size, sub)
     local t = parent:CreateTexture(nil, "OVERLAY", nil, sub or 7)
     t:SetSize(size, size)
@@ -70,14 +64,16 @@ function Frames.Setup(b)
     hp:SetFrameLevel(Glass.ContentLevel(body))
     b.health = hp
 
+    -- Dead/Offline sits at the end of the name line: the bottom edge belongs
+    -- to the debuff row, drawn above the glass. Empty, it takes no room.
+    local status = Glass.Font(g.top, 9, "RIGHT")
+    status:SetPoint("TOPRIGHT", body, "TOPRIGHT", -inset - 3, -inset - 4)
+    b.statusText = status
+
     local name = Glass.Font(g.top, 10, "LEFT")
     name:SetPoint("TOPLEFT", body, "TOPLEFT", inset + 3, -inset - 3)
-    name:SetPoint("RIGHT", body, "RIGHT", -inset - 3, 0)
+    name:SetPoint("RIGHT", status, "LEFT", -2, 0)
     b.nameText = name
-
-    local status = Glass.Font(g.top, 9, "CENTER")
-    status:SetPoint("BOTTOM", body, "BOTTOM", 0, inset + 3)
-    b.statusText = status
 
     local ind = {}
     ind.leader = icon(g.top, 10)
@@ -156,7 +152,7 @@ Engine.SetPainter("indicators", function(b, u)
     end
 
     local atlas = Frames.ROLE_ATLAS[plain(UnitGroupRolesAssigned, u)]
-    if atlas and hasAtlas(atlas) then
+    if atlas and API.AtlasExists(atlas) then
         ind.role:SetAtlas(atlas)
         ind.role:Show()
     else

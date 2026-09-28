@@ -75,8 +75,16 @@ function Engine.MarkDirty(frame, channel)
     flusher:Show()
 end
 
+-- Who a unit is: its GUID when plain, else nil (unknown: repaint in full).
+local function personOf(unit)
+    local ok, guid = pcall(UnitGUID, unit)
+    if not ok or API.IsSecret(guid) then return nil end
+    return guid
+end
+
 -- Every channel, snapping bars: the unit may be a different person now.
 function Engine.FullRepaint(frame)
+    frame.guid = personOf(frame.unit)
     frame.snap = true
     for _, channel in ipairs(Engine.ORDER) do Engine.MarkDirty(frame, channel) end
 end
@@ -119,10 +127,19 @@ local function onEvent(_, event, unit)
             for _, channel in ipairs(chans) do Engine.MarkDirty(frame, channel) end
         end
     elseif event == "GROUP_ROSTER_UPDATE" then
-        -- The same token can mean someone else now: repaint everything. The
-        -- header reassigns units first when frames change; this covers a
-        -- token that stays on the same frame but changes person.
-        Engine.RepaintAll()
+        -- A token can stay on its frame but mean someone else now: that frame
+        -- repaints in full (bars snap). The others only refresh what a roster
+        -- change can move (leader, assist, role, mark): no bar churn.
+        for _, frame in ipairs(frames) do
+            if frame.unit then
+                local guid = personOf(frame.unit)
+                if guid == nil or guid ~= frame.guid then
+                    Engine.FullRepaint(frame)
+                else
+                    Engine.MarkDirty(frame, "indicators")
+                end
+            end
+        end
     elseif event == "RAID_TARGET_UPDATE" or event == "PARTY_LEADER_CHANGED"
         or event == "PLAYER_ROLES_ASSIGNED" then
         Engine.RepaintChannel("indicators")

@@ -42,6 +42,21 @@ check(not M.IsUnlocked(), "combat locks")
 check(not M.Unlock(), "and unlocking is refused in combat")
 WoW.combat = false
 
+-- Combat starting mid-drag keeps and SAVES the spot the grid followed to
+-- (PLAYER_REGEN_DISABLED fires before lockdown; code review).
+M.Unlock()
+mv._scripts.OnDragStart(mv)
+mv._center = { 312, 184 }
+mv._scripts.OnUpdate(mv)
+WoW.fire("PLAYER_REGEN_DISABLED")
+WoW.combat = true
+check(not M.IsUnlocked(), "combat mid-drag locks")
+eq(GRF.db.pos.x, -200, "the dragged-to position is saved (x)")
+eq(GRF.db.pos.y, -200, "(y)")
+WoW.combat = false
+eq(mv._width, select(1, H.Size()), "the mover has an explicit size")
+check(WoW.methodsCalled["Frame:SetDontSavePosition"], "the client doesn't save the mover's position")
+
 -- Right-click locks; reset forgets the saved spot.
 M.Unlock()
 mv._scripts.OnMouseUp(mv, "RightButton")

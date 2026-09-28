@@ -31,6 +31,18 @@ eq(#ran, 0, "the queue empties once run")
 GRF.WhenOutOfCombat("now", function() ran[#ran + 1] = "now" end)
 eq(ran[1], "now", "out of combat an action runs at once")
 
+-- One queued action throwing is recorded; the rest still run (code review).
+ran = {}
+WoW.combat = true
+GRF.WhenOutOfCombat("boom", function() error("kaboom") end, false)
+GRF.WhenOutOfCombat("after", function() ran[#ran + 1] = "after" end, false)
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+eq(ran[1], "after", "an action after a failing one still runs")
+check(GRF.paintFailures["queued boom"] and GRF.paintFailures["queued boom"]:find("kaboom"),
+    "the failure is recorded")
+GRF.paintFailures["queued boom"] = nil
+
 -- /grf
 newChat()
 SlashCmdList.GLASSRAIDFRAMES("")

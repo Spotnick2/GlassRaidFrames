@@ -43,4 +43,22 @@ WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
 eq(GRF.Header.headers[1]:GetAttribute("showSolo"), true, "and applies after")
 
+-- One header failing to build doesn't cost the other groups or the Blizzard
+-- hide (code review): the failure is recorded, the rest is built.
+WoW.reset()
+party(1)
+local realCreate = CreateFrame
+rawset(_G, "CreateFrame", function(ftype, name, ...)
+    if name == "GlassRaidFramesGroup3" then error("refused") end
+    return realCreate(ftype, name, ...)
+end)
+local pf = realCreate("Frame", "PartyFrame", UIParent, "SecureFrameTemplate")
+GRF = loadAddon()
+rawset(_G, "CreateFrame", realCreate)
+eq(GRF.Header.headers[3], nil, "the failing group has no header")
+check(GRF.Header.headers[4] ~= nil, "the groups after it are built")
+eq(#GRF.Header.children, 35, "35 of 40 children exist")
+check(GRF.paintFailures["header 3"], "the failure is recorded")
+eq(pf:GetParent(), GRF.Blizzard.hiddenParent, "Blizzard's frames are still hidden")
+
 done("test_combat")

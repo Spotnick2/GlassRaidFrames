@@ -843,6 +843,7 @@ end
 -- The Vanilla talent trees live in Retail's trait system here (one spec per
 -- class, measured): map how, so "the tree with the most points" can be read.
 local function traits()
+    if not (rawget(_G, "C_ClassTalents") and rawget(_G, "C_Traits")) then say("C_ClassTalents/C_Traits: absent") return end
     local ok, configID = pcall(C_ClassTalents.GetActiveConfigID)
     if not (ok and configID) then say("no active config: " .. show(configID)) return end
     local okC, info = pcall(C_Traits.GetConfigInfo, configID)

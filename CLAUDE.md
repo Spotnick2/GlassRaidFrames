@@ -87,11 +87,15 @@ Planned: `ClickCast.lua`, `Dispel.lua`, `Options.lua`.
 - **`Auras.lua`**: a 3-icon debuff row per tile on an `AuraContainer` (`AddAuraGroup` before
   `SetUnit`, then `UpdateAllAuras`). It follows the child's unit, in combat too (measured).
   Buttons are styled only in `initializeFrame`, with `EnableMouse(false)`.
-- **`Blizzard.lua`**: hides `PartyFrame`, `CompactPartyFrame`, `CompactRaidFrameContainer` and
-  `CompactRaidFrameManager` using GlassUnitFrames' recipe: unregister events, hide, reparent,
+- **`Blizzard.lua`**: hides `PartyFrame`, `CompactPartyFrame` and `CompactRaidFrameContainer`
+  using GlassUnitFrames' recipe. **`CompactRaidFrameManager` stays**: that side panel holds the
+  raid leader's tools (ready check, world markers). The recipe: unregister events, hide, reparent,
   plus a deferred `SetParent` repair that waits for Edit Mode and combat.
-- **`Movers.lua`**: `/grf unlock`. One insecure mover anchored to the container (never the
-  reverse); the container follows the drag through `Header.SetPosition`. Combat locks it.
+- **`Movers.lua`**: `/grf unlock`. One insecure mover, with an explicit size, anchored to the container (never the
+  reverse); the container follows the drag through `Header.SetPosition`. Combat locks it and saves the spot it was dragged to.
+- **The combat queue isolates each action** (`pcall` per action, failures recorded under
+  `queued <key>`), and the build is guarded per header. One failure never costs the rest of
+  the queue, the other groups, or hiding Blizzard's frames.
 - **`GlassRaidFrames.lua`**:
   - bootstrap and `GlassRaidFramesDB`;
   - **the addon's one combat queue**, `GlassRaidFrames.WhenOutOfCombat(key, fn, message)`,

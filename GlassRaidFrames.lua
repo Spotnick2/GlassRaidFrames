@@ -37,12 +37,19 @@ local function whenOutOfCombat(key, fn, message)
 end
 GRF.WhenOutOfCombat = whenOutOfCombat   -- the addon's one combat queue
 
+-- Each action runs on its own: one that throws is recorded and the rest of
+-- the queue still runs.
+local function runOne(key, fn)
+    local ok, err = pcall(fn)
+    if not ok then API.Fail("queued " .. key, err) end
+end
+
 local function runPending()
     local run, keys = pending, order
     pending, order = {}, {}
-    if run.build then run.build() end
+    if run.build then runOne("build", run.build) end
     for _, key in ipairs(keys) do
-        if key ~= "build" then run[key]() end
+        if key ~= "build" then runOne(key, run[key]) end
     end
 end
 
@@ -74,7 +81,8 @@ local function slash(msg)
     elseif cmd == "blizzard" then
         GRF.db.hideBlizzard = not GRF.db.hideBlizzard
         if GRF.db.hideBlizzard then
-            whenOutOfCombat("blizzard", GRF.Blizzard.HideAll)
+            -- Re-check when it runs: toggled back off in combat, nothing hides.
+            whenOutOfCombat("blizzard", function() if GRF.db.hideBlizzard then GRF.Blizzard.HideAll() end end)
             say("Blizzard's party/raid frames: hidden")
         else
             say("Blizzard's party/raid frames: shown after /reload")
@@ -104,7 +112,9 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         -- Secure frames can't be built under lockdown. Loading normally runs
         -- before it applies, but don't bet the whole addon on that.
         whenOutOfCombat("build", function()
-            GRF.Header.Build(GRF.Frames.Setup)
+            -- Hiding Blizzard's frames must not depend on our build succeeding.
+            local ok, err = pcall(GRF.Header.Build, GRF.Frames.Setup)
+            if not ok then API.Fail("build", err) end
             if GRF.db.hideBlizzard then GRF.Blizzard.HideAll() end
         end, "frames will appear when combat ends")
     elseif event == "PLAYER_ENTERING_WORLD" then

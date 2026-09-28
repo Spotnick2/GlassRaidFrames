@@ -36,6 +36,8 @@ end
 
 local function build()
     mover = CreateFrame("Frame", "GlassRaidFramesMover", UIParent)
+    mover:SetSize(Header.Size())      -- an explicit rect: a drag's re-anchoring can't collapse it
+    mover:SetDontSavePosition(true)   -- our saved position is the only one
     mover:SetFrameStrata("DIALOG")
     mover:SetMovable(true)
     mover:SetClampedToScreen(true)
@@ -84,6 +86,9 @@ function Movers.Lock()
     if mover.dragging then
         mover:StopMovingOrSizing()
         mover.dragging = false
+        -- The grid already followed the drag: keep and save where it is.
+        -- (Combat locks on PLAYER_REGEN_DISABLED, before lockdown applies.)
+        follow(true)
         reattach()
     end
     mover:Hide()

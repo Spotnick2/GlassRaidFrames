@@ -52,9 +52,31 @@ eq(pf:GetParent(), hidden, "and is repaired when combat ends")
 -- A frame this client lacks is skipped, not an error.
 eq(B.HideFrame("NoSuchBlizzardFrame"), false, "a missing frame is skipped")
 
+-- The raid manager (leader tools: ready check, world markers) stays (code review).
+local mgr = rawget(_G, "CompactRaidFrameManager")
+eq(mgr:GetParent(), UIParent, "the raid manager side panel is left alone")
+check(not mgr._silenced, "and keeps its events")
+
 -- /grf blizzard turns it off for the next session.
 SlashCmdList.GLASSRAIDFRAMES("blizzard")
 eq(GRF.db.hideBlizzard, false, "the setting is saved off")
 check(chatHas("after /reload"), "and says it takes a /reload")
+
+-- Toggled on then off again in combat: the queued hide re-checks the
+-- setting when combat ends, so nothing is hidden (code review).
+WoW.reset()
+for _, name in ipairs({ "PartyFrame", "CompactPartyFrame", "CompactRaidFrameContainer" }) do
+    CreateFrame("Frame", name, UIParent, "SecureFrameTemplate")
+end
+party(1)
+GRF = loadAddon({ db = { hideBlizzard = false } })
+eq(rawget(_G, "PartyFrame"):GetParent(), UIParent, "hideBlizzard off: nothing hidden at login")
+WoW.combat = true
+SlashCmdList.GLASSRAIDFRAMES("blizzard")
+SlashCmdList.GLASSRAIDFRAMES("blizzard")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+eq(GRF.db.hideBlizzard, false, "the setting ends off")
+eq(rawget(_G, "PartyFrame"):GetParent(), UIParent, "and the queued hide did nothing")
 
 done("test_blizzard")

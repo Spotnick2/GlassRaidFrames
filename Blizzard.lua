@@ -1,6 +1,6 @@
 -- Blizzard.lua: hide Blizzard's own party and raid frames.
 --
--- Measured in the probe (FOREVER-PROBE item 6): all four exist and are
+-- Measured in the probe (FOREVER-PROBE item 6): all of these exist and are
 -- protected; reparenting them out of combat works and Edit Mode does not
 -- bring them back. PartyFrame is the classic-style party display,
 -- CompactPartyFrame the raid-style one ("Use Raid-Style Party Frames"), so
@@ -19,7 +19,9 @@ local GRF = GlassRaidFrames
 local Blizzard = {}
 GRF.Blizzard = Blizzard
 
-Blizzard.FRAMES = { "PartyFrame", "CompactPartyFrame", "CompactRaidFrameContainer", "CompactRaidFrameManager" }
+-- CompactRaidFrameManager (the side panel) stays: it holds the raid leader's
+-- tools (ready check, role poll, world markers), not a group display.
+Blizzard.FRAMES = { "PartyFrame", "CompactPartyFrame", "CompactRaidFrameContainer" }
 Blizzard.active = false   -- true once anything was hidden this session
 
 local hiddenParent = CreateFrame("Frame", nil, UIParent)

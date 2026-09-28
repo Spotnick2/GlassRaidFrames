@@ -99,10 +99,15 @@ function Header.Build(setup)
     Header.container = c
     Header.SetPosition(Header.PositionOf(GRF.db))
     for group = 1, Header.GROUPS do
-        local h = newHeader(group, c)
+        -- One header failing to build must not cost the other groups.
+        local okH, h = pcall(newHeader, group, c)
+        if not okH or not h then
+            API.Fail("header " .. group, h)
+            h = nil
+        end
         Header.headers[group] = h
         local i = 1
-        while true do
+        while h do
             local child = h:GetAttribute("child" .. i)
             if not child then break end
             table.insert(Header.children, child)

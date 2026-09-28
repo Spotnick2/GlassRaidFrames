@@ -44,6 +44,13 @@ eq(p1.health._value, 100, "health painted")
 eq(p1.health._max, 150, "max health painted")
 check(p1.health._color and math.abs(p1.health._color[1] - 0.53) < 1e-6, "the bar takes the class colour")
 
+-- Dead/Offline is on the name line, right-aligned; the name stops before it
+-- (the bottom edge is the debuff row's; code review).
+local sp = p1.statusText._points[1]
+eq(sp[1], "TOPRIGHT", "the status sits top-right")
+local np = p1.nameText._points[2]
+eq(np[2], p1.statusText, "the name ends where the status begins")
+
 -- Offline and dead.
 WoW.units.party1.connected = false
 WoW.fire("UNIT_CONNECTION", "party1"); flush()
@@ -120,8 +127,18 @@ eq(r7.debuffs._modelUnit, "raid7", "its debuff row moved to the new unit in comb
 eq(childFor("party1"), nil, "party tokens are gone in the raid")
 eq(GRF.Engine._test.framesByUnit.party1[p1], nil, "the engine forgot the old unit")
 
+-- A roster update where nobody changed person refreshes indicators only:
+-- no health repaint, so no bar snaps across the grid (code review).
+flush()
+WoW.fire("GROUP_ROSTER_UPDATE")
+local d = GRF.Engine._test.dirty()[r7]
+check(d and d.indicators, "a roster update refreshes indicators")
+check(not d.health and not r7.snap, "but doesn't repaint or snap the bar of an unchanged person")
+flush()
+
 -- A token that stays on its frame but changes person: repainted on roster.
 WoW.units.raid7.name = "Someone Else"
+WoW.units.raid7.guid = "GUID-someone-else"
 WoW.fire("GROUP_ROSTER_UPDATE"); flush()
 eq(r7.nameText._text, "Someone Else", "a reused token repaints its name")
 WoW.combat = false

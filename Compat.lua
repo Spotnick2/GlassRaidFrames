@@ -104,6 +104,19 @@ function API.LoadBlizzardAddOn(name)
     return false, okL and tostring(reason) or tostring(done)
 end
 
+-- Whether a texture atlas exists on this client, asked once per name (it
+-- can't change during a session). False when C_Texture is absent.
+local atlasKnown = {}
+function API.AtlasExists(name)
+    if atlasKnown[name] == nil then
+        local tex = rawget(_G, "C_Texture")
+        local ok, v = false, nil
+        if tex and tex.GetAtlasExists then ok, v = pcall(tex.GetAtlasExists, name) end
+        atlasKnown[name] = ok and not API.IsSecret(v) and v == true
+    end
+    return atlasKnown[name]
+end
+
 -- Class colour from the documented API (RAID_CLASS_COLORS is a FrameXML
 -- table the dump cannot confirm). Returns r, g, b or nil.
 function API.ClassColor(classFile)
