@@ -138,10 +138,11 @@ local function testSpell()
 end
 
 -- Every form of the `spell` attribute we might use, on its own modifier.
+-- unit = nil for a header child: the header owns its "unit" attribute.
 local function applyBindings(b, unit)
     local id = testSpell()
     local name = id and spellName(id)
-    b:SetAttribute("unit", unit)
+    if unit then b:SetAttribute("unit", unit) end
     b:SetAttribute("type1", "target")
     b:SetAttribute("type2", "togglemenu")
     if not name then return end
@@ -151,14 +152,15 @@ local function applyBindings(b, unit)
     b:SetAttribute("ctrl-type1", "spell");  b:SetAttribute("ctrl-spell1", id)          -- numeric ID
     b:SetAttribute("alt-type1", "spell");   b:SetAttribute("alt-spell1", ranked)       -- rank-qualified
     b:SetAttribute("shift-type2", "macro")                                              -- macro fallback
-    b:SetAttribute("shift-macrotext2", "/cast [@" .. unit .. "] " .. name)
+    -- @mouseover: a header child's unit changes, so none can be baked in.
+    b:SetAttribute("shift-macrotext2", "/cast [@mouseover,help,nodead] " .. name)
     b:SetAttribute("*type3", "spell");      b:SetAttribute("*spell3", name)            -- wildcard
 end
 
 local BINDING_HELP = {
     "left: target | right: menu",
     "shift-left: spell by name | ctrl-left: spell by ID | alt-left: spell 'Name(Rank n)'",
-    "shift-right: /cast macro | middle (any modifier): *spell3 wildcard",
+    "shift-right: /cast [@mouseover] macro | middle (any modifier): *spell3 wildcard",
     "corner box: left/right/middle = cure slot 1/2/3",
 }
 
@@ -471,9 +473,17 @@ local function header()
         n = n + 1
         local child = h:GetAttribute("child" .. n)
         child:HookScript("PostClick", postClick)
+        applyBindings(child, nil)
+        P.headerChildren = P.headerChildren or {}
+        P.headerChildren[#P.headerChildren + 1] = child
         buildDebuffRow(child, child:GetAttribute("unit") or "player")
     end
-    say("header created (shown call ok=" .. show(shown) .. "), " .. n .. " children precreated, each with a debuff row")
+    say("header created (shown call ok=" .. show(shown) .. "), " .. n .. " children precreated, each with a debuff row and the test bindings")
+    local id = testSpell()
+    local c1 = h:GetAttribute("child1")
+    say("test spell " .. show(id) .. ": name=" .. show(c1 and c1:GetAttribute("shift-spell1"))
+        .. " id=" .. show(c1 and c1:GetAttribute("ctrl-spell1")) .. " ranked=" .. show(c1 and c1:GetAttribute("alt-spell1")))
+    for i = 1, 3 do say(BINDING_HELP[i]) end
     C_Timer.After(0.5, headerReport)
 end
 
@@ -870,9 +880,11 @@ SlashCmdList.RAIDPROBE = function(msg)
         P.spell = tonumber(arg)
         say("test spell: " .. show(P.spell) .. " " .. show(P.spell and spellName(P.spell)))
         for unit, t in pairs(tiles) do applyBindings(t, unit) end
+        for _, c in ipairs(P.headerChildren or {}) do applyBindings(c, nil) end
     elseif cmd == "clear" then
         if InCombatLockdown() then say("out of combat only") return end
         for _, t in pairs(tiles) do t:SetAttribute("shift-type1", nil); t:SetAttribute("shift-spell1", nil) end
+        for _, c in ipairs(P.headerChildren or {}) do c:SetAttribute("shift-type1", nil); c:SetAttribute("shift-spell1", nil) end
         say("cleared shift-type1/shift-spell1")
     elseif cmd == "sound" then sound()
     elseif cmd == "aurasound" then auraSound(arg)
