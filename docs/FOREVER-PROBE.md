@@ -131,6 +131,9 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
 - Hover bindings (`OnEnter` → `SetOverrideBindingClick`) went untested: the probe hooked only
   the manual tiles. They were expected to be refused in combat, and two routes already work,
   so this is dropped.
+- **Without a friendly mouseover, a plain dedicated key does nothing** (measured, key 9 with
+  nothing hovered): the button is clicked, but no cast is sent, there is no error and no
+  self-cast (even with `autoSelfCast = 1`). The key is swallowed.
 - **Owner's decision: both.** Mouseover cast is the default, with a checkbox for the CVar.
   Optional dedicated keys use the permanent-binding route. Still to measure: what a dedicated
   key does with **no** friendly mouseover, and whether a
