@@ -82,7 +82,8 @@ left, blue for right, yellow for middle.
       arrive, and are the values readable? Is the `UNIT_AURA` payload secret in combat?
 
 ### 6. Hiding Blizzard's frames (gates `Blizzard.lua`)
-- [ ] `/rprobe hide` in a party and in a raid: which of `CompactPartyFrame`,
+- [ ] `/rprobe hide` in a party and in a raid: which of `PartyFrame` (the classic-style party
+      frames, shown by default), `CompactPartyFrame`,
       `CompactRaidFrameContainer` and `CompactRaidFrameManager` exist, and are protected?
       Do they stay hidden?
 - [ ] Open and close Edit Mode: do they come back?

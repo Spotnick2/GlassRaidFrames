@@ -585,7 +585,7 @@ end
 local hidden = CreateFrame("Frame")
 hidden:Hide()
 
-local BLIZZARD = { "CompactPartyFrame", "CompactRaidFrameContainer", "CompactRaidFrameManager" }
+local BLIZZARD = { "PartyFrame", "CompactPartyFrame", "CompactRaidFrameContainer", "CompactRaidFrameManager" }
 
 local function editModeOpen()
     local em = rawget(_G, "EditModeManagerFrame")
