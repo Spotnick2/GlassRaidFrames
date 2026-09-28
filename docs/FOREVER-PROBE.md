@@ -119,6 +119,15 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
 
 ## Results
 
+### 3. The dispel box: deferred
+- No character in the group can cure yet (the priest is below Cure Disease at 14; the paladin is
+  below Purify). The box's test slot lights for any dispellable type, so lighting and
+  click-through can still be checked the next time a dispellable debuff lands. Casting a real
+  cure waits for a curer.
+- Since the header was chosen, the probe puts the box on header children too:
+  `useparent-unit` on the box, whose `unit` can't be set in combat, with its container
+  following the child's unit through `OnAttributeChanged`.
+
 ### 8. Keyboard hover-casting (1.60.1.70009, 2026-09-28, priest, header children)
 - **The client's mouseover cast works on our frames, in combat.** `IsMouseoverCastSupported()` is
   true. After `C_CVar.SetCVar("enableMouseoverCast", "1")`, Lesser Heal on an action-bar key,
