@@ -1,0 +1,292 @@
+# Forever probe: what GlassRaidFrames needs measured
+
+Milestone 0 of the plan. Nothing here has been measured yet. The design of milestones 1–3
+waits on these answers, and each item names the decision it gates.
+
+Addon-agnostic results also go into `C:\Projects\References\PORTING-TBC-TO-FOREVER.md`.
+
+## How to run it
+
+1. `pwsh Tools\deploy.ps1 -Probe`, then **restart the client**, because RaidProbe is a new
+   folder. Enable GlassRaidFrames too: the probe's tiles use its glass material when it is
+   loaded.
+2. In game: `/console scriptErrors 1`, then `/rprobe help`.
+3. Everything the probe prints also goes to `RaidProbeDB.log`. When done, **exit the client
+   fully**, which is what flushes SavedVariables, then share
+   `WTF\Account\<account>\SavedVariables\RaidProbe.lua`. The log survives `/reload` and
+   accumulates across sessions; `/rprobe log clear` starts over.
+4. Lines stamped with `C` were logged in combat.
+
+You need a group for most items: a party first, then a raid, ideally with a healer class on
+your side so real cures exist. A training dummy or a low mob works for combat.
+
+## Checklist
+
+### 1. Group buttons: manual vs header (gates `Roster.lua`)
+- [x] `/rprobe build` out of combat: 45 tiles appear, the player's tile shows, and the rest
+      follow the roster.
+- [ ] Join and leave a party, out of combat and **in combat**. Check the `roster:` lines: the
+      right tiles are shown, names are correct, and there is no `ADDON_ACTION_BLOCKED`.
+- [ ] Convert party → raid in combat, if you can arrange it. Note what shows.
+- [ ] `/rprobe header` (do it on a separate `/reload`, so the two builds don't interfere):
+      does the header spawn children? Are their units right? Do they survive roster changes in
+      and out of combat, and a `/reload`? Do left and right clicks on a child target and open
+      the menu?
+- **Decision:** use the header only if it passes everything above in combat. Otherwise use
+  manual buttons (DinoUF's route).
+
+### 2. Click-cast attributes (gates `ClickCast.lua`)
+Click a party member's tile with each combination, in and out of combat. Each click logs what
+the secure handler resolved (`click … -> type value`), then `cast sent/succeeded/failed`.
+- [ ] shift-left: `spell` = bare name. Does it cast the highest rank?
+- [ ] ctrl-left: `spell` = numeric ID. Does it cast, and which rank?
+- [ ] alt-left: `spell` = `"Name(Rank n)"`. Does it downrank?
+- [ ] shift-right: `macro` + `macrotext` `/cast [@partyN] Name`.
+- [ ] middle with any modifier: the `*type3` wildcard.
+- [ ] `/rprobe clear`, then shift-left: does it fall back to a plain left click (target)?
+- [ ] `/rprobe spell <id>` switches the test spell (out of combat).
+- **Decision:** `type=spell` with whichever `spell` form works. If none cast in combat, fall
+  back to `macro`.
+
+### 3. The dispel box (gates `Dispel.lua`)
+The corner box on each tile has one aura slot per cure you know. It shows the red square for
+left, blue for right, yellow for middle.
+- [ ] Get a dispellable debuff on a party member (or yourself). Does the box light in the right
+      colour, **in combat too**?
+- [ ] Click the lit box: does the cure cast on that member, in combat? The log shows
+      `click … -> spell <cure>`.
+- [ ] Does a debuff that appears *during* combat light the box, and does clicking still reach
+      the box? Aura buttons created in combat must not eat the click.
+- [ ] Is a debuff of a type you can't cure left unlit?
+- [ ] The debuff row (bottom-left icons): do icons show, and do clicks on them reach the tile?
+- [ ] `/rprobe enums`: `CustomAuraButtonDispelTypeTextureStyle` has `PreserveAsset`.
+
+### 4. Sounds (gates the alert design)
+- [ ] `/rprobe sound`: do you hear the chime (addon `.ogg`) and the raid-warning kit?
+      `willPlay` should be true.
+- [ ] `/rprobe aurasound` in a group: which struct shapes return a handle and which error? The
+      errors name the fields the client expects.
+- [ ] `/rprobe aurasound <spellID>` with the ID of a debuff you can reproduce (`/rprobe auras`
+      shows IDs out of combat). Does the chime play when it lands **in combat**?
+- [ ] `/rprobe aurasound clear` afterwards.
+- [ ] `/rprobe auras party1` out of combat: do `HARMFUL` and `HARMFUL|RAID` differ? Is
+      `dispelName` readable?
+- **Decision:** a dispel-type trigger means full in-combat sound coverage. A spell-ID-only
+  trigger means the learned-ID route, with limited coverage.
+
+### 5. Secrecy and range (gates `Frames.lua`)
+- [ ] `/rprobe secrets` in a party and in a raid, **out of and in combat**. `S` = secret, `ERR`
+      = threw. Check `hp`, `hpMax`, `dead`, `conn`, `role`, `name`, `class`, `guid`,
+      `inRange`/`checked`, `leader`, `mark`, and `GetRaidRosterInfo` subgroup.
+- [ ] `/rprobe watch`, then walk away from a party member: do `UNIT_IN_RANGE_UPDATE` lines
+      arrive, and are the values readable? Is the `UNIT_AURA` payload secret in combat?
+
+### 6. Hiding Blizzard's frames (gates `Blizzard.lua`)
+- [ ] `/rprobe hide` in a party and in a raid: which of `PartyFrame` (the classic-style party
+      frames, shown by default), `CompactPartyFrame`,
+      `CompactRaidFrameContainer` and `CompactRaidFrameManager` exist, and are protected?
+      Do they stay hidden?
+- [ ] Open and close Edit Mode: do they come back?
+
+### 8. Keyboard hover-casting (gates `ClickCast.lua` scope)
+The owner's Cell setup (Anniversary SavedVariables) casts mostly with **keys while hovering a
+frame**, not mouse clicks:
+- Paladin: 1 Holy Shock, 2 Flash of Light, 3/4/5 Holy Light ranks 7/9/max.
+- Priest: 1–8 including Greater Heal rank 2, Renew and Prayer of Healing.
+- Shaman: 1–4.
+- Resurrection on Shift-R (Alt-R on the druid).
+
+Ranks are pinned (`"635:7"`). Cell does hover keys with restricted snippets, which are broken
+here, so three other routes get measured, each out of and **in** combat. Use a helpful test
+spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
+- [ ] `/rprobe mocast`: is `IsMouseoverCastSupported()` true? Then `/rprobe mocast on`, put a
+      heal on an action-bar key, hover a probe tile and press the key. Does it cast on the
+      hovered member, in combat? What does `mouseoverCastModifier` do? This is the client's own
+      feature, so if it works it needs no binding code at all.
+- [ ] `/rprobe hoverkeys`: hover a tile and press **8**. Does the `OnEnter bind` line say `ok`
+      out of combat, and is it refused in combat (expected)?
+- [ ] `/rprobe permkey`: key **9** always runs `/cast [@mouseover,help,nodead] <spell>` from a
+      hidden secure button. Does it cast on a hovered tile in combat? What happens when you
+      press 9 while hovering nothing? `/rprobe permkey` again releases it.
+- **Decision:** keyboard hover-casting is back in scope for milestone 2, through whichever
+  route works in combat. With route (c), the addon owns the key only while you are in a group,
+  and the options have to say so.
+
+### 7. Scale (gates the tile budget)
+- [ ] The `built … in … ms` line after `/rprobe build`.
+- [ ] `/rprobe fps` in a raid, out of combat and in combat, with debuffs going on and off.
+      Compare with a `/reload` without `/rprobe build`.
+
+## Results
+
+### 4. Sounds (1.60.1.70009, 2026-09-28)
+- `PlaySoundFile("Interface\AddOns\RaidProbe\Media\dispel.ogg", "Master")` plays
+  (`willPlay = true`, heard). `PlaySound(8959)` plays too.
+- `Enum.UnitAuraSoundTrigger = { Added = 0, ApplicationsIncreased = 1, Removed = 2 }`.
+- **`AddAuraSound` requires `spellID`.** Without one (and with `dispelName` or `dispelType`
+  instead), it fails with `bad argument #3 … (Current Field: [spellID])`. There's no dispel-type
+  trigger. So in combat the alert covers only spell IDs learned out of combat (Decursive's
+  route). Out of combat, our own scan plus `PlaySoundFile` covers every dispellable debuff.
+
+### 5. Secrecy (1.60.1.70009, 2026-09-28, raid of 2)
+- `C_Secrets.ShouldAurasBeSecret()`: false out of combat, **true in combat**.
+- `UnitHealth`: secret, in and out of combat.
+- `UnitHealthMax`: plain for the player (92), **secret for the partner**.
+- Plain even **in combat**, for both units: `UnitIsDeadOrGhost`, `UnitIsConnected`,
+  `UnitGroupRolesAssigned` (`DAMAGER`: roles do come back on Forever), `GetUnitName`,
+  `UnitClass`, `UnitGUID`, `UnitIsGroupLeader`, `GetRaidTargetIndex` (nil, unmarked) and
+  `GetRaidRosterInfo` (name, rank, subgroup).
+- **`UnitInRange` is secret (both returns), even out of combat.** Fade through the client:
+  `Frame/Region:SetAlphaFromBoolean(value, alphaIfTrue, alphaIfFalse)` or
+  `C_CurveUtil.EvaluateColorValueFromBoolean` (both in the dump; the alpha scale, 0-1 or 0-255,
+  is to be measured).
+- **No `UNIT_IN_RANGE_UPDATE` arrived** while walking out of range and back (watch on for
+  30 s), so poll range on a shared ticker.
+- The `UNIT_AURA` payload wasn't logged: the probe's watch only covered manual tiles. Nothing
+  depends on it, because auras go through `AuraContainer`.
+
+### 6. Hiding Blizzard's frames (1.60.1.70009, 2026-09-28)
+- `PartyFrame` (shown), `CompactPartyFrame` (hidden: the raid-style party frames are used in a
+  raid), `CompactRaidFrameContainer` (shown) and `CompactRaidFrameManager` (shown) all exist and
+  are protected.
+- `SetParent(hidden)` out of combat worked for all four, with no errors, and **Edit Mode did not
+  bring them back** (owner, visually). The deferred `SetParent` repair hook stayed in place.
+
+### 7. Scale (1.60.1.70009, 2026-09-28, raid of 2)
+- The header with 40 precreated children, each with a debuff-row container and a dispel-box
+  container (400 row and 40 box aura buttons initialised):
+  - 66.4 fps average out of combat, 64.9 in combat;
+  - worst single frame 67–69 ms.
+- The baseline without the probe wasn't captured, so that spike isn't attributed yet. Recheck
+  if stutter is seen.
+
+### 3. The dispel box: deferred
+- No character in the group can cure yet (the priest is below Cure Disease at 14; the paladin is
+  below Purify). The box's test slot lights for any dispellable type, so lighting and
+  click-through can still be checked the next time a dispellable debuff lands. Casting a real
+  cure waits for a curer.
+- Since the header was chosen, the probe puts the box on header children too:
+  `useparent-unit` on the box, whose `unit` can't be set in combat, with its container
+  following the child's unit through `OnAttributeChanged`.
+
+### 8. Keyboard hover-casting (1.60.1.70009, 2026-09-28, priest, header children)
+- **The client's mouseover cast works on our frames, in combat.** `IsMouseoverCastSupported()` is
+  true. After `C_CVar.SetCVar("enableMouseoverCast", "1")`, Lesser Heal on an action-bar key,
+  pressed while hovering the partner's header child, cast on the partner out of combat and in
+  combat. There is no `mouseoverCastModifier` CVar (`GetCVar` threw), so no modifier gates it.
+- **A permanent override binding works in combat.** Key 9 → a hidden `SecureActionButtonTemplate`
+  (both edges registered; PostClick fires twice, one cast) with `macro /cast
+  [@mouseover,help,nodead] Lesser Heal` cast on the hovered partner, out of combat and in
+  combat. `SetOverrideBindingClick` was set out of combat.
+- Hover bindings (`OnEnter` → `SetOverrideBindingClick`) went untested: the probe hooked only
+  the manual tiles. They were expected to be refused in combat, and two routes already work,
+  so this is dropped.
+- **Without a friendly mouseover, a plain dedicated key does nothing** (measured, key 9 with
+  nothing hovered): the button is clicked, but no cast is sent, there is no error and no
+  self-cast (even with `autoSelfCast = 1`). The key is swallowed.
+- **Fallback, first try:**
+  - `/click [nomouseover][@mouseover,harm][@mouseover,dead] ActionButton9` after the
+    `@mouseover` heal: hovering an **enemy** fired action button 9 (Smite on the mob, in
+    combat), so `/click ActionButtonN` works from a secure macro.
+  - Hovering **nothing** did nothing, because `nomouseover` isn't a valid macro condition.
+  - Retest with `[@mouseover,noexists]`.
+- **Fallback works.** The macro was `/cast [@mouseover,help,nodead] <spell>` then
+  `/click [@mouseover,noexists][@mouseover,harm][@mouseover,dead] ActionButton9`. With nothing
+  hovered, key 9 fired action button 9 (Smite on the target). A friendly frame gets the heal;
+  an enemy or nothing gets the key's own action. **A dedicated key never swallows the key.**
+  **Item 8 is complete.**
+- **Owner's decision: both.** Mouseover cast is the default, with a checkbox for the CVar.
+  Optional dedicated keys use the permanent-binding route. Still to measure: what a dedicated
+  key does with **no** friendly mouseover, and whether a
+  `/click [@mouseover,noexists][@mouseover,harm][@mouseover,dead] ActionButton<n>` fallback line keeps
+  the key's action-bar action (`/rprobe permkey fallback`).
+
+### 2. Click-cast attributes (1.60.1.70009, 2026-09-28, priest, header children)
+- **All five forms cast out of combat** on a header child: Lesser Heal (2050), logged
+  `cast sent … spell=2050`, then `succeeded`.
+  - `shift-type1=spell` with `shift-spell1="Lesser Heal"` (name);
+  - `ctrl-spell1=2050` (numeric ID);
+  - `alt-spell1="Lesser Heal(Rank 1)"` (rank-qualified);
+  - `shift-type2=macro` with `/cast [@mouseover,help,nodead] Lesser Heal`;
+  - `*type3`/`*spell3` (wildcard).
+
+  Modifier-prefixed attributes resolve independently per button, and the `unit` attribute the
+  header set is used as the target.
+- **In combat (second run), every form cast.** Name, ID, rank-qualified, the `@mouseover` macro
+  and the wildcard all logged `C cast sent` and `succeeded`.
+- **Alt goes to the player.** Both alt-left clicks (`alt-spell1`) on the partner's child cast on
+  **the player** in combat. Every other form hit the clicked unit. Alt is the client's default
+  `SELFCAST` modifier, and it wins over the button's `unit`. This matters for bindings: the owner's
+  paladin binds Alt-left and Alt-right in Cell. Next run: an Alt `@mouseover` macro
+  (`alt-type2`), and `/rprobe selfcast none` (unbinds the modifier) followed by alt-left again.
+- **Self-cast measured (third run).** The client options were Self Cast = "Auto and Key Press",
+  key ALT (`GetModifiedClick("SELFCAST") == "ALT"`, `autoSelfCast = 1`). In combat, with ALT:
+  - alt-left (`spell`) cast on the player;
+  - alt-right (`macro /cast [@mouseover,help,nodead]`) **also** cast on the player, so a macro
+    doesn't escape it.
+
+  After `SetModifiedClick("SELFCAST", "NONE")` + `SaveBindings`, alt-left cast on the clicked
+  partner, twice, in combat. **Rule: a binding on the SELFCAST modifier always self-casts.** The
+  addon detects the conflict and offers to set the key to NONE (a global client setting, only
+  with consent, out of combat). It never changes the key on its own.
+- One shift-left on the partner also landed on the player, while later identical clicks
+  didn't. That fits `autoSelfCast` retargeting an invalid (out-of-range) unit. It's unconfirmed;
+  `/rprobe selfcast` now logs the CVar.
+- **Clearing a modified binding does not fall back to `type1`.** After clearing `shift-type1`,
+  shift-left resolved to `nil`. The template tries `shift-type1`, `*type1`, `shift-type*`,
+  `*type*` and a bare `type`, but never `type1`. **Defaults must be `*type1=target` and
+  `*type2=togglemenu`**, so that unbound modified clicks still target and open the menu.
+- **Still open:**
+  - **downranking**, which needs a character with two ranks. Only rank 1 was known, so the ID
+    and `Name(Rank 1)` forms were accepted but didn't prove they choose a lower rank.
+
+### 1. Group buttons (1.60.1.70009, 2026-09-28, party of 2, converted to a raid of 2)
+- **Manual buttons work, in and out of combat.** 45 `SecureUnitButtonTemplate` tiles with
+  `RegisterUnitWatch` on `player`/`party1-4`/`raid1-40`, built out of combat, in 164 ms with
+  glass.
+  - A member leaving **in combat**: the unit watch hid `party1` (`C roster: … shown tiles:
+    player`).
+  - Joining out of combat: `party1` showed. Party→raid: `raid1`, `raid2` showed. Raid→party:
+    they hid.
+  - In a raid in combat, the right tiles stayed shown.
+  - **No `ADDON_ACTION_BLOCKED`/`FORBIDDEN` anywhere.**
+- As designed, the probe never hides the party set in a raid. In a raid both sets showed
+  (`player,party1,raid1,raid2`), which confirms that party tokens stay valid in a raid. The
+  roster code has to unwatch the party set out of combat.
+- Right-click on a tile opened the menu (`togglemenu`). The one `-> nil` was a right-click on
+  the corner box, which has no second cure on that character. That's correct.
+- **`SecureGroupHeaderTemplate` spawns children without `initialConfigFunction`**, created out
+  of combat in a raid of 2: `child1 = raid1`, `child2 = raid2`, both shown, sized by the XML
+  template.
+- **The header follows the roster in combat** (second run, same day):
+  - Raid→party out of combat: `child1` became `player` and `child2` became `nil`, then
+    `party1`.
+  - The partner leaving **in combat**: `child2` → `nil`, hidden.
+  - Rejoining **in combat**: `child2` → `party1`, shown.
+  - No blocked actions.
+  - The header's own restricted-free update code runs in combat, and our insecure
+    `OnAttributeChanged` on its children fires in combat too.
+  - Re-created after `/reload`, it spawned `raid1`/`raid2` again.
+- **Third run: the header passes the full lifecycle.**
+  - All 40 children were precreated out of combat (`startingIndex = -39`, `Show`, then back to
+    `1`), each with its own debuff-row `AuraContainer`.
+  - In combat: the partner left (1 shown), rejoined (`party1`, 2 shown), and the group was
+    **converted party→raid** (`raid1`, `raid2`), all live.
+  - **`container:SetUnit(newUnit)` + `UpdateAllAuras()` succeeded in combat on every
+    reassignment.**
+  - No blocked actions.
+- **Decision: `SecureGroupHeaderTemplate`**, with no `initialConfigFunction`, the child
+  template in XML, and all 40 children precreated out of combat. Unlike manual buttons, it
+  keeps sorting and grouping in combat. Its aura containers follow each child's unit through
+  `OnAttributeChanged`.
+- Clicks on header children work: left-click `raid1` → `target`, right-click `raid2` →
+  `togglemenu` (fourth run). **Item 1 is complete.**
+- **Was open for the header** (resolved by the third run, except clicks):
+  1. Children must be **precreated** out of combat (Cell's `startingIndex = -39` trick) so all
+     40 exist before combat and can be configured.
+  2. A child's unit changes in combat, so its **aura containers must follow with `SetUnit` in
+     combat**. With manual buttons the tokens are fixed and this never happens.
+  3. Clicks on header children weren't logged: the XML template had no `PostClick`.
+- Party→raid conversion in combat is still untested for both approaches.
+- The first run's party/raid double set (both shown in a raid) was before the probe hid the
+  unused set. That mode switch hasn't been exercised yet.

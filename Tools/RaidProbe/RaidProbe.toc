@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: RaidProbe
+## Notes: Throwaway probe for GlassRaidFrames: group buttons, click-casting, dispel box, sounds. /rprobe help
+## Author: Spotnick
+## Version: dev
+## OptionalDeps: GlassRaidFrames
+## SavedVariables: RaidProbeDB
+
+RaidProbe.xml
+RaidProbe.lua

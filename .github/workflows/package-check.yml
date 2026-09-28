@@ -1,0 +1,93 @@
+name: Package check
+
+# Dry run only. Releases are built by CurseForge's own packager from the tag
+# webhook, against the same .pkgmeta - this job exists so a packaging mistake
+# surfaces on a pull request instead of in a published zip (Priestly's pattern).
+#
+# -d is the real no-upload switch: merely leaving CF_API_KEY out still lets the
+# packager cut a GitHub release.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1
+
+      # WoW runs Lua 5.1, so the tests do too. tests/run.ps1 is the Windows
+      # entry point for the same files. find, not globs: Libs/ nests deeper
+      # than one level.
+      - name: Syntax-check every shipped Lua file
+        run: |
+          count=$(find . -name '*.lua' -not -path './.git/*' | wc -l)
+          test "$count" -gt 0 || { echo "no Lua files found - the check would prove nothing"; exit 1; }
+          echo "checking $count files"
+          find . -name '*.lua' -not -path './.git/*' -print0 | xargs -0 luac5.1 -p
+
+      # Without ../GlassUnitFrames and the API dump (local only), test_toc skips
+      # the upstream-copy comparison and test_methods skips the method check.
+      - name: Unit tests
+        run: |
+          for f in tests/test_*.lua; do
+            echo "-- $f"
+            lua5.1 "$f" || exit 1
+          done
+
+      # Pinned to a SHA, not the moving v2 tag (the siblings pin the same one).
+      - name: Package (dry run)
+        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0
+        with:
+          args: -d
+
+      # The zip is what players install, so assert its SHAPE rather than
+      # trusting .pkgmeta to have been read the way it was meant. An exact
+      # allowlist, not a denylist: the TOC, every file it loads, the textures
+      # and LICENSE, and NOTHING else (a new notes file or a dotfile fails
+      # here instead of shipping).
+      - name: The package is exactly the addon
+        run: |
+          zip=$(ls .release/*.zip | head -1)
+          rm -rf unpacked && mkdir unpacked && unzip -q "$zip" -d unpacked
+          {
+            echo GlassRaidFrames/GlassRaidFrames.toc
+            echo GlassRaidFrames/LICENSE
+            tr -d '\r' < GlassRaidFrames.toc | tr '\\' '/' | grep -v '^#' | grep -v '^$' | sed 's|^|GlassRaidFrames/|'
+            ls Media/*.tga Media/*.ogg | sed 's|^|GlassRaidFrames/|'
+          } | sort > expected.txt
+          (cd unpacked && find . -type f | sed 's|^\./||' | sort) > actual.txt
+          if ! diff -u expected.txt actual.txt; then
+            echo "the package differs from the addon (- missing, + extra)"
+            exit 1
+          fi
+
+      # The packager must have replaced @project-version@. A literal version
+      # committed over the token (deploy.ps1 writes "dev" into its copy) would
+      # ship silently.
+      - name: The packaged TOC carries a real version
+        run: |
+          v=$(tr -d '\r' < unpacked/GlassRaidFrames/GlassRaidFrames.toc | sed -n 's/^## Version: *//p')
+          echo "packaged version: '$v'"
+          case "$v" in ''|'@project-version@'|dev) echo "version not substituted"; exit 1 ;; esac
+
+      # .release is hidden, and upload-artifact@v4 skips hidden content by
+      # default: without include-hidden-files the upload finds nothing.
+      - name: Keep the zip for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: glassraidframes-package
+          path: .release/*.zip
+          include-hidden-files: true
+          if-no-files-found: error
