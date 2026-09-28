@@ -192,7 +192,20 @@ trees is unmeasured.
   trait system. `/rprobe traits` maps the config, its trees, currency spent and nodes per subtree
   or column. It's a candidate for "the tree with the most points"; to be run, then run again once
   points are spent.
-- `PLAYER_TALENT_UPDATE` fires at login and on `/reload`.
+- **Trait layout (`/rprobe traits nodes`, priest, 0 points):**
+  - Config 88388 ("Priest", type 4) has **one** tree (1114), with currency 3820 (quantity, spent
+    and spentInTree all 0) and **54 nodes, no subtrees**.
+  - The three Vanilla trees are **column clusters on one canvas**, split by gaps of over 2000
+    units: posX 1020-2820 (Discipline), 5020-6820 (Holy) and 9080-10880 (Shadow), each at y
+    2130-5730.
+  - One stray duplicate ("Holy Specialization") sits at x 9280, **y 21300**, off the canvas:
+    exclude nodes outside the canvas or not `isVisible`.
+  - Forever's trees aren't pure Vanilla (Penance, Divine Aegis and Prayer of Mending are in).
+  - **Role rule:** cluster the visible nodes by posX, sum `currentRank` per cluster (trees
+    left to right in tab order), and let the tree with the most points pick the role through a
+    per-class table. It uses positions only, so it's locale-proof.
+  - To confirm once points are spent: ranks land in the right cluster, and a second class
+    (the paladin) clusters into three the same way.
 - **`EventRegistry` is usable** (`TriggerEvent` and `RegisterCallback` exist), so the
   GlassUnitFrames integration route (#7) is open.
 
