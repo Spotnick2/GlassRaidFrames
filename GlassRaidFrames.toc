@@ -7,4 +7,11 @@
 
 Compat.lua
 Glass.lua
+Engine.lua
+Frames.lua
+Auras.lua
+Header.lua
+GlassRaidFrames.xml
+Blizzard.lua
+Movers.lua
 GlassRaidFrames.lua

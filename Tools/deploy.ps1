@@ -34,7 +34,7 @@ function Deploy-Addon {
     $dest = Join-Path $AddOnsPath "GlassRaidFrames"
     Write-Host "Deploying GlassRaidFrames -> $dest" -ForegroundColor Cyan
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    $files = @("GlassRaidFrames.toc") + (Get-ChildItem -LiteralPath $RepoRoot -Filter "*.lua" | Select-Object -ExpandProperty Name)
+    $files = @("GlassRaidFrames.toc") + (Get-ChildItem -LiteralPath $RepoRoot -File | Where-Object { $_.Extension -in ".lua", ".xml" } | Select-Object -ExpandProperty Name)
     foreach ($f in $files) {
         $src = Join-Path $RepoRoot $f
         if ($f -like "*.toc") {

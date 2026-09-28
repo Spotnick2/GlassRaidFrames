@@ -16,6 +16,15 @@ for _, f in ipairs(tocFiles()) do
     seen[f] = true
 end
 
+-- Every kind of file the TOC loads is one Tools/deploy.ps1 copies (it once
+-- skipped the XML template, and the headers would have had no children).
+local deploy = io.open("Tools/deploy.ps1"):read("*a")
+for line in io.lines("GlassRaidFrames.toc") do
+    line = line:gsub("%c", "")
+    local ext = line:match("^[^#].-(%.%a+)$")
+    if ext then check(deploy:find('"' .. ext .. '"', 1, true), "deploy.ps1 copies " .. ext .. " files (" .. line .. ")") end
+end
+
 -- Two places that must agree, never derived from each other (porting guide §0).
 loadAddon()
 eq(GlassRaidFrames.MEASURED_ON_BUILD, "1.60.1.70009", "MEASURED_ON_BUILD")

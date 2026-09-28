@@ -98,6 +98,7 @@ Files, in TOC order: `Compat.lua` → `Glass.lua` → `Engine.lua` → `Roster.l
   - A spell picker: a scrollable grid of the player's spellbook icons (`C_SpellBook`), with a text box for an ID.
 
 ### Milestone 3: Decursive-style dispel (issue #4)
+- **Before building, compare with ForeverUI's route** (`Modules/Frames/GameAuras.lua`): `C_UnitAuras.AddPrivateAuraAnchor` with Blizzard's raid dispel indicator. It uses holder attributes such as `dispel-indicator-option = DispellableByMe`, and the client does the "can I cure this" test. Probe both routes; keep the click-to-cure box either way.
 - **`Dispel.lua`**: our own cure table for Vanilla spell IDs, per class:
   - Priest: Dispel Magic, Cure/Abolish Disease.
   - Paladin: Purify, Cleanse.

@@ -1,0 +1,11 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <!-- The group header's child template. No initialConfigFunction: restricted
+         snippets are broken on Forever, and the header measured fine without one
+         (docs/FOREVER-PROBE.md, item 1). The size must come from the template,
+         because nothing else sizes a child before the header lays it out.
+         Everything else (clicks, bindings, the glass) is set up in Lua, out of
+         combat, on the 40 children precreated by Header.lua. -->
+    <Button name="GlassRaidFramesUnitTemplate" inherits="SecureUnitButtonTemplate" virtual="true">
+        <Size x="76" y="38"/>
+    </Button>
+</Ui>

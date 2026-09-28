@@ -28,11 +28,25 @@ WoW.fireAllRegistered()
 WoW.tick()
 for _, cmd in ipairs({ "", "failures", "version" }) do SlashCmdList.GLASSRAIDFRAMES(cmd) end
 
+-- Methods the dump cannot list: Blizzard_AuraContainer is a load-on-demand
+-- Blizzard addon the dump did not capture. Evidence they exist on Forever:
+-- GlassUnitFrames and DinoUnitFrames call every one of them in game, and the
+-- probe built these containers on 70009 (FOREVER-PROBE items 1 and 7).
+-- Keep this list exact: anything else missing from the dump still fails.
+local AURA_CONTAINER_API = {
+    ["AuraContainer:AddAuraGroup"] = true, ["AuraContainer:UpdateAllAuras"] = true,
+    ["AuraContainer:SetUnit"] = true,
+    ["Button:SetIcon"] = true,   -- on the buttons the container creates
+}
+
 local n = 0
 for name in pairs(WoW.methodsCalled) do
     n = n + 1
     local method = name:match(":(%a+)$")
-    check(widget[name] or documented[method], "method exists on Forever: " .. name)
+    local wtype = name:match("^(%a+):")
+    local ok = widget[name] or documented[method] or AURA_CONTAINER_API[name]
+        or (wtype == "AuraContainer" and widget["Frame:" .. method])   -- a Frame underneath
+    check(ok, "method exists on Forever: " .. name)
 end
 check(n >= 2, "recorded the addon's method calls (" .. n .. ")")
 done("test_methods")

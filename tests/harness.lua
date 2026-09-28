@@ -28,11 +28,27 @@ function tocFiles()
     return files
 end
 
+-- Virtual templates from the addon's XML: their <Size> and whether they
+-- inherit a secure template (then their frames are protected).
+function xmlTemplates()
+    local xml = io.open("GlassRaidFrames.xml"):read("*a")
+    for attrs, body in xml:gmatch("<Button%s+([^>]-)>(.-)</Button>") do
+        local name = attrs:match('name="([^"]+)"')
+        local inherits = attrs:match('inherits="([^"]+)"') or ""
+        local w, h = body:match('<Size%s+x="(%d+)"%s+y="(%d+)"')
+        if name then
+            if w then WoW.templateSizes[name] = { tonumber(w), tonumber(h) } end
+            if inherits:find("Secure") then WoW.secureTemplates[name] = true end
+        end
+    end
+end
+
 -- Load the addon the way the client does: every TOC file with (name, ns),
 -- then ADDON_LOADED, PLAYER_LOGIN, PLAYER_ENTERING_WORLD (initial login).
 function loadAddon(opts)
     opts = opts or {}
     local ns = {}
+    xmlTemplates()
     for _, file in ipairs(tocFiles()) do
         local chunk = assert(loadfile(file))
         chunk("GlassRaidFrames", ns)
@@ -61,3 +77,32 @@ function chatHas(pattern)
     end
     return false
 end
+
+-- A party: the player and party1..n (n <= 4).
+function party(n)
+    WoW.SetUnit("player", { name = "Karuzo Elegia", class = "PRIEST", player = true, health = 90, maxHealth = 92 })
+    for i = 1, n do
+        WoW.SetUnit("party" .. i, { name = "Member " .. i, class = "PALADIN", player = true, health = 100, maxHealth = 150 })
+    end
+end
+
+-- A raid of `n` members, five per subgroup in index order.
+function raid(n)
+    WoW.raid = {}
+    WoW.SetUnit("player", { name = "Karuzo Elegia", class = "PRIEST", player = true })
+    for i = 1, n do
+        local u = "raid" .. i
+        WoW.SetUnit(u, { name = "Raider " .. i, class = "WARRIOR", player = true })
+        WoW.raid[u] = { index = i, subgroup = math.floor((i - 1) / 5) + 1 }
+    end
+end
+
+-- The header child currently showing `unit`, or nil.
+function childFor(unit)
+    for _, c in ipairs(GlassRaidFrames.Header.children) do
+        if c:GetAttribute("unit") == unit then return c end
+    end
+end
+
+-- Let the engine paint: one rendered frame flushes every dirty channel.
+function flush() WoW.tick() end
