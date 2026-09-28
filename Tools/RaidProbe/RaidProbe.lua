@@ -816,6 +816,10 @@ local function permKey(arg)
             show(UnitExists("mouseover")), okN and show(who) or "?", okP and show(inParty) or "?", okR and show(inRaid) or "?"))
     end)
     local ok, err = pcall(SetOverrideBindingClick, b, true, PERM_KEY, b:GetName())
+    -- Alt-9 too: does the SELFCAST modifier (Alt) send a key's @mouseover cast
+    -- to the player, as it does for clicks? (the owner's druid rezzes on Alt-R)
+    local okA, errA = pcall(SetOverrideBindingClick, b, true, "ALT-" .. PERM_KEY, b:GetName())
+    say("ALT-" .. PERM_KEY .. " bound too: " .. (okA and "ok" or tostring(errA)))
     say("permanent key " .. PERM_KEY .. " -> " .. (text:gsub("\n", " | ")) .. ": " .. (ok and "ok" or tostring(err)))
     P.perm = b
 end
