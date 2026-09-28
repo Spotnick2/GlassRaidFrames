@@ -352,6 +352,10 @@ break the behaviour and confirm it goes red.
 - Issue → branch off `main` → PR with `Closes #N` → review (owner-launched) → squash-merge (by
   the owner). Never commit to `main`.
   Commit or push only when asked. Before committing, `luac -p` must be clean and the tests green.
+  **After pushing, check the PR's `package-check` run** (`gh run list`, then `gh run view`).
+  CI has no API dump: the stub validates events against `tests/events-70009.txt` instead, so
+  run a new test once with `GLASSRF_API_DUMP` pointing at a missing file. Milestone 1 sat red
+  on CI for several pushes before a review caught it.
 - Review policy: use the shared `$wow-addon-review` skill for PR reviews.
 - **The owner merges and closes PRs, and launches reviews.** Claude opens the issue, branch and
   PR, runs the tests, and stops there: never `gh pr merge` or close a PR, and never start a Codex
