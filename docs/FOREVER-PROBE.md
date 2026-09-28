@@ -182,6 +182,20 @@ trees is unmeasured.
   `useparent-unit` on the box, whose `unit` can't be set in combat, with its container
   following the child's unit through `OnAttributeChanged`.
 
+### 9. Spec and role (1.60.1.70009, 2026-09-28, level-? priest, no talent points)
+- **One spec per class.** `GetNumSpecializationsForClassID(5) = 1`. `GetSpecialization() = 1`,
+  and `GetSpecializationInfo(1)` = id 1487, name "Priest", **role DAMAGER**, pointsSpent 0; rows
+  2-4 are empty. `GetSpecializationRole` and `UnitGroupRolesAssigned("player")` also say
+  DAMAGER. **The spec API can't tell Holy from Shadow, or a tank from DPS**, so the automatic role
+  can't come from it.
+- `C_ClassTalents.GetActiveConfigID()` = 88388: the Vanilla trees appear to live in Retail's
+  trait system. `/rprobe traits` maps the config, its trees, currency spent and nodes per subtree
+  or column. It's a candidate for "the tree with the most points"; to be run, then run again once
+  points are spent.
+- `PLAYER_TALENT_UPDATE` fires at login and on `/reload`.
+- **`EventRegistry` is usable** (`TriggerEvent` and `RegisterCallback` exist), so the
+  GlassUnitFrames integration route (#7) is open.
+
 ### 8. Keyboard hover-casting (1.60.1.70009, 2026-09-28, priest, header children)
 - **The client's mouseover cast works on our frames, in combat.** `IsMouseoverCastSupported()` is
   true. After `C_CVar.SetCVar("enableMouseoverCast", "1")`, Lesser Heal on an action-bar key,

@@ -840,6 +840,52 @@ local function spec()
         .. " RegisterCallback=" .. show(type(EventRegistry.RegisterCallback))) or ""))
 end
 
+-- The Vanilla talent trees live in Retail's trait system here (one spec per
+-- class, measured): map how, so "the tree with the most points" can be read.
+local function traits()
+    local ok, configID = pcall(C_ClassTalents.GetActiveConfigID)
+    if not (ok and configID) then say("no active config: " .. show(configID)) return end
+    local okC, info = pcall(C_Traits.GetConfigInfo, configID)
+    if not (okC and type(info) == "table") then say("GetConfigInfo: " .. show(info)) return end
+    say(string.format("config %s: name=%s type=%s trees=%s", show(configID), show(info.name), show(info.type),
+        show(info.treeIDs and #info.treeIDs)))
+    for _, treeID in ipairs(info.treeIDs or {}) do
+        local okT, tree = pcall(C_Traits.GetTreeInfo, configID, treeID)
+        say(string.format(" tree %s: title=%s", show(treeID), show(okT and tree and tree.titleText)))
+        local okCur, cur = pcall(C_Traits.GetTreeCurrencyInfo, configID, treeID, false)
+        for i, c in ipairs(okCur and cur or {}) do
+            say(string.format("  currency %d: id=%s quantity=%s max=%s spent=%s spentInTree=%s", i,
+                show(c.traitCurrencyID), show(c.quantity), show(c.maxQuantity), show(c.spent), show(c.spentInTree)))
+        end
+        local okN, nodes = pcall(C_Traits.GetTreeNodes, treeID)
+        nodes = okN and nodes or {}
+        -- Group nodes by subtree (Retail puts spec and hero trees there) and
+        -- by posX band, in case the three Vanilla trees are side by side.
+        local bySub, n = {}, 0
+        for _, nodeID in ipairs(nodes) do
+            local okI, node = pcall(C_Traits.GetNodeInfo, configID, nodeID)
+            if okI and node and node.ID and node.ID ~= 0 then
+                n = n + 1
+                local key = tostring(node.subTreeID) .. "/x" .. tostring(node.posX and math.floor(node.posX / 3000))
+                local g = bySub[key] or { nodes = 0, ranks = 0 }
+                g.nodes = g.nodes + 1
+                g.ranks = g.ranks + (tonumber(node.currentRank) or 0)
+                bySub[key] = g
+            end
+        end
+        say(string.format("  %d nodes", n))
+        for key, g in pairs(bySub) do
+            local sub = key:match("^(%d+)/")
+            local name = ""
+            if sub then
+                local okS, si = pcall(C_Traits.GetSubTreeInfo, configID, tonumber(sub))
+                name = okS and si and show(si.name) or ""
+            end
+            say(string.format("  group subTree/xBand=%s %s: %d nodes, %d ranks", key, name, g.nodes, g.ranks))
+        end
+    end
+end
+
 --------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
@@ -950,6 +996,7 @@ local HELP = {
     "hide - hide Blizzard's compact party/raid frames by reparenting",
     "fps - 5 s frame-time sample",
     "spec - what the spec/talent APIs return (role source for per-role settings)",
+    "traits - how the talent trees are laid out in the trait system (points per tree)",
     "selfcast [none|alt] - show the self-cast modifier; none/alt changes it (a global setting)",
     "mocast [on|off] - the client's mouseover cast: support and CVars",
     "hoverkeys - toggle: hovering a tile binds key 8 to cast the test spell on it",
@@ -984,6 +1031,7 @@ SlashCmdList.RAIDPROBE = function(msg)
     elseif cmd == "fps" then fps()
     elseif cmd == "selfcast" then selfCast(arg)
     elseif cmd == "spec" then spec()
+    elseif cmd == "traits" then traits()
     elseif cmd == "mocast" then mouseoverCast(arg)
     elseif cmd == "hoverkeys" then hoverKeys()
     elseif cmd == "permkey" then permKey(arg)
