@@ -408,6 +408,14 @@ function RaidProbe_HeaderChildAttribute(self, name, value)
         end
     end
     say("header child unit -> " .. show(value))
+    -- A header moves tokens between its children, in combat too, so a child's
+    -- aura container must follow: does SetUnit work on a secure child in combat?
+    if self.rowContainer and value then
+        local ok, err = pcall(self.rowContainer.SetUnit, self.rowContainer, value)
+        local okU, errU = pcall(self.rowContainer.UpdateAllAuras, self.rowContainer)
+        say("  container SetUnit " .. show(value) .. ": " .. (ok and "ok" or tostring(err))
+            .. ", UpdateAllAuras: " .. (okU and "ok" or tostring(errU)))
+    end
 end
 
 local function headerReport()
@@ -419,8 +427,10 @@ local function headerReport()
         local child = h:GetAttribute("child" .. i)
         if not child then break end
         n = n + 1
-        if child:IsShown() then shown = shown + 1 end
-        say(string.format("  child%d unit=%s shown=%s", i, show(child:GetAttribute("unit")), show(child:IsShown())))
+        if child:IsShown() or child:GetAttribute("unit") then
+            if child:IsShown() then shown = shown + 1 end
+            say(string.format("  child%d unit=%s shown=%s", i, show(child:GetAttribute("unit")), show(child:IsShown())))
+        end
         i = i + 1
     end
     say(string.format("header: %d children, %d shown, header shown=%s", n, shown, show(h:IsShown())))
@@ -448,8 +458,19 @@ local function header()
     h:SetAttribute("columnAnchorPoint", "LEFT")
     h:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 40, -120)
     P.header = h
+    -- Precreate all 40 children out of combat (Cell's trick): a child the
+    -- header would otherwise create mid-combat could not be configured.
+    h:SetAttribute("startingIndex", -39)
     local shown = try("header Show", h.Show, h)
-    say("header created (shown call ok=" .. show(shown) .. ")")
+    h:SetAttribute("startingIndex", 1)
+    local n = 0
+    while h:GetAttribute("child" .. (n + 1)) do
+        n = n + 1
+        local child = h:GetAttribute("child" .. n)
+        child:HookScript("PostClick", postClick)
+        buildDebuffRow(child, child:GetAttribute("unit") or "player")
+    end
+    say("header created (shown call ok=" .. show(shown) .. "), " .. n .. " children precreated, each with a debuff row")
     C_Timer.After(0.5, headerReport)
 end
 

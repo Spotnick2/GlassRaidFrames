@@ -137,6 +137,21 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
 - **`SecureGroupHeaderTemplate` spawns children without `initialConfigFunction`**, created out
   of combat in a raid of 2: `child1 = raid1`, `child2 = raid2`, both shown, sized by the XML
   template.
-- **Still unmeasured for the header:** roster changes (join, leave, token reuse, conversion)
-  **in combat**, surviving `/reload`, and clicks on its children. The header was built in only
-  one session, and no roster change followed it.
+- **The header follows the roster in combat** (second run, same day):
+  - Raid→party out of combat: `child1` became `player` and `child2` became `nil`, then
+    `party1`.
+  - The partner leaving **in combat**: `child2` → `nil`, hidden.
+  - Rejoining **in combat**: `child2` → `party1`, shown.
+  - No blocked actions.
+  - The header's own restricted-free update code runs in combat, and our insecure
+    `OnAttributeChanged` on its children fires in combat too.
+  - Re-created after `/reload`, it spawned `raid1`/`raid2` again.
+- **Still open for the header** (the probe now tests all three):
+  1. Children must be **precreated** out of combat (Cell's `startingIndex = -39` trick) so all
+     40 exist before combat and can be configured.
+  2. A child's unit changes in combat, so its **aura containers must follow with `SetUnit` in
+     combat**. With manual buttons the tokens are fixed and this never happens.
+  3. Clicks on header children weren't logged: the XML template had no `PostClick`.
+- Party→raid conversion in combat is still untested for both approaches.
+- The first run's party/raid double set (both shown in a raid) was before the probe hid the
+  unused set. That mode switch hasn't been exercised yet.
