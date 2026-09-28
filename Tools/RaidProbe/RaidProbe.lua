@@ -390,6 +390,7 @@ local function build()
         show(GlassRaidFrames ~= nil and GlassRaidFrames.Glass ~= nil)))
     for _, line in ipairs(BINDING_HELP) do say(line) end
     for _, t in ipairs(order) do paint(t) end
+    applyMode()
 end
 
 --------------------------------------------------------------------------------
@@ -724,6 +725,22 @@ end
 -- Events
 --------------------------------------------------------------------------------
 
+-- Visibility ownership, as the real Roster.lua will do it: out of combat, the
+-- set that doesn't match the group mode is unwatched and hidden (party tokens
+-- stay valid inside a raid, so both sets would show). In combat nothing
+-- changes; a conversion waits for PLAYER_REGEN_ENABLED.
+local function applyMode()
+    if not P.built or InCombatLockdown() then return end
+    local raid = IsInRaid()
+    if P.mode == raid then return end
+    P.mode = raid
+    for _, t in ipairs(order) do
+        local wanted = (t.unit:find("^raid") ~= nil) == raid
+        if wanted then RegisterUnitWatch(t) else UnregisterUnitWatch(t); t:Hide() end
+    end
+    say("mode: " .. (raid and "raid" or "party") .. " set watched, the other hidden")
+end
+
 local function rosterLog()
     local parts = {}
     for _, t in ipairs(order) do
@@ -750,6 +767,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
             if t.boxContainer then pcall(t.boxContainer.UpdateAllAuras, t.boxContainer) end
             if t.rowContainer then pcall(t.rowContainer.UpdateAllAuras, t.rowContainer) end
         end
+        applyMode()
         C_Timer.After(0.3, rosterLog)
     elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_NAME_UPDATE"
         or event == "UNIT_CONNECTION" then
@@ -775,6 +793,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
         say("combat starts")
     elseif event == "PLAYER_REGEN_ENABLED" then
         say("combat ends")
+        applyMode()
         C_Timer.After(0.3, rosterLog)
     end
 end)
