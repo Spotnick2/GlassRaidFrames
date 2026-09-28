@@ -72,7 +72,8 @@ Files, in TOC order: `Compat.lua` → `Glass.lua` → `Engine.lua` → `Roster.l
   - Role icon: shown only when `UnitGroupRolesAssigned` is not NONE.
   - Leader and raid mark (sprite sheet).
   - Dead, ghost and offline text.
-  - Out-of-range alpha from `UnitInRange` (group range, not spell range), only if the probe shows it is readable. An "unchecked" result doesn't fade. It updates on `UNIT_IN_RANGE_UPDATE`, or on a shared ticker if that event isn't delivered.
+  - Out-of-range alpha: `UnitInRange` is **secret even out of combat** (probe item 5), so it goes straight to `SetAlphaFromBoolean(inRange, 1, 0.4)` and is never tested in Lua. It updates on a shared ticker, because `UNIT_IN_RANGE_UPDATE` wasn't delivered.
+  - Role icon: `UnitGroupRolesAssigned` is plain and returns roles on Forever (probe item 5). Dead, offline, name, class, leader and roster subgroup are plain in combat.
   - Health via secret-safe `SetValue`, never divided in Lua.
 - **`Auras.lua`**: one `AuraContainer` debuff row per tile (HARMFUL, a few icons), using GlassUF's `Auras.lua` order (`AddAuraGroup`, then `SetUnit`, then `UpdateAllAuras`, with a refresh on unit change). Nothing is anchored *to* the container.
 - **`Blizzard.lua`**: hide the compact party and raid frames using GlassUF's reparent plus deferred `SetParent` hook pattern.

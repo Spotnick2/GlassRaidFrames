@@ -119,6 +119,47 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
 
 ## Results
 
+### 4. Sounds (1.60.1.70009, 2026-09-28)
+- `PlaySoundFile("Interface\AddOns\RaidProbe\Media\dispel.ogg", "Master")` plays
+  (`willPlay = true`, heard). `PlaySound(8959)` plays too.
+- `Enum.UnitAuraSoundTrigger = { Added = 0, ApplicationsIncreased = 1, Removed = 2 }`.
+- **`AddAuraSound` requires `spellID`.** Without one (and with `dispelName` or `dispelType`
+  instead), it fails with `bad argument #3 … (Current Field: [spellID])`. There's no dispel-type
+  trigger. So in combat the alert covers only spell IDs learned out of combat (Decursive's
+  route). Out of combat, our own scan plus `PlaySoundFile` covers every dispellable debuff.
+
+### 5. Secrecy (1.60.1.70009, 2026-09-28, raid of 2)
+- `C_Secrets.ShouldAurasBeSecret()`: false out of combat, **true in combat**.
+- `UnitHealth`: secret, in and out of combat.
+- `UnitHealthMax`: plain for the player (92), **secret for the partner**.
+- Plain even **in combat**, for both units: `UnitIsDeadOrGhost`, `UnitIsConnected`,
+  `UnitGroupRolesAssigned` (`DAMAGER`: roles do come back on Forever), `GetUnitName`,
+  `UnitClass`, `UnitGUID`, `UnitIsGroupLeader`, `GetRaidTargetIndex` (nil, unmarked) and
+  `GetRaidRosterInfo` (name, rank, subgroup).
+- **`UnitInRange` is secret (both returns), even out of combat.** Fade through the client:
+  `Frame/Region:SetAlphaFromBoolean(value, alphaIfTrue, alphaIfFalse)` or
+  `C_CurveUtil.EvaluateColorValueFromBoolean` (both in the dump; the alpha scale, 0-1 or 0-255,
+  is to be measured).
+- **No `UNIT_IN_RANGE_UPDATE` arrived** while walking out of range and back (watch on for
+  30 s), so poll range on a shared ticker.
+- The `UNIT_AURA` payload wasn't logged: the probe's watch only covered manual tiles. Nothing
+  depends on it, because auras go through `AuraContainer`.
+
+### 6. Hiding Blizzard's frames (1.60.1.70009, 2026-09-28)
+- `PartyFrame` (shown), `CompactPartyFrame` (hidden: the raid-style party frames are used in a
+  raid), `CompactRaidFrameContainer` (shown) and `CompactRaidFrameManager` (shown) all exist and
+  are protected.
+- `SetParent(hidden)` out of combat worked for all four, with no errors, and **Edit Mode did not
+  bring them back** (owner, visually). The deferred `SetParent` repair hook stayed in place.
+
+### 7. Scale (1.60.1.70009, 2026-09-28, raid of 2)
+- The header with 40 precreated children, each with a debuff-row container and a dispel-box
+  container (400 row and 40 box aura buttons initialised):
+  - 66.4 fps average out of combat, 64.9 in combat;
+  - worst single frame 67–69 ms.
+- The baseline without the probe wasn't captured, so that spike isn't attributed yet. Recheck
+  if stutter is seen.
+
 ### 3. The dispel box: deferred
 - No character in the group can cure yet (the priest is below Cure Disease at 14; the paladin is
   below Purify). The box's test slot lights for any dispellable type, so lighting and
