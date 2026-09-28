@@ -85,7 +85,8 @@ Files, in TOC order: `Compat.lua` → `Glass.lua` → `Engine.lua` → `Roster.l
   - The button's `unit` attribute supplies the target, so there is no `@cell` rewrite.
   - It re-resolves on `SPELLS_CHANGED`.
   - It is applied to all 45 buttons out of combat, clearing old keys first (Cell's `ClearClickCastings` idea).
-  - Defaults: `type1=target`, `type2=togglemenu`.
+  - Defaults: `*type1=target`, `*type2=togglemenu`, **with wildcards**. The template never falls back from `shift-type1` to `type1`, so an unbound modified click would otherwise do nothing (probe item 2).
+  - **Self-cast conflict** (probe item 2): the client's SELFCAST modifier (`GetModifiedClick("SELFCAST")`, ALT by default) overrides the button's unit, and a macro too. A binding using that modifier is flagged in the options, with a one-click "set Self Cast Key to None" (`SetModifiedClick` + `SaveBindings`), offered with consent and out of combat only.
 - **Keyboard hover-casting is back in scope** (revised 2026-09-28): the owner's Cell data shows keys 1-8 and Shift-R while hovering are the main healing binds, with pinned ranks. The route (client mouseover cast, hover override bindings, or a permanent `@mouseover` binding) is picked by probe item 8. Mouse-wheel bindings stay out. Rank pinning ("Holy Light rank 7") is required, so probe item 2's rank forms decide how a binding stores a rank.
 - **Options**: a "Click-casting" page in a canvas panel, built GlassUF `Options.lua` style.
   - A binding row list and an "add binding" capture button. It captures the pressed mouse button and modifiers, and refuses duplicates.

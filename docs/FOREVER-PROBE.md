@@ -137,6 +137,16 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
   `SELFCAST` modifier, and it wins over the button's `unit`. This matters for bindings: the owner's
   paladin binds Alt-left and Alt-right in Cell. Next run: an Alt `@mouseover` macro
   (`alt-type2`), and `/rprobe selfcast none` (unbinds the modifier) followed by alt-left again.
+- **Self-cast measured (third run).** The client options were Self Cast = "Auto and Key Press",
+  key ALT (`GetModifiedClick("SELFCAST") == "ALT"`, `autoSelfCast = 1`). In combat, with ALT:
+  - alt-left (`spell`) cast on the player;
+  - alt-right (`macro /cast [@mouseover,help,nodead]`) **also** cast on the player, so a macro
+    doesn't escape it.
+
+  After `SetModifiedClick("SELFCAST", "NONE")` + `SaveBindings`, alt-left cast on the clicked
+  partner, twice, in combat. **Rule: a binding on the SELFCAST modifier always self-casts.** The
+  addon detects the conflict and offers to set the key to NONE (a global client setting, only
+  with consent, out of combat). It never changes the key on its own.
 - One shift-left on the partner also landed on the player, while later identical clicks
   didn't. That fits `autoSelfCast` retargeting an invalid (out-of-range) unit. It's unconfirmed;
   `/rprobe selfcast` now logs the CVar.
