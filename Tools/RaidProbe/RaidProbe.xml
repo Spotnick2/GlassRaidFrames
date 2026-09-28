@@ -1,0 +1,31 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <!-- The child template for the SecureGroupHeaderTemplate probe (/rprobe header).
+         No initialConfigFunction: restricted snippets are broken on Forever, so
+         everything the child needs is declared here. Size must come from the
+         template, since nothing else can set it on a header-spawned child. -->
+    <Button name="RaidProbeHeaderUnitTemplate" inherits="SecureUnitButtonTemplate" virtual="true">
+        <Size x="70" y="26"/>
+        <Attributes>
+            <Attribute name="type1" type="string" value="target"/>
+            <Attribute name="type2" type="string" value="togglemenu"/>
+        </Attributes>
+        <Layers>
+            <Layer level="BACKGROUND">
+                <Texture parentKey="bg" setAllPoints="true">
+                    <Color r="0.1" g="0.3" b="0.5" a="0.6"/>
+                </Texture>
+            </Layer>
+            <Layer level="OVERLAY">
+                <FontString parentKey="label" inherits="GameFontHighlightSmall" setAllPoints="true"/>
+            </Layer>
+        </Layers>
+        <Scripts>
+            <OnLoad>
+                self:RegisterForClicks("AnyUp")
+            </OnLoad>
+            <OnAttributeChanged>
+                RaidProbe_HeaderChildAttribute(self, name, value)
+            </OnAttributeChanged>
+        </Scripts>
+    </Button>
+</Ui>

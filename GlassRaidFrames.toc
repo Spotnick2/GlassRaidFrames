@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: |cff7fd4ffGlass|r Raid Frames
+## Notes: Liquid-glass party and raid frames with click-casting for WoW: Forever. /grf help
+## Author: Spotnick
+## Version: @project-version@
+## SavedVariables: GlassRaidFramesDB
+
+Compat.lua
+Glass.lua
+GlassRaidFrames.lua
