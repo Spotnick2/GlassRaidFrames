@@ -173,7 +173,9 @@ local function postClick(self, mouse)
     local kind = get and get(self, "type", mouse)
     local what = kind == "spell" and get(self, "spell", mouse)
         or kind == "macro" and get(self, "macrotext", mouse) or ""
-    say(string.format("click %s %s%s%s%s -> %s %s", show(self:GetAttribute("unit")),
+    local unit = self:GetAttribute("unit")
+    if unit == nil and self:GetAttribute("useparent-unit") then unit = "box of " .. tostring(self:GetParent():GetAttribute("unit")) end
+    say(string.format("click %s %s%s%s%s -> %s %s", show(unit),
         IsShiftKeyDown() and "shift-" or "", IsControlKeyDown() and "ctrl-" or "",
         IsAltKeyDown() and "alt-" or "", tostring(mouse), show(kind), show(what)))
 end
@@ -228,7 +230,13 @@ local function buildBox(tile, unit, slots, curve)
     box:SetPoint("TOPRIGHT", tile, "TOPRIGHT", -2, -2)
     box:SetFrameLevel(tile:GetFrameLevel() + 10)
     box:RegisterForClicks("AnyUp")
-    box:SetAttribute("unit", unit)
+    if unit then
+        box:SetAttribute("unit", unit)
+    else
+        -- A header child's unit changes in combat, when the box's own "unit"
+        -- could not be set: take the parent's (SecureButton_GetUnit).
+        box:SetAttribute("useparent-unit", true)
+    end
     for i, slot in ipairs(slots) do
         if slot.name then
             box:SetAttribute("type" .. i, "spell")
@@ -268,7 +276,7 @@ local function buildBox(tile, unit, slots, curve)
             end,
         })
     end
-    try("box SetUnit", c.SetUnit, c, unit)
+    try("box SetUnit", c.SetUnit, c, unit or tile:GetAttribute("unit") or "player")
     if c.SetEnabled then try("box SetEnabled", c.SetEnabled, c, true) end
     try("box UpdateAllAuras", c.UpdateAllAuras, c)
     tile.boxContainer = c
@@ -434,6 +442,11 @@ function RaidProbe_HeaderChildAttribute(self, name, value)
     say("header child unit -> " .. show(value))
     -- A header moves tokens between its children, in combat too, so a child's
     -- aura container must follow: does SetUnit work on a secure child in combat?
+    if self.boxContainer and value then
+        local ok, err = pcall(self.boxContainer.SetUnit, self.boxContainer, value)
+        pcall(self.boxContainer.UpdateAllAuras, self.boxContainer)
+        if not ok then say("  box container SetUnit " .. show(value) .. ": " .. tostring(err)) end
+    end
     if self.rowContainer and value then
         local ok, err = pcall(self.rowContainer.SetUnit, self.rowContainer, value)
         local okU, errU = pcall(self.rowContainer.UpdateAllAuras, self.rowContainer)
@@ -487,6 +500,12 @@ local function header()
     h:SetAttribute("startingIndex", -39)
     local shown = try("header Show", h.Show, h)
     h:SetAttribute("startingIndex", 1)
+    P.slots = P.slots or cureSlots()
+    P.curve = P.curve or slotCurve(P.slots)
+    for i, sl in ipairs(P.slots) do
+        say(string.format("cure slot %d (%s click): %s -> %s", i, ({ "left", "right", "middle" })[i],
+            show(sl.name or "none"), table.concat(sl.types, "/")))
+    end
     local n = 0
     while h:GetAttribute("child" .. (n + 1)) do
         n = n + 1
@@ -496,8 +515,9 @@ local function header()
         P.headerChildren = P.headerChildren or {}
         P.headerChildren[#P.headerChildren + 1] = child
         buildDebuffRow(child, child:GetAttribute("unit") or "player")
+        buildBox(child, nil, P.slots, P.curve)
     end
-    say("header created (shown call ok=" .. show(shown) .. "), " .. n .. " children precreated, each with a debuff row and the test bindings")
+    say("header created (shown call ok=" .. show(shown) .. "), " .. n .. " children precreated, each with a debuff row, a dispel box and the test bindings")
     local id = testSpell()
     local c1 = h:GetAttribute("child1")
     say("test spell " .. show(id) .. ": name=" .. show(c1 and c1:GetAttribute("shift-spell1"))
