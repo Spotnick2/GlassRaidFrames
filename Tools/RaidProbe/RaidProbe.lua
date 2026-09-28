@@ -800,8 +800,21 @@ local function permKey(arg)
     -- button 9 would (the dedicated-key mode should not eat the key).
     local text = "/cast [@mouseover,help,nodead] " .. name
     if arg == "fallback" then text = text .. "\n/click [@mouseover,noexists][@mouseover,harm][@mouseover,dead] ActionButton9" end
+    -- "group": only a group member under the cursor gets the spell (owner's
+    -- rule: a stranger hovered in the world must never be healed); anyone else,
+    -- or nothing, and the key does its action-bar action on your target.
+    if arg == "group" then
+        text = "/cast [@mouseover,help,nodead,party][@mouseover,help,nodead,raid] " .. name
+            .. "\n/click [@mouseover,noparty,noraid][@mouseover,noexists][@mouseover,harm][@mouseover,dead] ActionButton9"
+    end
     b:SetAttribute("macrotext", text)
-    b:SetScript("PostClick", function() say("perm key " .. PERM_KEY .. " clicked (mouseover=" .. show(UnitExists("mouseover")) .. ")") end)
+    b:SetScript("PostClick", function()
+        local okN, who = pcall(GetUnitName, "mouseover", false)
+        local okP, inParty = pcall(UnitInParty, "mouseover")
+        local okR, inRaid = pcall(UnitInRaid, "mouseover")
+        say(string.format("perm key %s clicked: mouseover=%s (%s) party=%s raid=%s", PERM_KEY,
+            show(UnitExists("mouseover")), okN and show(who) or "?", okP and show(inParty) or "?", okR and show(inRaid) or "?"))
+    end)
     local ok, err = pcall(SetOverrideBindingClick, b, true, PERM_KEY, b:GetName())
     say("permanent key " .. PERM_KEY .. " -> " .. (text:gsub("\n", " | ")) .. ": " .. (ok and "ok" or tostring(err)))
     P.perm = b
@@ -1023,7 +1036,7 @@ local HELP = {
     "selfcast [none|alt] - show the self-cast modifier; none/alt changes it (a global setting)",
     "mocast [on|off] - the client's mouseover cast: support and CVars",
     "hoverkeys - toggle: hovering a tile binds key 8 to cast the test spell on it",
-    "permkey [fallback] - toggle: key 9 casts the test spell on @mouseover (fallback: else action button 9)",
+    "permkey [fallback|group] - toggle: key 9 casts on @mouseover (fallback: else action button 9; group: group members only)",
     "enums - dump the enums the dispel box relies on",
     "log clear - empty RaidProbeDB.log",
 }
