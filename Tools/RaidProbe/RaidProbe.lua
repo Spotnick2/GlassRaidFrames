@@ -772,7 +772,7 @@ local function permKey(arg)
     -- "fallback": without a friendly mouseover, the key does what action
     -- button 9 would (the dedicated-key mode should not eat the key).
     local text = "/cast [@mouseover,help,nodead] " .. name
-    if arg == "fallback" then text = text .. "\n/click [nomouseover][@mouseover,harm][@mouseover,dead] ActionButton9" end
+    if arg == "fallback" then text = text .. "\n/click [@mouseover,noexists][@mouseover,harm][@mouseover,dead] ActionButton9" end
     b:SetAttribute("macrotext", text)
     b:SetScript("PostClick", function() say("perm key " .. PERM_KEY .. " clicked (mouseover=" .. show(UnitExists("mouseover")) .. ")") end)
     local ok, err = pcall(SetOverrideBindingClick, b, true, PERM_KEY, b:GetName())

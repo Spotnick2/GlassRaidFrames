@@ -134,10 +134,16 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
 - **Without a friendly mouseover, a plain dedicated key does nothing** (measured, key 9 with
   nothing hovered): the button is clicked, but no cast is sent, there is no error and no
   self-cast (even with `autoSelfCast = 1`). The key is swallowed.
+- **Fallback, first try:**
+  - `/click [nomouseover][@mouseover,harm][@mouseover,dead] ActionButton9` after the
+    `@mouseover` heal: hovering an **enemy** fired action button 9 (Smite on the mob, in
+    combat), so `/click ActionButtonN` works from a secure macro.
+  - Hovering **nothing** did nothing, because `nomouseover` isn't a valid macro condition.
+  - Retest with `[@mouseover,noexists]`.
 - **Owner's decision: both.** Mouseover cast is the default, with a checkbox for the CVar.
   Optional dedicated keys use the permanent-binding route. Still to measure: what a dedicated
   key does with **no** friendly mouseover, and whether a
-  `/click [nomouseover][@mouseover,harm][@mouseover,dead] ActionButton<n>` fallback line keeps
+  `/click [@mouseover,noexists][@mouseover,harm][@mouseover,dead] ActionButton<n>` fallback line keeps
   the key's action-bar action (`/rprobe permkey fallback`).
 
 ### 2. Click-cast attributes (1.60.1.70009, 2026-09-28, priest, header children)
