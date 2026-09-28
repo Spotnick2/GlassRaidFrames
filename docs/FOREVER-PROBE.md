@@ -204,8 +204,11 @@ trees is unmeasured.
   - **Role rule:** cluster the visible nodes by posX, sum `currentRank` per cluster (trees
     left to right in tab order), and let the tree with the most points pick the role through a
     per-class table. It uses positions only, so it's locale-proof.
-  - To confirm once points are spent: ranks land in the right cluster, and a second class
-    (the paladin) clusters into three the same way.
+  - **A second class confirms it (paladin, 0 points):** config 5079379 ("Paladin"), one tree
+    (1100), 50 nodes, the **same column ranges**: 1020-2820 Holy, 5020-6820 Protection,
+    9080-10880 Retribution. The order is the tab order, and there is no off-canvas node. The
+    layout is shared across classes, so clustering by posX gaps holds.
+  - Still to confirm once points are spent: ranks show up in `currentRank` in the right cluster.
 - **`EventRegistry` is usable** (`TriggerEvent` and `RegisterCallback` exist), so the
   GlassUnitFrames integration route (#7) is open.
 
