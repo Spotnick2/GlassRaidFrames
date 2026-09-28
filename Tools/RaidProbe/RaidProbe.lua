@@ -747,6 +747,12 @@ end
 
 -- b. Hover bindings: key "8" -> click the hovered tile as virtual button "key8".
 local HOVER_KEY = "8"
+local function clearHover(t)
+    if not t.hoverBound then return end
+    local okC, err = pcall(ClearOverrideBindings, t)
+    if okC then t.hoverBound = nil else say("clear hover binding: " .. tostring(err)) end
+end
+
 local function hoverKeys()
     if InCombatLockdown() then say("out of combat only") return end
     P.hover = not P.hover
@@ -754,17 +760,18 @@ local function hoverKeys()
     for _, t in ipairs(order) do
         t:SetAttribute("type-key8", name and "spell" or nil)
         t:SetAttribute("spell-key8", name)
+        -- Turning the mode off releases any key a hovered tile still holds:
+        -- OnLeave may never come, and must not be the only cleanup.
+        if not P.hover then clearHover(t) end
         if not t.hoverHooked then
             t:HookScript("OnEnter", function(self)
                 if not P.hover then return end
                 local okB, err = pcall(SetOverrideBindingClick, self, true, HOVER_KEY, self:GetName(), "key8")
+                if okB then self.hoverBound = true end
                 say("OnEnter bind " .. HOVER_KEY .. " -> " .. self.unit .. ": " .. (okB and "ok" or tostring(err)))
             end)
-            t:HookScript("OnLeave", function(self)
-                if not P.hover then return end
-                local okC, err = pcall(ClearOverrideBindings, self)
-                if not okC then say("OnLeave clear: " .. tostring(err)) end
-            end)
+            -- Cleanup runs whether or not the mode is still on.
+            t:HookScript("OnLeave", clearHover)
             t.hoverHooked = true
         end
     end
@@ -950,3 +957,6 @@ SlashCmdList.RAIDPROBE = function(msg)
         for _, line in ipairs(HELP) do say("/rprobe " .. line) end
     end
 end
+
+-- Seam for tests/test_probe.lua: file-local state and the hover-key toggle.
+RaidProbe_test = { P = P, order = order, hoverKeys = hoverKeys, HOVER_KEY = HOVER_KEY }
