@@ -808,6 +808,39 @@ local function permKey(arg)
 end
 
 --------------------------------------------------------------------------------
+-- Spec and role (probe item 9): the talent-tab API is gone on Forever, and what
+-- C_SpecializationInfo returns for Vanilla trees is unmeasured (porting guide).
+-- Settings per role (healer/caster/melee/tank) need a role source.
+--------------------------------------------------------------------------------
+
+local function spec()
+    local S = C_SpecializationInfo or {}
+    local function call(label, fn, ...)
+        if type(fn) ~= "function" then say(label .. ": absent") return end
+        local ok, a, b2, c, d, e, f, g = pcall(fn, ...)
+        say(string.format("%s: ok=%s %s %s %s %s %s %s %s", label, show(ok), show(a), show(b2), show(c),
+            show(d), show(e), show(f), show(g)))
+        return ok and a or nil
+    end
+    call("IsInitialized", S.IsInitialized)
+    call("GetActiveSpecGroup", S.GetActiveSpecGroup)
+    local idx = call("GetSpecialization", S.GetSpecialization)
+    local _, _, classID = UnitClass("player")
+    call("GetNumSpecializationsForClassID(" .. show(classID) .. ")", S.GetNumSpecializationsForClassID, classID)
+    for i = 1, 4 do
+        local ok, id, name, _, _, role, _, points = pcall(S.GetSpecializationInfo, i)
+        say(string.format("  spec %d: ok=%s id=%s name=%s role=%s pointsSpent=%s%s", i, show(ok), show(id),
+            show(name), show(role), show(points), i == idx and "  <- active" or ""))
+    end
+    if rawget(_G, "GetSpecializationRole") then call("GetSpecializationRole(active)", GetSpecializationRole, idx or 1) end
+    call("C_ClassTalents.GetActiveConfigID", C_ClassTalents and C_ClassTalents.GetActiveConfigID)
+    call("UnitGroupRolesAssigned(player)", UnitGroupRolesAssigned, "player")
+    say("EventRegistry: " .. show(type(rawget(_G, "EventRegistry")))
+        .. (rawget(_G, "EventRegistry") and (" TriggerEvent=" .. show(type(EventRegistry.TriggerEvent))
+        .. " RegisterCallback=" .. show(type(EventRegistry.RegisterCallback))) or ""))
+end
+
+--------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
 
@@ -873,6 +906,10 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
         end
     elseif event == "UNIT_IN_RANGE_UPDATE" then
         if P.watch then say(string.format("UNIT_IN_RANGE_UPDATE %s -> %s", show(a1), show(a2))) end
+    elseif event == "ACTIVE_TALENT_GROUP_CHANGED" or event == "PLAYER_TALENT_UPDATE"
+        or event == "CHARACTER_POINTS_CHANGED" or event == "PLAYER_SPECIALIZATION_CHANGED"
+        or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "TRAIT_CONFIG_UPDATED" then
+        say(string.format("|cff7fd4ff%s|r %s %s", event, show(a1), show(a2)))
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         say(string.format("|cffff6060%s|r %s %s", event, show(a1), show(a2)))
     elseif event == "PLAYER_REGEN_DISABLED" then
@@ -885,7 +922,9 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
 end)
 for _, e in ipairs({ "ADDON_LOADED", "GROUP_ROSTER_UPDATE", "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE",
     "UNIT_CONNECTION", "UNIT_AURA", "UNIT_IN_RANGE_UPDATE", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN",
-    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE",
+    "CHARACTER_POINTS_CHANGED", "PLAYER_SPECIALIZATION_CHANGED", "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
+    "TRAIT_CONFIG_UPDATED" }) do
     local ok, r = pcall(ev.RegisterEvent, ev, e)
     if not ok or r == false then print("RaidProbe could not register " .. e .. ": " .. tostring(r)) end
 end
@@ -910,6 +949,7 @@ local HELP = {
     "aurasound [spellID|clear] - try C_UnitAuras.AddAuraSound shapes on every group unit",
     "hide - hide Blizzard's compact party/raid frames by reparenting",
     "fps - 5 s frame-time sample",
+    "spec - what the spec/talent APIs return (role source for per-role settings)",
     "selfcast [none|alt] - show the self-cast modifier; none/alt changes it (a global setting)",
     "mocast [on|off] - the client's mouseover cast: support and CVars",
     "hoverkeys - toggle: hovering a tile binds key 8 to cast the test spell on it",
@@ -943,6 +983,7 @@ SlashCmdList.RAIDPROBE = function(msg)
     elseif cmd == "hide" then hide()
     elseif cmd == "fps" then fps()
     elseif cmd == "selfcast" then selfCast(arg)
+    elseif cmd == "spec" then spec()
     elseif cmd == "mocast" then mouseoverCast(arg)
     elseif cmd == "hoverkeys" then hoverKeys()
     elseif cmd == "permkey" then permKey(arg)

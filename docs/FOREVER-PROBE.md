@@ -112,6 +112,19 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
   route works in combat. With route (c), the addon owns the key only while you are in a group,
   and the options have to say so.
 
+### 9. Spec and role (gates per-role settings, issue #7)
+The talent-tab API is gone on Forever, and what `C_SpecializationInfo` returns for Vanilla
+trees is unmeasured.
+- [ ] `/rprobe spec` on a character with talent points spent. It logs:
+      `GetSpecialization`, the `GetSpecializationInfo` rows (name, **role**, **pointsSpent**),
+      the active spec group, and whether `EventRegistry` is usable.
+- [ ] Spend a talent point, and switch dual spec if available. Which of
+      `PLAYER_TALENT_UPDATE`, `CHARACTER_POINTS_CHANGED`, `ACTIVE_TALENT_GROUP_CHANGED`,
+      `PLAYER_SPECIALIZATION_CHANGED` and `TRAIT_CONFIG_UPDATED` are logged? Run `/rprobe spec`
+      again after each.
+- **Decision:** auto role from the spec if these answer, with the manual `/grf role` override
+  either way. Otherwise manual plus a class default.
+
 ### 7. Scale (gates the tile budget)
 - [ ] The `built … in … ms` line after `/rprobe build`.
 - [ ] `/rprobe fps` in a raid, out of combat and in combat, with debuffs going on and off.
