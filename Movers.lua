@@ -62,6 +62,7 @@ local function build()
         self.dragging = false
         follow(true)
         reattach()
+        if GRF.Announce then GRF.Announce() end
     end)
     mover:SetScript("OnMouseUp", function(_, button)
         if button == "RightButton" then Movers.Lock() end
@@ -98,11 +99,14 @@ function Movers.IsUnlocked()
     return mover ~= nil and mover:IsShown()
 end
 
--- Back to the default spot, forgetting the saved one. Out of combat.
+-- Back to the current role's default spot, forgetting its saved one. Out of combat.
 function Movers.Reset()
     if InCombatLockdown() then return false end
-    if GRF.db then GRF.db.pos = nil end
-    return Header.SetPosition(Header.DEFAULT_POS.x, Header.DEFAULT_POS.y, false)
+    local prof = GRF.Profile and GRF.Profile()
+    if prof then prof.pos = nil end
+    local ok = Header.SetPosition(Header.DefaultPosition(GRF.role))
+    if GRF.Announce then GRF.Announce() end
+    return ok
 end
 
 -- Combat starting mid-drag: stop, and stay where the last out-of-combat

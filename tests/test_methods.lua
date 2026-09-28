@@ -26,7 +26,22 @@ f:close()
 loadAddon()
 WoW.fireAllRegistered()
 WoW.tick()
-for _, cmd in ipairs({ "", "failures", "version" }) do SlashCmdList.GLASSRAIDFRAMES(cmd) end
+for _, cmd in ipairs({ "", "failures", "version", "role", "role healer", "role auto" }) do SlashCmdList.GLASSRAIDFRAMES(cmd) end
+-- The options panel: built on show, every control clicked.
+local O = GlassRaidFrames.Options._test
+O.panel._scripts.OnShow(O.panel)
+for _, rb in ipairs(O.controls.role) do rb._scripts.OnClick(rb) end
+for _, key in ipairs({ "solo", "blizzard" }) do
+    local cb = O.controls[key]
+    cb._scripts.OnClick(cb)
+end
+-- Unlock mode and a drag, so the mover's methods are checked too.
+GlassRaidFrames.Movers.Unlock()
+local mv = GlassRaidFrames.Movers._test.mover()
+UIParent._center = { 512, 384 }
+mv._center = { 520, 390 }
+mv._scripts.OnDragStart(mv); mv._scripts.OnUpdate(mv); mv._scripts.OnDragStop(mv)
+GlassRaidFrames.Movers.Lock()
 
 -- Methods the dump cannot list: Blizzard_AuraContainer is a load-on-demand
 -- Blizzard addon the dump did not capture. Evidence they exist on Forever:

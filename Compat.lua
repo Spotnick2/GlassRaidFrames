@@ -86,6 +86,16 @@ function API.HealthPercent(unit)
     return UnitHealthPercent(unit, true, curve)
 end
 
+-- CreateFrame with a template that may be missing on this client. A missing
+-- template doesn't throw, it returns a bare frame (Priestly, GlassUnitFrames),
+-- so `proof` names a field the template would have made. Returns the frame
+-- and whether the template really applied.
+function API.SafeFrame(ftype, parent, template, proof)
+    local ok, f = pcall(CreateFrame, ftype, nil, parent, template)
+    if ok and f then return f, (proof == nil) or f[proof] ~= nil end
+    return CreateFrame(ftype, nil, parent), false
+end
+
 -- The one place failures are recorded (first error per key), read by
 -- /grf failures and the tests.
 GRF.paintFailures = GRF.paintFailures or {}
