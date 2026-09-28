@@ -27,21 +27,16 @@ a new idiom.
   healing binds (keys 1–8, Shift-R to resurrect, pinned spell ranks, from their Cell data).
   Cell does it with restricted snippets, which are broken here; probe item 8 picks the route.
 
-**Status: milestone 0 (scaffold and probe).** The approved plan has four milestones:
-1. Scaffold and probe.
-2. Glass party/raid frames.
-3. Click-casting.
-4. Dispel box and sound.
-
-Polish follows. `docs/FOREVER-PROBE.md` lists what the probe (`Tools/RaidProbe/`) must measure
-before milestone 1 picks its design; record the results there. Work goes through GitHub issues
-and PRs at `github.com/Spotnick2/GlassRaidFrames` (private), one issue per milestone.
+**Status: milestone 1 (glass party and raid frames).** Milestone 0's probe settled the
+design (`docs/FOREVER-PROBE.md`); the approved plan is `docs/PLAN.md`. Next: click-casting (#3),
+then the dispel box and sound (#4). Work goes through GitHub issues and PRs at
+`github.com/Spotnick2/GlassRaidFrames` (private), one issue per milestone.
 
 ## Layout
 
-TOC load order: `Compat.lua` → `Glass.lua` → `GlassRaidFrames.lua`. Planned additions, in
-order: `Engine.lua` → `Roster.lua` → `Frames.lua` → `Auras.lua` → `ClickCast.lua` →
-`Dispel.lua` → `Blizzard.lua` → `Movers.lua`, then `Options.lua` last.
+TOC load order: `Compat.lua` → `Glass.lua` → `Engine.lua` → `Frames.lua` → `Auras.lua` →
+`Header.lua` → `GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` → `GlassRaidFrames.lua`.
+Planned: `ClickCast.lua`, `Dispel.lua`, `Options.lua`.
 
 - **`Compat.lua`**: `GlassRaidFrames.API` is the only route to client APIs that moved or may be
   absent. It holds:
@@ -60,6 +55,47 @@ order: `Engine.lua` → `Roster.lua` → `Frames.lua` → `Auras.lua` → `Click
   the header and namespace lines differ. `tests/test_toc.lua` fails while they differ, and the
   same goes for `Tools/make_textures.py`. Change the material in GlassUnitFrames first, then copy
   it back. `Media/*.tga` come from that generator.
+- **`Header.lua`**: the layout. **Eight `SecureGroupHeaderTemplate` headers**, one per raid
+  group (`groupFilter` 1..8), side by side in one protected container, as in EllesmereUI's
+  separated mode. Header 1 also has `showParty`/`showPlayer`, so **the client switches between
+  the party column and the raid grid, in combat too; there is no mode code**. No
+  `initialConfigFunction` (snippets are broken): the child template in `GlassRaidFrames.xml`
+  carries the size. All 40 children are **precreated out of combat** (`startingIndex = -4`, show,
+  back to `1`) and dressed once. A child's unit changes in combat; its `OnAttributeChanged`
+  hook calls `Engine.SetUnit` and the child's `onUnitChanged` (lower case on purpose: a
+  capitalised field on a widget collides with the widget-method namespace). The container
+  moves only out of combat (`Header.SetPosition`).
+- **`Engine.lua`**: who gets painted and when, adapted from GlassUnitFrames' engine for frames
+  whose unit changes:
+  - a unit→frames map kept by `Engine.SetUnit`;
+  - one `RegisterEvent` frame for the unit events (tokens move between frames);
+  - channels (`name`, `health`, `indicators`, `range`) flushed once per rendered frame;
+  - a full repaint on `GROUP_ROSTER_UPDATE`, because a token can change person without
+    changing frame;
+  - a shared ticker for range (`UNIT_IN_RANGE_UPDATE` wasn't delivered).
+- **`Frames.lua`**: `Frames.Setup` dresses a child out of combat: `*type1=target` and
+  `*type2=togglemenu` (**wildcards**: no fallback from `shift-type1` to `type1`), and `AnyUp`.
+  **Every visual lives on `b.body`, an insecure child**, so painting and fading never touch the
+  secure button: glass, health bar, name, status text, leader, raid mark and role icons. The
+  painters follow probe item 5:
+  - health goes straight to the bar;
+  - dead, offline, leader and role are read through `plain()`;
+  - range is secret: `body:SetAlphaFromBoolean(UnitInRange(u), 1, 0.4)`. Your own unit reads
+    "unchecked" and never fades;
+  - the mark index may be secret: `SetSpriteSheetCell`;
+  - role icons show for TANK/HEALER only, because everyone is DAMAGER by default on Forever.
+- **`Auras.lua`**: a 3-icon debuff row per tile on an `AuraContainer` (`AddAuraGroup` before
+  `SetUnit`, then `UpdateAllAuras`). It follows the child's unit, in combat too (measured).
+  Buttons are styled only in `initializeFrame`, with `EnableMouse(false)`.
+- **`Blizzard.lua`**: hides `PartyFrame`, `CompactPartyFrame` and `CompactRaidFrameContainer`
+  using GlassUnitFrames' recipe. **`CompactRaidFrameManager` stays**: that side panel holds the
+  raid leader's tools (ready check, world markers). The recipe: unregister events, hide, reparent,
+  plus a deferred `SetParent` repair that waits for Edit Mode and combat.
+- **`Movers.lua`**: `/grf unlock`. One insecure mover, with an explicit size, anchored to the container (never the
+  reverse); the container follows the drag through `Header.SetPosition`. Combat locks it and saves the spot it was dragged to.
+- **The combat queue isolates each action** (`pcall` per action, failures recorded under
+  `queued <key>`), and the build is guarded per header. One failure never costs the rest of
+  the queue, the other groups, or hiding Blizzard's frames.
 - **`GlassRaidFrames.lua`**:
   - bootstrap and `GlassRaidFramesDB`;
   - **the addon's one combat queue**, `GlassRaidFrames.WhenOutOfCombat(key, fn, message)`,
@@ -128,6 +164,19 @@ our own code**.
   `modules\units.lua` builds `party1-4`/`raid1-40` buttons by hand, because the header's
   initialisation failed here. See its changelog, v2.10–v2.34.
 
+- **`ForeverUI-0.4.42\ForeverUI` is a Forever-native UI suite** with group frames
+  (`Modules\Frames\`). It confirms the design: per-group `SecureGroupHeaderTemplate` headers
+  with no `initialConfigFunction` ("the error there aborts frame creation entirely"), and a
+  secret-safe range fade. Its field notes:
+  - names can be **secret in groups** (seen at a dungeon pull);
+  - `UnitIsConnected`, `UnitIsDead` and roles can be secret;
+  - the raid mark index is secret even solo;
+  - registering an unknown event is reported to error catchers even inside `pcall`.
+
+  Its in-combat dispel display uses Blizzard's raid dispel indicator through
+  `C_UnitAuras.AddPrivateAuraAnchor` (`Modules\Frames\GameAuras.lua`), which is an
+  alternative to Decursive's `includeDispelTypes` slots for milestone 3.
+
 None is licensed for our reuse in the way a copy would need, so write our own code.
 
 Keep a `MEASURED_ON_BUILD` constant in the source, matching the dump's build (`1.60.1.70009`),
@@ -167,6 +216,12 @@ pwsh Tools\deploy.ps1 -Probe                                         # copy the 
   order is the load order.
 - Consumers reach client APIs through `GRF.API`, never by injecting globals into `_G`. Read the
   porting guide's "False friends" section before aliasing anything.
+- **IDs, never names (owner rule: support localized clients).** Spells, talents, cures and
+  auras are identified and stored by ID. Never compare against, or save, an English display
+  name. A name the client needs (a `/cast` line in a macro) is resolved at runtime from the ID
+  with `C_Spell.GetSpellName` (rank text with `C_Spell.GetSpellSubtext`), so it's always the
+  client's own localized string. Unit tokens, role tokens (`HEALER`), dispel-type keys
+  (`Magic`) and texture/atlas paths are API values, not display text, and are fine.
 - Keep a `_test` seam table at the bottom of a file to expose file-local internals to tests.
   Don't promote internals to globals.
 
@@ -297,6 +352,10 @@ break the behaviour and confirm it goes red.
 - Issue → branch off `main` → PR with `Closes #N` → review (owner-launched) → squash-merge (by
   the owner). Never commit to `main`.
   Commit or push only when asked. Before committing, `luac -p` must be clean and the tests green.
+  **After pushing, check the PR's `package-check` run** (`gh run list`, then `gh run view`).
+  CI has no API dump: the stub validates events against `tests/events-70009.txt` instead, so
+  run a new test once with `GLASSRF_API_DUMP` pointing at a missing file. Milestone 1 sat red
+  on CI for several pushes before a review caught it.
 - Review policy: use the shared `$wow-addon-review` skill for PR reviews.
 - **The owner merges and closes PRs, and launches reviews.** Claude opens the issue, branch and
   PR, runs the tests, and stops there: never `gh pr merge` or close a PR, and never start a Codex

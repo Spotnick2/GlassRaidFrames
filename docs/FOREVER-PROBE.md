@@ -112,6 +112,19 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
   route works in combat. With route (c), the addon owns the key only while you are in a group,
   and the options have to say so.
 
+### 9. Spec and role (gates per-role settings, issue #7)
+The talent-tab API is gone on Forever, and what `C_SpecializationInfo` returns for Vanilla
+trees is unmeasured.
+- [ ] `/rprobe spec` on a character with talent points spent. It logs:
+      `GetSpecialization`, the `GetSpecializationInfo` rows (name, **role**, **pointsSpent**),
+      the active spec group, and whether `EventRegistry` is usable.
+- [ ] Spend a talent point, and switch dual spec if available. Which of
+      `PLAYER_TALENT_UPDATE`, `CHARACTER_POINTS_CHANGED`, `ACTIVE_TALENT_GROUP_CHANGED`,
+      `PLAYER_SPECIALIZATION_CHANGED` and `TRAIT_CONFIG_UPDATED` are logged? Run `/rprobe spec`
+      again after each.
+- **Decision:** auto role from the spec if these answer, with the manual `/grf role` override
+  either way. Otherwise manual plus a class default.
+
 ### 7. Scale (gates the tile budget)
 - [ ] The `built … in … ms` line after `/rprobe build`.
 - [ ] `/rprobe fps` in a raid, out of combat and in combat, with debuffs going on and off.
@@ -168,6 +181,36 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
 - Since the header was chosen, the probe puts the box on header children too:
   `useparent-unit` on the box, whose `unit` can't be set in combat, with its container
   following the child's unit through `OnAttributeChanged`.
+
+### 9. Spec and role (1.60.1.70009, 2026-09-28, level-? priest, no talent points)
+- **One spec per class.** `GetNumSpecializationsForClassID(5) = 1`. `GetSpecialization() = 1`,
+  and `GetSpecializationInfo(1)` = id 1487, name "Priest", **role DAMAGER**, pointsSpent 0; rows
+  2-4 are empty. `GetSpecializationRole` and `UnitGroupRolesAssigned("player")` also say
+  DAMAGER. **The spec API can't tell Holy from Shadow, or a tank from DPS**, so the automatic role
+  can't come from it.
+- `C_ClassTalents.GetActiveConfigID()` = 88388: the Vanilla trees appear to live in Retail's
+  trait system. `/rprobe traits` maps the config, its trees, currency spent and nodes per subtree
+  or column. It's a candidate for "the tree with the most points"; to be run, then run again once
+  points are spent.
+- **Trait layout (`/rprobe traits nodes`, priest, 0 points):**
+  - Config 88388 ("Priest", type 4) has **one** tree (1114), with currency 3820 (quantity, spent
+    and spentInTree all 0) and **54 nodes, no subtrees**.
+  - The three Vanilla trees are **column clusters on one canvas**, split by gaps of over 2000
+    units: posX 1020-2820 (Discipline), 5020-6820 (Holy) and 9080-10880 (Shadow), each at y
+    2130-5730.
+  - One stray duplicate ("Holy Specialization") sits at x 9280, **y 21300**, off the canvas:
+    exclude nodes outside the canvas or not `isVisible`.
+  - Forever's trees aren't pure Vanilla (Penance, Divine Aegis and Prayer of Mending are in).
+  - **Role rule:** cluster the visible nodes by posX, sum `currentRank` per cluster (trees
+    left to right in tab order), and let the tree with the most points pick the role through a
+    per-class table. It uses positions only, so it's locale-proof.
+  - **A second class confirms it (paladin, 0 points):** config 5079379 ("Paladin"), one tree
+    (1100), 50 nodes, the **same column ranges**: 1020-2820 Holy, 5020-6820 Protection,
+    9080-10880 Retribution. The order is the tab order, and there is no off-canvas node. The
+    layout is shared across classes, so clustering by posX gaps holds.
+  - Still to confirm once points are spent: ranks show up in `currentRank` in the right cluster.
+- **`EventRegistry` is usable** (`TriggerEvent` and `RegisterCallback` exist), so the
+  GlassUnitFrames integration route (#7) is open.
 
 ### 8. Keyboard hover-casting (1.60.1.70009, 2026-09-28, priest, header children)
 - **The client's mouseover cast works on our frames, in combat.** `IsMouseoverCastSupported()` is

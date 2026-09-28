@@ -60,13 +60,15 @@ do
         WoW.dumpAvailable = next(WoW.KNOWN_EVENTS) ~= nil
     end
     if not WoW.dumpAvailable then
-        for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED",
-            "PLAYER_REGEN_ENABLED", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "UNIT_TARGET", "UNIT_PET", "UNIT_HEALTH",
-            "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER",
-            "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_LEVEL", "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED",
-            "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
-            "UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_UPDATE",
-            "UNIT_SPELLCAST_CHANNEL_STOP" }) do WoW.KNOWN_EVENTS[e] = true end
+        -- No dump (CI): the checked-in list generated from it, so validation
+        -- stays exactly as strict. test_toc fails if the two ever drift.
+        local fixture = io.open("tests/events-70009.txt", "r")
+        assert(fixture, "tests/events-70009.txt missing: event validation needs the dump or the fixture")
+        for line in fixture:lines() do
+            local name = line:match("^([A-Z][A-Z0-9_]+)%s*$")
+            if name then WoW.KNOWN_EVENTS[name] = true end
+        end
+        fixture:close()
     end
 end
 
@@ -92,6 +94,10 @@ function WoW.reset()
     WoW.settings = {}
     WoW.atlases = { ["UI-HUD-UnitFrame-Player-Rest-Flipbook"] = true }
     WoW.loadedAddOns = {}
+    WoW.rangeTruth = setmetatable({}, { __mode = "k" })
+    WoW.templateSizes = WoW.templateSizes or {}
+    -- XML templates that inherit a secure one (their frames are protected).
+    WoW.secureTemplates = WoW.secureTemplates or {}
     rawset(_G, "EditModeManagerFrame", nil)
     if UIParent then WoW.CreateBlizzardFrames() end
 end
@@ -163,7 +169,8 @@ end
 function CreateFrame(ftype, name, parent, template)
     local w = newWidget(ftype, parent, name)
     w._template = template
-    if template and template:find("Secure") then
+    if template == "SecureGroupHeaderTemplate" then w._isHeader = true end
+    if template and (template:find("Secure") or WoW.secureTemplates[template]) then
         local p = w
         while p do p._protected = true; p = p._parent end
     end
@@ -592,6 +599,99 @@ function GetRaidRosterInfo(index)
     for u, r in pairs(WoW.raid or {}) do
         if r.index == index then return unitField(u, "name"), 0, r.subgroup end
     end
+end
+
+-- Unit field `role` (UnitGroupRolesAssigned; plain on Forever, measured).
+function UnitGroupRolesAssigned(u) return unitField(u, "role") or "NONE" end
+-- Range is SECRET on Forever even out of combat (measured): the stub always
+-- returns secrets, so any Lua test of it throws. Unit field `inRange` is the
+-- truth the client would act on (read by SetAlphaFromBoolean below).
+function UnitInRange(u)
+    if not WoW.units[u] then return false, false end
+    local s = WoW.Secret(u .. ".inRange")
+    -- Your own unit is "unchecked": inRange reads false (EllesmereUI, on Forever).
+    WoW.rangeTruth[s] = u ~= "player" and WoW.units[u].inRange ~= false
+    return s, WoW.Secret(u .. ".checkedRange")
+end
+function Methods.SetAlphaFromBoolean(w, v, yes, no)
+    local truth = v
+    if secrets[v] then truth = WoW.rangeTruth[v] end
+    w._alpha = truth and yes or no
+    w._alphaFromBoolean = true
+end
+
+--------------------------------------------------------------------------------
+-- SecureGroupHeaderTemplate, as far as the addon relies on it (measured in
+-- the probe, FOREVER-PROBE item 1): children are created from the "template"
+-- attribute while the header is shown with startingIndex <= 0 (1 - startingIndex
+-- of them), exposed as "child<n>" attributes; WoW.layoutHeaders() assigns units
+-- (the client does it on roster changes, in combat too) and fires each child's
+-- OnAttributeChanged("unit", ...) when its unit changes.
+-- WoW.templateSizes[template] = { w, h } stands in for the XML <Size>.
+--------------------------------------------------------------------------------
+
+local function headerUnits(h)
+    local a = h._attrs
+    local list = {}
+    if WoW.raid and a.showRaid then
+        local want = {}
+        for g in tostring(a.groupFilter or "1,2,3,4,5,6,7,8"):gmatch("%d+") do want[tonumber(g)] = true end
+        local byIndex = {}
+        for u, r in pairs(WoW.raid) do
+            if want[r.subgroup] and WoW.units[u] then byIndex[#byIndex + 1] = { r.index, u } end
+        end
+        table.sort(byIndex, function(x, y) return x[1] < y[1] end)
+        for _, e in ipairs(byIndex) do list[#list + 1] = e[2] end
+    elseif not WoW.raid then
+        local party = {}
+        for i = 1, 4 do if WoW.units["party" .. i] then party[#party + 1] = "party" .. i end end
+        if (#party > 0 and a.showParty) or a.showSolo then
+            if a.showPlayer or #party == 0 then list[1] = "player" end
+            for _, u in ipairs(party) do list[#list + 1] = u end
+        end
+    end
+    return list
+end
+
+function WoW.layoutHeader(h)
+    local list = headerUnits(h)
+    local i = 1
+    while h._attrs["child" .. i] do
+        local child = h._attrs["child" .. i]
+        local unit = list[i]
+        local old = child._attrs.unit
+        child._attrs.unit = unit      -- secure header code: never blocked
+        child._shown = unit ~= nil
+        if old ~= unit and child._scripts.OnAttributeChanged then
+            child._scripts.OnAttributeChanged(child, "unit", unit)
+        end
+        i = i + 1
+    end
+end
+
+function WoW.layoutHeaders()
+    for _, w in ipairs(WoW.frames) do
+        if w._isHeader and w._shown then WoW.layoutHeader(w) end
+    end
+end
+
+local plainShow = Methods.Show
+function Methods.Show(w)
+    plainShow(w)
+    if not w._isHeader then return end
+    local start = w._attrs.startingIndex
+    if type(start) == "number" and start <= 0 then
+        local want = 1 - start
+        local n = 0
+        while w._attrs["child" .. (n + 1)] do n = n + 1 end
+        for i = n + 1, want do
+            local child = CreateFrame(w._attrs.templateType or "Button", nil, w, w._attrs.template)
+            local size = WoW.templateSizes[w._attrs.template]
+            if size then child._width, child._height = size[1], size[2] end
+            w._attrs["child" .. i] = child
+        end
+    end
+    WoW.layoutHeader(w)
 end
 
 local function durationFor(u, channel)

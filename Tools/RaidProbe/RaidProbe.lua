@@ -808,6 +808,108 @@ local function permKey(arg)
 end
 
 --------------------------------------------------------------------------------
+-- Spec and role (probe item 9): the talent-tab API is gone on Forever, and what
+-- C_SpecializationInfo returns for Vanilla trees is unmeasured (porting guide).
+-- Settings per role (healer/caster/melee/tank) need a role source.
+--------------------------------------------------------------------------------
+
+local function spec()
+    local S = C_SpecializationInfo or {}
+    local function call(label, fn, ...)
+        if type(fn) ~= "function" then say(label .. ": absent") return end
+        local ok, a, b2, c, d, e, f, g = pcall(fn, ...)
+        say(string.format("%s: ok=%s %s %s %s %s %s %s %s", label, show(ok), show(a), show(b2), show(c),
+            show(d), show(e), show(f), show(g)))
+        return ok and a or nil
+    end
+    call("IsInitialized", S.IsInitialized)
+    call("GetActiveSpecGroup", S.GetActiveSpecGroup)
+    local idx = call("GetSpecialization", S.GetSpecialization)
+    local _, _, classID = UnitClass("player")
+    call("GetNumSpecializationsForClassID(" .. show(classID) .. ")", S.GetNumSpecializationsForClassID, classID)
+    for i = 1, 4 do
+        local ok, id, name, _, _, role, _, points = pcall(S.GetSpecializationInfo, i)
+        say(string.format("  spec %d: ok=%s id=%s name=%s role=%s pointsSpent=%s%s", i, show(ok), show(id),
+            show(name), show(role), show(points), i == idx and "  <- active" or ""))
+    end
+    if rawget(_G, "GetSpecializationRole") then call("GetSpecializationRole(active)", GetSpecializationRole, idx or 1) end
+    call("C_ClassTalents.GetActiveConfigID", C_ClassTalents and C_ClassTalents.GetActiveConfigID)
+    call("UnitGroupRolesAssigned(player)", UnitGroupRolesAssigned, "player")
+    say("EventRegistry: " .. show(type(rawget(_G, "EventRegistry")))
+        .. (rawget(_G, "EventRegistry") and (" TriggerEvent=" .. show(type(EventRegistry.TriggerEvent))
+        .. " RegisterCallback=" .. show(type(EventRegistry.RegisterCallback))) or ""))
+end
+
+-- The Vanilla talent trees live in Retail's trait system here (one spec per
+-- class, measured): map how, so "the tree with the most points" can be read.
+local function traits()
+    if not (rawget(_G, "C_ClassTalents") and rawget(_G, "C_Traits")) then say("C_ClassTalents/C_Traits: absent") return end
+    local ok, configID = pcall(C_ClassTalents.GetActiveConfigID)
+    if not (ok and configID) then say("no active config: " .. show(configID)) return end
+    local okC, info = pcall(C_Traits.GetConfigInfo, configID)
+    if not (okC and type(info) == "table") then say("GetConfigInfo: " .. show(info)) return end
+    say(string.format("config %s: name=%s type=%s trees=%s", show(configID), show(info.name), show(info.type),
+        show(info.treeIDs and #info.treeIDs)))
+    for _, treeID in ipairs(info.treeIDs or {}) do
+        local okT, tree = pcall(C_Traits.GetTreeInfo, configID, treeID)
+        say(string.format(" tree %s: title=%s", show(treeID), show(okT and tree and tree.titleText)))
+        local okCur, cur = pcall(C_Traits.GetTreeCurrencyInfo, configID, treeID, false)
+        for i, c in ipairs(okCur and cur or {}) do
+            say(string.format("  currency %d: id=%s quantity=%s max=%s spent=%s spentInTree=%s", i,
+                show(c.traitCurrencyID), show(c.quantity), show(c.maxQuantity), show(c.spent), show(c.spentInTree)))
+        end
+        local okN, nodes = pcall(C_Traits.GetTreeNodes, treeID)
+        nodes = okN and nodes or {}
+        -- Group nodes by subtree (Retail puts spec and hero trees there) and
+        -- by posX band, in case the three Vanilla trees are side by side.
+        local bySub, n = {}, 0
+        for _, nodeID in ipairs(nodes) do
+            local okI, node = pcall(C_Traits.GetNodeInfo, configID, nodeID)
+            if okI and node and node.ID and node.ID ~= 0 then
+                n = n + 1
+                local key = tostring(node.subTreeID) .. "/x" .. tostring(node.posX and math.floor(node.posX / 3000))
+                local g = bySub[key] or { nodes = 0, ranks = 0 }
+                g.nodes = g.nodes + 1
+                g.ranks = g.ranks + (tonumber(node.currentRank) or 0)
+                bySub[key] = g
+            end
+        end
+        say(string.format("  %d nodes", n))
+        if P.traitNodes then
+            -- Every node: position, ranks, and its talent's name, sorted by x then y,
+            -- so the three Vanilla trees show up as column ranges.
+            local rows = {}
+            for _, nodeID in ipairs(nodes) do
+                local okI, node = pcall(C_Traits.GetNodeInfo, configID, nodeID)
+                if okI and node and node.ID and node.ID ~= 0 then
+                    local name = "?"
+                    local entry = node.entryIDs and node.entryIDs[1]
+                    local okE, e = pcall(C_Traits.GetEntryInfo, configID, entry or 0)
+                    if okE and e and e.definitionID then
+                        local okD, d = pcall(C_Traits.GetDefinitionInfo, e.definitionID)
+                        if okD and d then name = d.overrideName or (d.spellID and spellName(d.spellID)) or ("spell " .. show(d.spellID)) end
+                    end
+                    rows[#rows + 1] = { x = tonumber(node.posX) or 0, y = tonumber(node.posY) or 0,
+                        text = string.format("   x=%s y=%s rank=%s/%s %s", show(node.posX), show(node.posY),
+                            show(node.currentRank), show(node.maxRanks), name) }
+                end
+            end
+            table.sort(rows, function(r1, r2) if r1.x ~= r2.x then return r1.x < r2.x end return r1.y < r2.y end)
+            for _, r in ipairs(rows) do say(r.text) end
+        end
+        for key, g in pairs(bySub) do
+            local sub = key:match("^(%d+)/")
+            local name = ""
+            if sub then
+                local okS, si = pcall(C_Traits.GetSubTreeInfo, configID, tonumber(sub))
+                name = okS and si and show(si.name) or ""
+            end
+            say(string.format("  group subTree/xBand=%s %s: %d nodes, %d ranks", key, name, g.nodes, g.ranks))
+        end
+    end
+end
+
+--------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
 
@@ -873,6 +975,10 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
         end
     elseif event == "UNIT_IN_RANGE_UPDATE" then
         if P.watch then say(string.format("UNIT_IN_RANGE_UPDATE %s -> %s", show(a1), show(a2))) end
+    elseif event == "ACTIVE_TALENT_GROUP_CHANGED" or event == "PLAYER_TALENT_UPDATE"
+        or event == "CHARACTER_POINTS_CHANGED" or event == "PLAYER_SPECIALIZATION_CHANGED"
+        or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "TRAIT_CONFIG_UPDATED" then
+        say(string.format("|cff7fd4ff%s|r %s %s", event, show(a1), show(a2)))
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         say(string.format("|cffff6060%s|r %s %s", event, show(a1), show(a2)))
     elseif event == "PLAYER_REGEN_DISABLED" then
@@ -885,7 +991,9 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
 end)
 for _, e in ipairs({ "ADDON_LOADED", "GROUP_ROSTER_UPDATE", "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE",
     "UNIT_CONNECTION", "UNIT_AURA", "UNIT_IN_RANGE_UPDATE", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN",
-    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE",
+    "CHARACTER_POINTS_CHANGED", "PLAYER_SPECIALIZATION_CHANGED", "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
+    "TRAIT_CONFIG_UPDATED" }) do
     local ok, r = pcall(ev.RegisterEvent, ev, e)
     if not ok or r == false then print("RaidProbe could not register " .. e .. ": " .. tostring(r)) end
 end
@@ -910,6 +1018,8 @@ local HELP = {
     "aurasound [spellID|clear] - try C_UnitAuras.AddAuraSound shapes on every group unit",
     "hide - hide Blizzard's compact party/raid frames by reparenting",
     "fps - 5 s frame-time sample",
+    "spec - what the spec/talent APIs return (role source for per-role settings)",
+    "traits [nodes] - how the talent trees are laid out in the trait system (nodes: every talent)",
     "selfcast [none|alt] - show the self-cast modifier; none/alt changes it (a global setting)",
     "mocast [on|off] - the client's mouseover cast: support and CVars",
     "hoverkeys - toggle: hovering a tile binds key 8 to cast the test spell on it",
@@ -943,6 +1053,8 @@ SlashCmdList.RAIDPROBE = function(msg)
     elseif cmd == "hide" then hide()
     elseif cmd == "fps" then fps()
     elseif cmd == "selfcast" then selfCast(arg)
+    elseif cmd == "spec" then spec()
+    elseif cmd == "traits" then P.traitNodes = arg == "nodes"; traits()
     elseif cmd == "mocast" then mouseoverCast(arg)
     elseif cmd == "hoverkeys" then hoverKeys()
     elseif cmd == "permkey" then permKey(arg)

@@ -1,9 +1,5 @@
 -- GlassRaidFrames.lua: bootstrap, saved settings, combat-deferred actions and
 -- the /grf command.
---
--- Milestone 0: the skeleton only. The frames, click-casting and dispel box
--- arrive in later milestones, once Tools/RaidProbe has measured what they
--- rely on (docs/FOREVER-PROBE.md).
 
 local ADDON = ...
 GlassRaidFrames = GlassRaidFrames or {}
@@ -11,7 +7,7 @@ local GRF = GlassRaidFrames
 local API = GRF.API
 local say = API.Print
 
-local DEFAULTS = {}
+local DEFAULTS = { hideBlizzard = true, showSolo = false }
 
 -- Read settings, fill missing keys. Nothing may REQUIRE a value to have
 -- survived: SavedVariables were broken on builds before 70009.
@@ -41,12 +37,19 @@ local function whenOutOfCombat(key, fn, message)
 end
 GRF.WhenOutOfCombat = whenOutOfCombat   -- the addon's one combat queue
 
+-- Each action runs on its own: one that throws is recorded and the rest of
+-- the queue still runs.
+local function runOne(key, fn)
+    local ok, err = pcall(fn)
+    if not ok then API.Fail("queued " .. key, err) end
+end
+
 local function runPending()
     local run, keys = pending, order
     pending, order = {}, {}
-    if run.build then run.build() end
+    if run.build then runOne("build", run.build) end
     for _, key in ipairs(keys) do
-        if key ~= "build" then run[key]() end
+        if key ~= "build" then runOne(key, run[key]) end
     end
 end
 
@@ -65,11 +68,34 @@ end
 
 local function slash(msg)
     local cmd = (msg or ""):lower():match("^%s*(%S*)")
-    if cmd == "failures" then
+    if cmd == "unlock" then
+        GRF.Movers.Unlock()
+    elseif cmd == "lock" then
+        GRF.Movers.Lock()
+    elseif cmd == "reset" then
+        whenOutOfCombat("reset", function() GRF.Movers.Reset() end)
+    elseif cmd == "solo" then
+        GRF.db.showSolo = not GRF.db.showSolo
+        whenOutOfCombat("solo", function() GRF.Header.SetShowSolo(GRF.db.showSolo) end)
+        say("show frames when solo: " .. (GRF.db.showSolo and "on" or "off"))
+    elseif cmd == "blizzard" then
+        GRF.db.hideBlizzard = not GRF.db.hideBlizzard
+        if GRF.db.hideBlizzard then
+            -- Re-check when it runs: toggled back off in combat, nothing hides.
+            whenOutOfCombat("blizzard", function() if GRF.db.hideBlizzard then GRF.Blizzard.HideAll() end end)
+            say("Blizzard's party/raid frames: hidden")
+        else
+            say("Blizzard's party/raid frames: shown after /reload")
+        end
+    elseif cmd == "failures" then
         failures()
     elseif cmd == "version" then
         say("client " .. API.ClientBuild() .. ", measured on " .. GRF.MEASURED_ON_BUILD)
     else
+        say("/grf unlock | lock - move the group frames (out of combat)")
+        say("/grf reset - back to the default position")
+        say("/grf solo - show your own frame when not in a group")
+        say("/grf blizzard - toggle hiding Blizzard's party/raid frames")
         say("/grf failures - what failed to build or register")
         say("/grf version - client build vs the measured one")
     end
@@ -83,17 +109,27 @@ boot:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
         if arg1 ~= ADDON then return end
         GRF.db = ensureDefaults()
+        -- Secure frames can't be built under lockdown. Loading normally runs
+        -- before it applies, but don't bet the whole addon on that.
+        whenOutOfCombat("build", function()
+            -- Hiding Blizzard's frames must not depend on our build succeeding.
+            local ok, err = pcall(GRF.Header.Build, GRF.Frames.Setup)
+            if not ok then API.Fail("build", err) end
+            if GRF.db.hideBlizzard then GRF.Blizzard.HideAll() end
+        end, "frames will appear when combat ends")
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- arg1 = isInitialLogin: warn at a real login, never on /reload.
         if arg1 and API.ClientBuild() ~= GRF.MEASURED_ON_BUILD then
             say("client build " .. API.ClientBuild() .. " is newer than the one this addon was measured on ("
                 .. GRF.MEASURED_ON_BUILD .. "). Things may misbehave until it is re-checked.")
         end
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        GRF.Movers.OnCombat()   -- unlock mode ends: the grid can't move in combat
     elseif event == "PLAYER_REGEN_ENABLED" then
         if InCombatLockdown() then return end   -- trust the lockdown state, not the event
         runPending()
     end
 end)
-API.RegisterEvents(boot, { "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" })
+API.RegisterEvents(boot, { "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" })
 
 GRF._test = { runPending = runPending, pending = function() return pending, order end }
