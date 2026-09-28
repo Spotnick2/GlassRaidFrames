@@ -24,6 +24,7 @@ local MAX_LOG = 3000
 local P = {}                 -- probe state
 local tiles = {}             -- unit -> tile (manual build)
 local order = {}             -- tiles in build order
+local applyMode              -- defined with the events, used by build()
 
 --------------------------------------------------------------------------------
 -- Log
@@ -729,7 +730,7 @@ end
 -- set that doesn't match the group mode is unwatched and hidden (party tokens
 -- stay valid inside a raid, so both sets would show). In combat nothing
 -- changes; a conversion waits for PLAYER_REGEN_ENABLED.
-local function applyMode()
+function applyMode()
     if not P.built or InCombatLockdown() then return end
     local raid = IsInRaid()
     if P.mode == raid then return end
