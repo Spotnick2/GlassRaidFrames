@@ -130,9 +130,21 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
 
   Modifier-prefixed attributes resolve independently per button, and the `unit` attribute the
   header set is used as the target.
+- **In combat (second run), every form cast.** Name, ID, rank-qualified, the `@mouseover` macro
+  and the wildcard all logged `C cast sent` and `succeeded`.
+- **Alt goes to the player.** Both alt-left clicks (`alt-spell1`) on the partner's child cast on
+  **the player** in combat. Every other form hit the clicked unit. Alt is the client's default
+  `SELFCAST` modifier, and it wins over the button's `unit`. This matters for bindings: the owner's
+  paladin binds Alt-left and Alt-right in Cell. Next run: an Alt `@mouseover` macro
+  (`alt-type2`), and `/rprobe selfcast none` (unbinds the modifier) followed by alt-left again.
+- One shift-left on the partner also landed on the player, while later identical clicks
+  didn't. That fits `autoSelfCast` retargeting an invalid (out-of-range) unit. It's unconfirmed;
+  `/rprobe selfcast` now logs the CVar.
+- **Clearing a modified binding does not fall back to `type1`.** After clearing `shift-type1`,
+  shift-left resolved to `nil`. The template tries `shift-type1`, `*type1`, `shift-type*`,
+  `*type*` and a bare `type`, but never `type1`. **Defaults must be `*type1=target` and
+  `*type2=togglemenu`**, so that unbound modified clicks still target and open the menu.
 - **Still open:**
-  - the same clicks **in combat**;
-  - the fallback after clearing `shift-type1`;
   - **downranking**, which needs a character with two ranks. Only rank 1 was known, so the ID
     and `Name(Rank 1)` forms were accepted but didn't prove they choose a lower rank.
 

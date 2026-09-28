@@ -155,12 +155,15 @@ local function applyBindings(b, unit)
     -- @mouseover: a header child's unit changes, so none can be baked in.
     b:SetAttribute("shift-macrotext2", "/cast [@mouseover,help,nodead] " .. name)
     b:SetAttribute("*type3", "spell");      b:SetAttribute("*spell3", name)            -- wildcard
+    -- Alt is the client's self-cast modifier: does a @mouseover macro escape it?
+    b:SetAttribute("alt-type2", "macro")
+    b:SetAttribute("alt-macrotext2", "/cast [@mouseover,help,nodead] " .. name)
 end
 
 local BINDING_HELP = {
     "left: target | right: menu",
     "shift-left: spell by name | ctrl-left: spell by ID | alt-left: spell 'Name(Rank n)'",
-    "shift-right: /cast [@mouseover] macro | middle (any modifier): *spell3 wildcard",
+    "shift-right: /cast [@mouseover] macro | middle (any modifier): *spell3 wildcard | alt-right: @mouseover macro",
     "corner box: left/right/middle = cure slot 1/2/3",
 }
 
@@ -396,6 +399,22 @@ local function build()
     applyMode()
 end
 
+-- The client's self-cast settings: alt-left cast on the player in combat
+-- even with a unit attribute (2026-09-28). "none" unbinds the modifier (a
+-- global setting of the player's, so "alt" puts it back).
+local function selfCast(arg)
+    local okM, mod = pcall(GetModifiedClick, "SELFCAST")
+    local okC, auto = pcall(C_CVar.GetCVar, "autoSelfCast")
+    say("SELFCAST modifier=" .. (okM and show(mod) or "ERR") .. " autoSelfCast=" .. (okC and show(auto) or "ERR"))
+    if arg == "none" or arg == "alt" then
+        if InCombatLockdown() then say("out of combat only") return end
+        local ok, err = pcall(SetModifiedClick, "SELFCAST", arg == "none" and "NONE" or "ALT")
+        if ok then pcall(SaveBindings, GetCurrentBindingSet()) end
+        say("SetModifiedClick SELFCAST " .. arg .. ": " .. (ok and "ok" or tostring(err)))
+        selfCast()
+    end
+end
+
 --------------------------------------------------------------------------------
 -- SecureGroupHeaderTemplate (probe item 1)
 --------------------------------------------------------------------------------
@@ -484,6 +503,7 @@ local function header()
     say("test spell " .. show(id) .. ": name=" .. show(c1 and c1:GetAttribute("shift-spell1"))
         .. " id=" .. show(c1 and c1:GetAttribute("ctrl-spell1")) .. " ranked=" .. show(c1 and c1:GetAttribute("alt-spell1")))
     for i = 1, 3 do say(BINDING_HELP[i]) end
+    selfCast()
     C_Timer.After(0.5, headerReport)
 end
 
@@ -859,6 +879,7 @@ local HELP = {
     "aurasound [spellID|clear] - try C_UnitAuras.AddAuraSound shapes on every group unit",
     "hide - hide Blizzard's compact party/raid frames by reparenting",
     "fps - 5 s frame-time sample",
+    "selfcast [none|alt] - show the self-cast modifier; none/alt changes it (a global setting)",
     "mocast [on|off] - the client's mouseover cast: support and CVars",
     "hoverkeys - toggle: hovering a tile binds key 8 to cast the test spell on it",
     "permkey - toggle: key 9 always casts the test spell on @mouseover",
@@ -890,6 +911,7 @@ SlashCmdList.RAIDPROBE = function(msg)
     elseif cmd == "aurasound" then auraSound(arg)
     elseif cmd == "hide" then hide()
     elseif cmd == "fps" then fps()
+    elseif cmd == "selfcast" then selfCast(arg)
     elseif cmd == "mocast" then mouseoverCast(arg)
     elseif cmd == "hoverkeys" then hoverKeys()
     elseif cmd == "permkey" then permKey()
