@@ -140,15 +140,24 @@ function Settings.SetHideBlizzard(on)
 end
 
 -- The current role's tile size; nil for either = back to the default.
-function Settings.SetSize(w, h)
-    local prof = GRF.Profile()
+-- Save a role's tile size NOW (the role asking, never whichever is current
+-- later: Codex review); nil for both = back to the default.
+function Settings.SaveSize(role, w, h)
+    local prof = GRF.db and role and GRF.db.profiles[role]
     if not prof then return false end
     if w == nil and h == nil then
         prof.size = nil
     else
-        local cw, ch = GRF.Header.TileSize()
-        prof.size = { w = w or cw, h = h or ch }
+        local s = type(prof.size) == "table" and prof.size or {}
+        prof.size = { w = w or s.w or GRF.Header.DEFAULT_W, h = h or s.h or GRF.Header.DEFAULT_H }
     end
+    return true
+end
+
+-- Resize the grid to the CURRENT role's saved size. Only layout: it writes
+-- nothing, so a late one (a debounced slider, a queued combat change) can't
+-- overwrite a newer save or another role's.
+function Settings.ApplySize()
     -- Silent when deferred: a slider dragged in combat would print on every tick.
     whenOutOfCombat("size", function()
         if GRF.Header.ApplySize() then
@@ -161,6 +170,12 @@ function Settings.SetSize(w, h)
             GRF.Announce()
         end
     end, false)
+end
+
+-- The current role's tile size: saved at once, applied out of combat.
+function Settings.SetSize(w, h)
+    if not Settings.SaveSize(GRF.role, w, h) then return false end
+    Settings.ApplySize()
     return true
 end
 

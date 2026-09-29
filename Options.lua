@@ -225,16 +225,17 @@ local function build()
     local H = GRF.Header
     -- A drag fires a value change per step: resize once it pauses (0.1 s), not
     -- 40 tiles plus an announcement to other addons on every tick.
-    local want, scheduled = {}, false
+    -- Each tick SAVES at once, to the role being edited; only the resize waits
+    -- for the drag to pause, and it reads whatever is saved then (a role switch
+    -- or a Default size meanwhile can't be overwritten: Codex review).
+    local scheduled = false
     local function later(w, h)
-        if w then want.w = w end
-        if h then want.h = h end
+        S.SaveSize(GRF.role, w, h)
         if scheduled then return end
         scheduled = true
         C_Timer.After(0.1, function()
             scheduled = false
-            S.SetSize(want.w, want.h)
-            want = {}
+            S.ApplySize()
         end)
     end
     controls.width = slider("Width", H.MIN_W, H.MAX_W, function() return (H.TileSize()) end,

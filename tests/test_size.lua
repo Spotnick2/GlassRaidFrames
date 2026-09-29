@@ -110,6 +110,32 @@ WoW.flushTimers()
 eq(child(1):GetHeight(), 48, "the height slider too")
 eq(child(1):GetWidth(), 110, "keeping the width")
 
+-- A role switch while a slider resize is pending: the drag was saved to the
+-- role that made it, and the other role keeps its own (Codex review).
+GRF.db.profiles.HEALER.size = { w = 90, h = 48 }
+GRF.db.profiles.CASTER.size = { w = 70, h = 40 }
+H.ApplySize()
+ws:SetValue(120)                       -- healer drag, resize pending
+GRF.Settings.SetRole("caster")
+WoW.flushTimers()
+eq(GRF.db.profiles.HEALER.size.w, 120, "the drag was saved to the healer")
+eq(GRF.db.profiles.CASTER.size.w, 70, "the caster keeps its own width")
+eq(child(1):GetWidth(), 70, "and the grid shows the caster's")
+GRF.Settings.SetRole("healer")
+eq(child(1):GetWidth(), 120, "back to healer: the dragged width")
+
+-- A Default size while a slider resize is pending wins.
+ws:SetValue(130)
+local defaultButton
+for _, f in ipairs(WoW.frames) do
+    if f._type == "Button" and f._text == "Default size" then defaultButton = f end
+end
+defaultButton._scripts.OnClick(defaultButton)
+WoW.flushTimers()
+eq(GRF.Profile().size, nil, "Default size isn't undone by the pending drag")
+eq(child(1):GetWidth(), H.DEFAULT_W, "the grid shows the default")
+ws:SetValue(110); hs:SetValue(48); WoW.flushTimers()
+
 -- Each group header takes the new width: it centres its first child on its
 -- OWN width (SecureGroupHeaders.lua:202), so a stale one shifts the column.
 for g = 1, 8 do eq(H.headers[g]._width, 110, "header " .. g .. " takes the tile width") end
