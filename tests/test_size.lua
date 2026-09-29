@@ -14,7 +14,8 @@ local function gridPoint() local p = H.container._points; return p[#p] end
 -- Default: Cell's look.
 eq(child(1):GetWidth(), 82, "default width (Cell's look)")
 eq(child(1):GetHeight(), 58, "default height")
-eq(child(1).health._height, 58 - 2 * GRF.Glass.Inset("small"), "the bar fills the tile's height")
+eq(child(1).health._height, GRF.Frames.BarHeight(child(1)), "the health bar fills the tile above the power bar")
+eq(child(1).health._height + child(1).power._height + 1, 58 - 2 * GRF.Glass.Inset("small"), "health + power + gap fill the tile")
 eq(child(1).nameText._font[2], GRF.Frames.NameSize(58) + GRF.Glass.FONTS[GRF.Glass.fontKey].bump, "the name scales with it")
 local gw, gh = H.Size()
 eq(H.container._width, gw, "the container is the grid's size")
@@ -31,7 +32,7 @@ for _, i in ipairs({ 1, 17, 40 }) do
     eq(child(i):GetWidth(), 100, "child " .. i .. " is resized (w)")
     eq(child(i):GetHeight(), 40, "child " .. i .. " is resized (h)")
 end
-eq(child(1).health._height, 40 - 2 * GRF.Glass.Inset("small"), "the bar follows")
+eq(child(1).health._height + child(1).power._height + 1, 40 - 2 * GRF.Glass.Inset("small"), "the bars follow")
 eq(child(1).nameText._font[2], GRF.Frames.NameSize(40) + GRF.Glass.FONTS[GRF.Glass.fontKey].bump, "the name follows")
 local hp = H.headers[3]._points[#H.headers[3]._points]
 eq(hp[4], 2 * (100 + H.GAP), "column 3 moves over by the new width")

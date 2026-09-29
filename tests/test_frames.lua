@@ -61,6 +61,44 @@ eq(next(GRF.paintFailures), nil, "without a failure")
 WoW.secretFields = {}
 WoW.fire("UNIT_NAME_UPDATE", "party1"); flush()
 
+-- The power bar along the bottom: coloured by power type, secret-safe.
+eq(me.power._value, 500, "power painted")
+eq(me.power._max, 500, "max power painted")
+eq(me.power._color[3], GRF.Frames.POWER.MANA[3], "mana is blue")
+WoW.units.party1.powerToken = "RAGE"
+WoW.fire("UNIT_DISPLAYPOWER", "party1"); flush()
+eq(p1.power._color[1], GRF.Frames.POWER.RAGE[1], "rage is red")
+WoW.secretFields = { power = true, maxPower = true }
+WoW.fire("UNIT_POWER_UPDATE", "party1"); flush()
+check(WoW.IsSecret(p1.power._value), "secret power goes straight to the bar")
+eq(next(GRF.paintFailures), nil, "without a failure")
+WoW.secretFields = {}
+
+-- Hover: the white glass rim shows while the mouse is on the tile.
+eq(p1.hoverRim._alpha, 0, "no hover rim at rest")
+p1._scripts.OnEnter(p1)
+eq(p1.hoverRim._alpha, 1, "the hover rim shows on mouse-over")
+p1._scripts.OnLeave(p1)
+eq(p1.hoverRim._alpha, 0, "and goes on leave")
+
+-- Target: the tinted rim on your target's tile only.
+WoW.units.target = WoW.units.party1
+WoW.fire("PLAYER_TARGET_CHANGED"); flush()
+eq(p1.targetRim._alpha, 1, "your target's tile shows the target rim")
+eq(me.targetRim._alpha, 0, "the others don't")
+WoW.secretFields = { targetIsUnit = true }
+local realIsUnit = UnitIsUnit
+rawset(_G, "UnitIsUnit", function(a, b) return WoW.Secret("isUnit") end)
+WoW.rangeTruth = WoW.rangeTruth or {}
+WoW.fire("PLAYER_TARGET_CHANGED"); flush()
+check(p1.targetRim._alphaFromBoolean, "a secret 'is my target' goes through SetAlphaFromBoolean")
+eq(next(GRF.paintFailures), nil, "without a failure")
+rawset(_G, "UnitIsUnit", realIsUnit)
+WoW.secretFields = {}
+WoW.units.target = nil
+WoW.fire("PLAYER_TARGET_CHANGED"); flush()
+eq(p1.targetRim._alpha, 0, "no target: no rim")
+
 -- Offline and dead.
 WoW.units.party1.connected = false
 WoW.fire("UNIT_CONNECTION", "party1"); flush()

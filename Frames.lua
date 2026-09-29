@@ -19,6 +19,14 @@ local Frames = {}
 GRF.Frames = Frames
 
 Frames.OUT_OF_RANGE_ALPHA = 0.4
+
+-- Power colours by the client's power token (plain; Blizzard's defaults).
+Frames.POWER = { MANA = { 0.25, 0.55, 1 }, RAGE = { 0.95, 0.2, 0.2 }, ENERGY = { 1, 0.85, 0.15 },
+                 FOCUS = { 1, 0.5, 0.25 } }
+-- The glass versions of Cell's hover and target borders: a second rim over the
+-- tile's own, white on hover, tinted on your target.
+Frames.HOVER = { 1, 1, 1, 0.9 }
+Frames.TARGET = { 1, 0.35, 0.5, 1 }
 Frames.OFFLINE = { 0.45, 0.45, 0.45 }
 Frames.FALLBACK = { 0.35, 0.8, 0.45 }   -- no readable class
 
@@ -64,6 +72,14 @@ function Frames.Setup(b)
     hp:SetFrameLevel(Glass.ContentLevel(body))
     b.health = hp
 
+    -- The power bar along the bottom, as Cell's (a thin glass bar; secret
+    -- values go straight to it). The health bar gives up that height.
+    local pw = Glass.Bar(body, Frames.PowerHeight(b))
+    pw:SetPoint("BOTTOMLEFT", body, "BOTTOMLEFT", inset, inset)
+    pw:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -inset, inset)
+    pw:SetFrameLevel(Glass.ContentLevel(body))
+    b.power = pw
+
     -- Dead/Offline: small, in the top-right corner (the bottom edge belongs to
     -- the debuff row, the middle to the name).
     local status = Glass.Font(g.top, 9, "RIGHT")
@@ -87,13 +103,39 @@ function Frames.Setup(b)
     ind.role:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -inset - 1, inset + 1)
     b.indicators = ind
 
+    -- Hover and target: a second rim, same slices as the glass's own, above it.
+    local S = Glass.SIZES.small
+    local function rim(color, sub)
+        local t = g.top:CreateTexture(nil, "OVERLAY", nil, sub)
+        t:SetTexture(Glass.MEDIA .. S.rim)
+        t:SetAllPoints(g.top)
+        t:SetTextureSliceMargins(S.rimMargin, S.rimMargin, S.rimMargin, S.rimMargin)
+        local modes = Enum and Enum.UITextureSliceMode
+        t:SetTextureSliceMode((modes and modes.Stretched) or 0)
+        t:SetBlendMode("ADD")
+        t:SetVertexColor(color[1], color[2], color[3], color[4])
+        t:SetAlpha(0)
+        return t
+    end
+    b.targetRim = rim(Frames.TARGET, 6)
+    b.hoverRim = rim(Frames.HOVER, 7)
+    -- Insecure hooks on the secure button: fine in combat (no protected call).
+    b:HookScript("OnEnter", function(self) self.hoverRim:SetAlpha(1) end)
+    b:HookScript("OnLeave", function(self) self.hoverRim:SetAlpha(0) end)
+
     if GRF.Auras then GRF.Auras.Attach(b) end
     b.relayout = Frames.Layout
     Frames.Layout(b)
 end
 
+-- The power bar's height: thin, growing a little with the tile (3 to 6).
+function Frames.PowerHeight(b)
+    return math.max(3, math.min(6, math.floor(b:GetHeight() * 0.08 + 0.5)))
+end
+
+-- The health bar takes the rest, above the power bar and a 1-unit gap.
 function Frames.BarHeight(b)
-    return b:GetHeight() - 2 * Glass.Inset("small")
+    return b:GetHeight() - 2 * Glass.Inset("small") - Frames.PowerHeight(b) - 1
 end
 
 -- The name grows with the tile, taking the room Cell's does (its glyphs span
@@ -118,6 +160,7 @@ function Frames.Layout(b)
     local h = b:GetHeight()
     if type(h) ~= "number" or h <= 0 then return end
     b.health:SetHeight(Frames.BarHeight(b))
+    b.power:SetHeight(Frames.PowerHeight(b))
     local f = Glass.FONTS[Glass.fontKey] or Glass.FONTS.arial
     b.nameText:SetFont(f.file, Frames.NameSize(h) + f.bump, "")
 end
@@ -188,6 +231,33 @@ Engine.SetPainter("indicators", function(b, u)
         ind.role:Show()
     else
         ind.role:Hide()
+    end
+end)
+
+Engine.SetPainter("power", function(b, u)
+    if not UnitExists(u) then return end
+    local pw = b.power
+    if plain(UnitIsConnected, u) == false or plain(UnitIsDeadOrGhost, u) == true then
+        Glass.SetBar(pw, 1, 0, true)
+        return
+    end
+    local ok, _, token = pcall(UnitPowerType, u)
+    local c = Frames.POWER[(ok and not API.IsSecret(token)) and token or "MANA"] or Frames.POWER.MANA
+    pw:SetStatusBarColor(c[1], c[2], c[3])
+    -- Secret values go straight back to the client.
+    Glass.SetBar(pw, UnitPowerMax(u), UnitPower(u), b.snap)
+end)
+
+-- Your target's tile gets the tinted rim. "Is this my target" can come back
+-- secret (ForeverUI's note on grouped units): the client picks the alpha.
+Engine.SetPainter("target", function(b, u)
+    local rim = b.targetRim
+    local ok, isTarget = pcall(UnitIsUnit, u, "target")
+    if not ok then rim:SetAlpha(0) return end
+    if API.IsSecret(isTarget) then
+        rim:SetAlphaFromBoolean(isTarget, 1, 0)
+    else
+        rim:SetAlpha(isTarget and 1 or 0)
     end
 end)
 

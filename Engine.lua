@@ -23,9 +23,10 @@ GRF.Engine = Engine
 Engine.CHANNEL_EVENTS = {
     name       = { "UNIT_NAME_UPDATE" },
     health     = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS" },
+    power      = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_CONNECTION" },
     indicators = {},   -- group-wide events only (below)
 }
-Engine.ORDER = { "name", "health", "indicators", "range" }
+Engine.ORDER = { "name", "health", "power", "indicators", "target", "range" }
 Engine.RANGE_INTERVAL = 0.25
 
 local painters = {}
@@ -140,6 +141,8 @@ local function onEvent(_, event, unit)
                 end
             end
         end
+    elseif event == "PLAYER_TARGET_CHANGED" then
+        Engine.RepaintChannel("target")
     elseif event == "RAID_TARGET_UPDATE" or event == "PARTY_LEADER_CHANGED"
         or event == "PLAYER_ROLES_ASSIGNED" then
         Engine.RepaintChannel("indicators")
@@ -154,7 +157,7 @@ do
     local list = {}
     for e in pairs(eventChannels) do list[#list + 1] = e end
     table.sort(list)
-    for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "RAID_TARGET_UPDATE", "PARTY_LEADER_CHANGED",
+    for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "RAID_TARGET_UPDATE", "PARTY_LEADER_CHANGED", "PLAYER_TARGET_CHANGED",
                          "PLAYER_ROLES_ASSIGNED", "PLAYER_ENTERING_WORLD" }) do
         list[#list + 1] = e
     end

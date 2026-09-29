@@ -155,6 +155,14 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   - It flags Blizzard's Mouseover Cast (**it casts on hovered strangers, measured**) with a
     turn-off button, lists Blizzard's own spell/macro click bindings, and warns when its
     "Target Unit Frame" is unbound.
+- **Power bar, hover and target** (Cell's, in glass):
+  - A thin `Glass.Bar` along the bottom (`Frames.PowerHeight`, 3-6), coloured by power token
+    (`Frames.POWER`), with secret values straight to the bar. The health bar takes the rest.
+  - **Hover:** a white additive copy of the glass rim, shown from insecure
+    `OnEnter`/`OnLeave` hooks.
+  - **Target:** a tinted rim (`Frames.TARGET`) on `PLAYER_TARGET_CHANGED` (a `target`
+    channel). `UnitIsUnit(u, "target")` can be secret, so a secret answer goes through
+    `SetAlphaFromBoolean`.
 - **The name is centred in the tile** (both ways) and shows the **first name**
   (`Frames.ShortName`), as Cell does: Forever's surnames only got a centred name cut short. A
   secret name (grouped) can't be split in Lua, so it goes to `SetText` whole. Dead/Offline is
