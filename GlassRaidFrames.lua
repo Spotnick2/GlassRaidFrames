@@ -1,10 +1,10 @@
--- GlassRaidFrames.lua: bootstrap, saved settings, combat-deferred actions and
--- the /grf command.
+-- GlassRaidFrames.lua: bootstrap, saved settings, the role and its profile,
+-- combat-deferred actions, and the /grf command.
 
 local ADDON = ...
 GlassRaidFrames = GlassRaidFrames or {}
 local GRF = GlassRaidFrames
-local API = GRF.API
+local API, Role = GRF.API, GRF.Role
 local say = API.Print
 
 local DEFAULTS = { hideBlizzard = true, showSolo = false }
@@ -17,7 +17,16 @@ local function ensureDefaults()
     for k, v in pairs(DEFAULTS) do
         if db[k] == nil then db[k] = v end
     end
-    return db
+    if type(db.profiles) ~= "table" then db.profiles = {} end
+    for _, role in ipairs(Role.ROLES) do
+        if type(db.profiles[role]) ~= "table" then db.profiles[role] = {} end
+    end
+    -- Per character: the manual role pick ("auto" = from talents, then class).
+    if type(GlassRaidFramesCharDB) ~= "table" then GlassRaidFramesCharDB = {} end
+    local char = GlassRaidFramesCharDB
+    if char.role ~= "auto" and not Role.VALID[char.role] then char.role = "auto" end
+    if not Role.VALID[char.talentRole] then char.talentRole = nil end
+    return db, char
 end
 
 -- Anything that touches the secure frames waits for combat to end. The queue
@@ -53,6 +62,90 @@ local function runPending()
     end
 end
 
+--------------------------------------------------------------------------------
+-- Role and profile (#7)
+--------------------------------------------------------------------------------
+
+-- The current role's settings (created by ensureDefaults).
+function GRF.Profile()
+    return GRF.db and GRF.role and GRF.db.profiles[GRF.role] or nil
+end
+
+-- Tell other addons where the grid is and for which role. GlassUnitFrames
+-- listens (its #35) and makes room; neither addon depends on the other.
+-- EventRegistry is usable on 70009 (probe item 9).
+GRF.LAYOUT_EVENT = "GlassRaidFrames.LayoutChanged"
+function GRF.Announce()
+    if not GRF.role then return end
+    local l, b, w, h = GRF.Header.Rect()
+    if not l then return end   -- no grid (not built, or it failed): nothing to announce
+    API.TriggerEvent(GRF.LAYOUT_EVENT, GRF.role, l, b, w, h)
+end
+
+-- Move the grid to the current role's position and say so. Out of combat.
+local function applyRole()
+    if not GRF.Header.container then return end
+    GRF.Header.SetPosition(GRF.Header.PositionOf())
+    GRF.Announce()
+end
+
+-- Work out the role again (talents may have changed, or the manual pick);
+-- re-apply only when it changed. Chat only for a real respec: talents
+-- changing a role that talents gave before. Settling at login (class or
+-- remembered role, then the first talent answer) stays quiet.
+local function evaluateRole(quiet)
+    local previousSource = GRF.roleSource
+    local role, source = Role.Get(GRF.char.role, GRF.char.talentRole)
+    if source == "talents" then GRF.char.talentRole = role end
+    GRF.roleSource = source
+    if role == GRF.role then return end
+    local respec = source == "talents" and (previousSource == "talents" or previousSource == "remembered")
+    GRF.role = role
+    if respec and not quiet then say("role: " .. role:lower() .. " (talents)") end
+    whenOutOfCombat("role", applyRole, false)
+end
+
+--------------------------------------------------------------------------------
+-- Settings: the apply-and-save helpers shared by /grf and the options panel.
+--------------------------------------------------------------------------------
+
+local Settings = {}
+GRF.Settings = Settings
+
+-- "auto" or a role; false for anything else.
+function Settings.SetRole(pick)
+    pick = type(pick) == "string" and pick:upper() or ""
+    if pick == "AUTO" then pick = "auto" end
+    if pick ~= "auto" and not Role.VALID[pick] then return false end
+    GRF.char.role = pick
+    evaluateRole(true)
+    return true
+end
+
+function Settings.SetShowSolo(on)
+    GRF.db.showSolo = on == true
+    whenOutOfCombat("solo", function() GRF.Header.SetShowSolo(GRF.db.showSolo) end)
+end
+
+function Settings.SetHideBlizzard(on)
+    GRF.db.hideBlizzard = on == true
+    -- Re-check when it runs: toggled back off in combat, nothing hides.
+    if on then whenOutOfCombat("blizzard", function() if GRF.db.hideBlizzard then GRF.Blizzard.HideAll() end end) end
+end
+
+function Settings.Unlock() return GRF.Movers.Unlock() end
+-- The reset belongs to the role it was asked for: queued in combat, it must
+-- not land on whatever role is current when combat ends (Codex review).
+-- One queue slot per role, so resets for two roles don't merge.
+function Settings.ResetPosition()
+    local role = GRF.role
+    whenOutOfCombat("reset:" .. tostring(role), function() GRF.Movers.Reset(role) end)
+end
+
+--------------------------------------------------------------------------------
+-- /grf
+--------------------------------------------------------------------------------
+
 local function failures()
     local any = false
     for key, err in pairs(GRF.paintFailures) do
@@ -66,34 +159,41 @@ local function failures()
     if not any then say("no failures recorded") end
 end
 
+local function roleLine()
+    local pick = GRF.char.role
+    return "role: " .. tostring(GRF.role):lower() .. " (" .. tostring(GRF.roleSource)
+        .. (pick == "auto" and "" or ", picked by hand") .. ")"
+end
+
 local function slash(msg)
-    local cmd = (msg or ""):lower():match("^%s*(%S*)")
+    local cmd, arg = (msg or ""):lower():match("^%s*(%S*)%s*(%S*)")
     if cmd == "unlock" then
-        GRF.Movers.Unlock()
+        Settings.Unlock()
     elseif cmd == "lock" then
         GRF.Movers.Lock()
     elseif cmd == "reset" then
-        whenOutOfCombat("reset", function() GRF.Movers.Reset() end)
+        Settings.ResetPosition()
+    elseif cmd == "role" then
+        if arg ~= "" and not Settings.SetRole(arg) then say("roles: auto, healer, caster, melee, tank") end
+        say(roleLine())
     elseif cmd == "solo" then
-        GRF.db.showSolo = not GRF.db.showSolo
-        whenOutOfCombat("solo", function() GRF.Header.SetShowSolo(GRF.db.showSolo) end)
+        Settings.SetShowSolo(not GRF.db.showSolo)
         say("show frames when solo: " .. (GRF.db.showSolo and "on" or "off"))
     elseif cmd == "blizzard" then
-        GRF.db.hideBlizzard = not GRF.db.hideBlizzard
-        if GRF.db.hideBlizzard then
-            -- Re-check when it runs: toggled back off in combat, nothing hides.
-            whenOutOfCombat("blizzard", function() if GRF.db.hideBlizzard then GRF.Blizzard.HideAll() end end)
-            say("Blizzard's party/raid frames: hidden")
-        else
-            say("Blizzard's party/raid frames: shown after /reload")
-        end
+        Settings.SetHideBlizzard(not GRF.db.hideBlizzard)
+        say(GRF.db.hideBlizzard and "Blizzard's party/raid frames: hidden"
+            or "Blizzard's party/raid frames: shown after /reload")
+    elseif cmd == "options" or cmd == "config" then
+        if not (GRF.Options and GRF.Options.Open()) then say("Game Menu > Options > AddOns > Glass Raid Frames") end
     elseif cmd == "failures" then
         failures()
     elseif cmd == "version" then
         say("client " .. API.ClientBuild() .. ", measured on " .. GRF.MEASURED_ON_BUILD)
     else
-        say("/grf unlock | lock - move the group frames (out of combat)")
-        say("/grf reset - back to the default position")
+        say("/grf options - the settings (Options > AddOns)")
+        say("/grf role [auto|healer|caster|melee|tank] - settings follow your role; " .. roleLine())
+        say("/grf unlock | lock - move the group frames for this role (out of combat)")
+        say("/grf reset - this role's default position")
         say("/grf solo - show your own frame when not in a group")
         say("/grf blizzard - toggle hiding Blizzard's party/raid frames")
         say("/grf failures - what failed to build or register")
@@ -108,7 +208,17 @@ local boot = CreateFrame("Frame")
 boot:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
         if arg1 ~= ADDON then return end
-        GRF.db = ensureDefaults()
+        GRF.db, GRF.char = ensureDefaults()
+        evaluateRole(true)
+        -- A position saved before roles existed: every role without one gets
+        -- it (the talents aren't read yet, so which role is yours isn't known).
+        if type(GRF.db.pos) == "table" then
+            for _, role in ipairs(Role.ROLES) do
+                local prof = GRF.db.profiles[role]
+                if prof.pos == nil then prof.pos = { x = GRF.db.pos.x, y = GRF.db.pos.y } end
+            end
+            GRF.db.pos = nil
+        end
         -- Secure frames can't be built under lockdown. Loading normally runs
         -- before it applies, but don't bet the whole addon on that.
         whenOutOfCombat("build", function()
@@ -116,7 +226,10 @@ boot:SetScript("OnEvent", function(_, event, arg1)
             local ok, err = pcall(GRF.Header.Build, GRF.Frames.Setup)
             if not ok then API.Fail("build", err) end
             if GRF.db.hideBlizzard then GRF.Blizzard.HideAll() end
+            GRF.Announce()
         end, "frames will appear when combat ends")
+        -- Talents arrive after load (PLAYER_TALENT_UPDATE at login, measured).
+        GRF.roleWatcher = Role.Watch(function() evaluateRole(false) end, API.RegisterEvents)
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- arg1 = isInitialLogin: warn at a real login, never on /reload.
         if arg1 and API.ClientBuild() ~= GRF.MEASURED_ON_BUILD then

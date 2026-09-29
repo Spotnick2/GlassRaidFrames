@@ -86,6 +86,26 @@ function API.HealthPercent(unit)
     return UnitHealthPercent(unit, true, curve)
 end
 
+-- CreateFrame with a template that may be missing on this client. A missing
+-- template doesn't throw, it returns a bare frame (Priestly, GlassUnitFrames),
+-- so `proof` names a field the template would have made. Returns the frame
+-- and whether the template really applied.
+function API.SafeFrame(ftype, parent, template, proof)
+    local ok, f = pcall(CreateFrame, ftype, nil, parent, template)
+    if ok and f then return f, (proof == nil) or f[proof] ~= nil end
+    return CreateFrame(ftype, nil, parent), false
+end
+
+-- Fire a callback event on Retail's EventRegistry (usable on 70009, probe
+-- item 9) for other addons; false when it's absent. Never throws.
+function API.TriggerEvent(event, ...)
+    local reg = rawget(_G, "EventRegistry")
+    if not (reg and reg.TriggerEvent) then return false end
+    local ok, err = pcall(reg.TriggerEvent, reg, event, ...)
+    if not ok then API.Fail("event " .. event, err) end
+    return ok
+end
+
 -- The one place failures are recorded (first error per key), read by
 -- /grf failures and the tests.
 GRF.paintFailures = GRF.paintFailures or {}

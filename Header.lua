@@ -30,9 +30,14 @@ Header.TEMPLATE = "GlassRaidFramesUnitTemplate"
 Header.headers = {}
 Header.children = {}
 
--- Default: the raid grid centred, clear of the action bars (UIParent is 768
--- units tall; the grid's bottom stays above y = -100).
-Header.DEFAULT_POS = { x = 0, y = 110 }
+-- Default positions per role (#7): the healer's grid in the lower middle,
+-- between GlassUnitFrames' player and target frames; the others on the left
+-- side, so the Cooldown Manager keeps the centre. UIParent is 768 units tall
+-- at the default scale; the grid stays above y = -250, clear of the action
+-- bars. The side's x comes from UIParent's actual width (screen aspect).
+Header.HEALER_POS = { x = 0, y = -120 }
+Header.SIDE_Y = 60
+Header.SIDE_MARGIN = 30
 
 function Header.Size()
     local w = Header.GROUPS * Header.TILE_W + (Header.GROUPS - 1) * Header.GAP
@@ -42,21 +47,46 @@ end
 
 local function sane(v) return type(v) == "number" and v == v and v > -2000 and v < 2000 end
 
--- The saved position, validated: a malformed save falls back to the default.
-function Header.PositionOf(db)
-    local p = db and db.pos
-    if type(p) == "table" and sane(p.x) and sane(p.y) then return p.x, p.y end
-    return Header.DEFAULT_POS.x, Header.DEFAULT_POS.y
+function Header.DefaultPosition(role)
+    if role == "HEALER" then return Header.HEALER_POS.x, Header.HEALER_POS.y end
+    local w = UIParent:GetWidth()
+    if type(w) ~= "number" or w <= 0 then w = 1024 end
+    local gridW = Header.Size()
+    return math.floor(-w / 2 + gridW / 2 + Header.SIDE_MARGIN), Header.SIDE_Y
 end
 
--- CENTER of the container on CENTER of UIParent, offset (x, y). Out of combat.
+-- The current role's saved position, validated: a malformed save falls back
+-- to the role's default.
+function Header.PositionOf()
+    local prof = GRF.Profile and GRF.Profile()
+    local p = prof and prof.pos
+    if type(p) == "table" and sane(p.x) and sane(p.y) then return p.x, p.y end
+    return Header.DefaultPosition(GRF.role)
+end
+
+-- CENTER of the container on CENTER of UIParent, offset (x, y); `save` stores
+-- it in the current role's profile. Out of combat.
 function Header.SetPosition(x, y, save)
     local c = Header.container
     if not c or InCombatLockdown() then return false end
     c:ClearAllPoints()
     c:SetPoint("CENTER", UIParent, "CENTER", x, y)
-    if save and GRF.db then GRF.db.pos = { x = x, y = y } end
+    local prof = save and GRF.Profile and GRF.Profile()
+    if prof then prof.pos = { x = x, y = y } end
+    -- Saved means settled (drag stop, combat mid-drag, reset): tell other
+    -- addons. Live drag updates (save = false) don't spam them.
+    if save and GRF.Announce then GRF.Announce() end
     return true
+end
+
+-- Where the grid is now, for other addons (GlassUnitFrames makes room):
+-- left, bottom, width, height in UIParent units, or nil.
+function Header.Rect()
+    local c = Header.container
+    if not c then return nil end
+    local ok, l, b, w, h = pcall(c.GetRect, c)
+    if not ok or type(l) ~= "number" then return nil end
+    return l, b, w, h
 end
 
 local function childUnitChanged(child, name, value)
@@ -97,7 +127,7 @@ function Header.Build(setup)
     local c = CreateFrame("Frame", "GlassRaidFramesContainer", UIParent)
     c:SetSize(Header.Size())
     Header.container = c
-    Header.SetPosition(Header.PositionOf(GRF.db))
+    Header.SetPosition(Header.PositionOf())
     for group = 1, Header.GROUPS do
         -- One header failing to build must not cost the other groups.
         local okH, h = pcall(newHeader, group, c)
@@ -134,4 +164,18 @@ function Header.SetShowSolo(on)
     return true
 end
 
-Header._test = { childUnitChanged = childUnitChanged }
+-- The side default depends on UIParent's width: re-place an unsaved role's
+-- grid when the UI scale or resolution changes (out of combat).
+local rescaler = CreateFrame("Frame")
+rescaler:SetScript("OnEvent", function()
+    if not Header.container then return end
+    local prof = GRF.Profile and GRF.Profile()
+    if prof and prof.pos then return end   -- a saved spot stays where it was put
+    GRF.WhenOutOfCombat("rescale", function()
+        -- Not saved (it's still the default), but it moved: tell other addons.
+        if Header.SetPosition(Header.PositionOf()) and GRF.Announce then GRF.Announce() end
+    end, false)
+end)
+API.RegisterEvents(rescaler, { "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" })
+
+Header._test = { childUnitChanged = childUnitChanged, rescaler = rescaler }

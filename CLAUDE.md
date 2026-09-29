@@ -34,9 +34,9 @@ then the dispel box and sound (#4). Work goes through GitHub issues and PRs at
 
 ## Layout
 
-TOC load order: `Compat.lua` → `Glass.lua` → `Engine.lua` → `Frames.lua` → `Auras.lua` →
-`Header.lua` → `GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` → `GlassRaidFrames.lua`.
-Planned: `ClickCast.lua`, `Dispel.lua`, `Options.lua`.
+TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` → `Frames.lua` →
+`Auras.lua` → `Header.lua` → `GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` →
+`GlassRaidFrames.lua` → `Options.lua`. Planned: `ClickCast.lua`, `Dispel.lua`.
 
 - **`Compat.lua`**: `GlassRaidFrames.API` is the only route to client APIs that moved or may be
   absent. It holds:
@@ -65,6 +65,48 @@ Planned: `ClickCast.lua`, `Dispel.lua`, `Options.lua`.
   hook calls `Engine.SetUnit` and the child's `onUnitChanged` (lower case on purpose: a
   capitalised field on a widget collides with the widget-method namespace). The container
   moves only out of combat (`Header.SetPosition`).
+- **`Role.lua`** (#7): which role you play. `HEALER`, `CASTER`, `MELEE` or `TANK`, in
+  priority order:
+  1. the per-character manual pick (`GlassRaidFramesCharDB.role`, `"auto"` = none);
+  2. the talent tree with the most points;
+  3. **the last role the talents gave** (`GlassRaidFramesCharDB.talentRole`): the talent API
+     doesn't answer at `ADDON_LOADED` or during a loading screen, and a build doesn't change
+     without a talent event, so this beats guessing;
+  4. a class default.
+
+  Settling at login is quiet. Chat says "role: … (talents)" only on a respec (talents changing a
+  talent-given role). `Role.Watch(onChange, register)` takes the caller's reporting registrar
+  (`API.RegisterEvents`).
+
+  **Self-contained like `Glass.lua`** (no engine, frames or saved variables), so GlassUnitFrames
+  can lift it for its #35. Forever has one spec per class (always DAMAGER), so the spec API is
+  useless here. The three Vanilla trees are **posX clusters in one trait tree** (probe item 9):
+  cluster the visible, on-canvas nodes (`y < MAX_Y`) at gaps over `Role.GAP` and sum
+  `currentRank` per cluster, left to right = tab order. Anything but three clusters means "don't
+  guess". Positions only: **no talent names** (the IDs-not-names rule). `Role.TREES` maps
+  class → the role of each tree.
+- **Settings per role**: `GlassRaidFramesDB.profiles[role]`, currently holding `pos`. `GRF.Profile()`
+  is the current role's table; `Header.PositionOf/SetPosition` and `Movers.Reset` read and write it.
+  Defaults: `Header.HEALER_POS` (lower middle, between GlassUnitFrames' player and target) and
+  the **left side for caster, melee and tank**, x computed from `UIParent:GetWidth()`. A position
+  saved before roles existed (`db.pos`) is copied into **every** role without one (the role
+  isn't known yet at load). An unsaved role's side grid is re-placed on `UI_SCALE_CHANGED` /
+  `DISPLAY_SIZE_CHANGED`. A role change (talent events via `Role.Watch`, or a pick) re-applies
+  through the combat queue and **announces `GlassRaidFrames.LayoutChanged` (role, left, bottom,
+  width, height)** through `API.TriggerEvent` (EventRegistry). Every *saved* position (drag stop,
+  combat mid-drag) announces from `Header.SetPosition`, and resets announce too. Nothing is
+  announced without a placed grid. GlassUnitFrames listens; neither needs the
+  other. New per-role settings go in the profile, not at the top of the DB.
+- **`Options.lua`**: Game Menu > Options > AddOns > Glass Raid Frames (`/grf options`). The panel
+  is created **hidden**, so Settings' `Show()` always fires `OnShow`. The Unlock button closes
+  Settings with **`SettingsPanel:Close(true)`**: plain `Close()` goes back to the Game Menu, whose
+  Esc handlers call the protected `SpellStopCasting` (ADDON_ACTION_FORBIDDEN blamed on us,
+  measured).
+  GlassUnitFrames' idiom: a canvas panel registered at `PLAYER_LOGIN`, `UIRadioButtonTemplate` /
+  `UICheckButtonTemplate` through `API.SafeFrame` with fallback art, no `UIDropDownMenu`, built
+  on first show and re-synced on every show. Every control goes through **`GRF.Settings`**
+  (`SetRole`, `SetShowSolo`, `SetHideBlizzard`, `Unlock`, `ResetPosition`), the helpers `/grf`
+  also uses.
 - **`Engine.lua`**: who gets painted and when, adapted from GlassUnitFrames' engine for frames
   whose unit changes:
   - a unit→frames map kept by `Engine.SetUnit`;
@@ -124,8 +166,13 @@ Classic API is usually stale. Spell IDs are Vanilla's, and so are ranks.
   contract.**
 - For a live check in game: `/api search <name>`, `/api system list`, `/api <system> list`
   (system names omit `C_`).
-- Use the Retail branch of `Gethe/wow-ui-source` for Blizzard FrameXML (`SecureTemplates.lua`,
-  `SecureGroupHeaders.lua`, `Blizzard_AuraContainer`).
+- **`C:\Projects\wow-ui-source` is Forever's own FrameXML** (branch `forever`, `version.txt` =
+  1.60.1.70009, the dump's build). Read Blizzard code there first (`SecureTemplates.lua`,
+  `SecureGroupHeaders.lua`, `Blizzard_AuraContainer`, …): line numbers in in-game error traces
+  match it, and they don't match Retail's. Fall back to the Retail branch of
+  `Gethe/wow-ui-source` only for what isn't there. For example, Forever's
+  `SecureUnitButton_OnClick` is where `C_ClickBindings` gets the first say on every
+  `SecureUnitButtonTemplate` frame, ours included.
 - `..\GlassUnitFrames\docs\GLASS-MATERIAL.md` is the write-up of the glass material.
 
 ## Reference addons

@@ -4,9 +4,11 @@
 ## Author: Spotnick
 ## Version: @project-version@
 ## SavedVariables: GlassRaidFramesDB
+## SavedVariablesPerCharacter: GlassRaidFramesCharDB
 
 Compat.lua
 Glass.lua
+Role.lua
 Engine.lua
 Frames.lua
 Auras.lua
@@ -15,3 +17,4 @@ GlassRaidFrames.xml
 Blizzard.lua
 Movers.lua
 GlassRaidFrames.lua
+Options.lua

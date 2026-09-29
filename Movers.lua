@@ -98,11 +98,17 @@ function Movers.IsUnlocked()
     return mover ~= nil and mover:IsShown()
 end
 
--- Back to the default spot, forgetting the saved one. Out of combat.
-function Movers.Reset()
+-- Forget `role`'s saved spot (default: the current role) and, if that role
+-- is the one shown, move the grid to its default. Out of combat.
+function Movers.Reset(role)
     if InCombatLockdown() then return false end
-    if GRF.db then GRF.db.pos = nil end
-    return Header.SetPosition(Header.DEFAULT_POS.x, Header.DEFAULT_POS.y, false)
+    role = role or GRF.role
+    local prof = GRF.db and GRF.db.profiles and GRF.db.profiles[role]
+    if prof then prof.pos = nil end
+    if role ~= GRF.role then return true end   -- another role: nothing on screen moves
+    local ok = Header.SetPosition(Header.DefaultPosition(role))
+    if ok and GRF.Announce then GRF.Announce() end
+    return ok
 end
 
 -- Combat starting mid-drag: stop, and stay where the last out-of-combat
