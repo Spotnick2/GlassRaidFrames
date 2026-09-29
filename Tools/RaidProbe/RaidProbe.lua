@@ -805,7 +805,7 @@ local function permKey(arg)
     -- or nothing, and the key does its action-bar action on your target.
     if arg == "group" then
         text = "/cast [@mouseover,help,nodead,party][@mouseover,help,nodead,raid] " .. name
-            .. "\n/click [@mouseover,noparty,noraid][@mouseover,noexists][@mouseover,harm][@mouseover,dead] ActionButton9"
+            .. "\n/click [@mouseover,noparty,noraid][@mouseover,noexists][@mouseover,nohelp][@mouseover,dead] ActionButton9"
     end
     b:SetAttribute("macrotext", text)
     b:SetScript("PostClick", function()
@@ -927,6 +927,99 @@ local function traits()
 end
 
 --------------------------------------------------------------------------------
+-- Milestone 2 checks (Codex review of the click-casting design, 2026-09-29):
+--   ranks <spellID>  can a LOWER rank be pinned, and how are lower ranks found?
+--   longmacro        does a secure macrotext over 255 characters run to its end?
+-- Keys: 0 = numeric spell ID, ALT-0 = "Name(Rank n)", CTRL-0 = the long macro,
+-- all cast at your TARGET. The log's "cast sent ... spell=<id>" says which rank.
+--------------------------------------------------------------------------------
+
+local testKeys
+
+local function testButton()
+    if testKeys then return testKeys end
+    local b = CreateFrame("Button", "RaidProbeRankKey", UIParent, "SecureActionButtonTemplate")
+    b:RegisterForClicks("AnyUp", "AnyDown")
+    b:SetAttribute("unit", "target")
+    b:SetScript("PostClick", function(_, mouse)
+        say("rank key clicked: " .. tostring(mouse) .. " type=" .. show(SecureButton_GetModifiedAttribute(b, "type", mouse))
+            .. " spell=" .. show(SecureButton_GetModifiedAttribute(b, "spell", mouse)))
+    end)
+    testKeys = b
+    return b
+end
+
+local function ranks(arg)
+    if InCombatLockdown() then say("out of combat only") return end
+    local id = tonumber(arg)
+    if not id then say("usage: /rprobe ranks <spellID of a LOWER rank you know>") return end
+    local okN, name = pcall(C_Spell.GetSpellName, id)
+    local okS, sub = pcall(C_Spell.GetSpellSubtext, id)
+    local okK, knownIt = pcall(C_SpellBook.IsSpellKnown, id)
+    say(string.format("spell %d: name=%s subtext=%s known=%s", id, show(okN and name), show(okS and sub), show(okK and knownIt)))
+    if not (okN and type(name) == "string") then return end
+    -- How many ranks can the client resolve from a rank-qualified name? (probe
+    -- only: the addon itself must not build names; this maps what exists)
+    local template = (okS and type(sub) == "string") and sub:gsub("%d+", "%%d") or nil
+    say("rank text template: " .. show(template))
+    if template then
+        for n = 1, 12 do
+            local q = name .. "(" .. template:format(n) .. ")"
+            local okI, info = pcall(C_Spell.GetSpellInfo, q)
+            if okI and type(info) == "table" and info.spellID then
+                local okK2, k2 = pcall(C_SpellBook.IsSpellKnown, info.spellID)
+                say(string.format("  %s -> id %s known=%s", q, show(info.spellID), show(okK2 and k2)))
+            end
+        end
+    end
+    -- Spellbook items with that exact spell name (lower ranks hidden in the UI?).
+    local okC, n = pcall(C_SpellBook.GetNumSpellBookSkillLines)
+    local seen = 0
+    if okC and type(n) == "number" then
+        for line = 1, n do
+            local okL, li = pcall(C_SpellBook.GetSpellBookSkillLineInfo, line)
+            if okL and type(li) == "table" and li.itemIndexOffset and li.numSpellBookItems then
+                for i = li.itemIndexOffset + 1, li.itemIndexOffset + li.numSpellBookItems do
+                    local okB, item = pcall(C_SpellBook.GetSpellBookItemInfo, i, Enum.SpellBookSpellBank.Player)
+                    if okB and type(item) == "table" and item.name == name then
+                        seen = seen + 1
+                        say(string.format("  spellbook #%d: id=%s subName=%s", i, show(item.spellID or item.actionID), show(item.subName)))
+                    end
+                end
+            end
+        end
+    end
+    say("spellbook entries named like it: " .. seen)
+    -- The two attribute forms, bound to keys 0 / ALT-0.
+    local b = testButton()
+    b:SetAttribute("type1", "spell")
+    b:SetAttribute("spell1", id)
+    b:SetAttribute("alt-type1", "spell")
+    b:SetAttribute("alt-spell1", (okS and type(sub) == "string" and sub ~= "") and (name .. "(" .. sub .. ")") or name)
+    ClearOverrideBindings(b)
+    SetOverrideBindingClick(b, true, "0", b:GetName())
+    SetOverrideBindingClick(b, true, "ALT-0", b:GetName())
+    say("target an enemy (or a friend for a heal) and press 0 (by ID) then ALT-0 (by '" .. show(b:GetAttribute("alt-spell1")) .. "')")
+end
+
+local function longMacro()
+    if InCombatLockdown() then say("out of combat only") return end
+    local id = testSpell()
+    local name = id and spellName(id)
+    if not name then say("no test spell: /rprobe spell <id>") return end
+    local lines = {}
+    -- Lines that can never cast ([mod,nomod] is always false), then the real one.
+    for i = 1, 14 do lines[#lines + 1] = "/cast [mod,nomod][@player,noexists] " .. name .. " " .. string.rep("x", 4) .. i end
+    lines[#lines + 1] = "/cast [@player] " .. name
+    local text = table.concat(lines, "\n")
+    local b = testButton()
+    b:SetAttribute("ctrl-type1", "macro")
+    b:SetAttribute("ctrl-macrotext1", text)
+    SetOverrideBindingClick(b, true, "CTRL-0", b:GetName())
+    say(string.format("CTRL-0: a %d-character macro whose LAST line casts %s on you. Does it cast?", #text, name))
+end
+
+--------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
 
@@ -1036,6 +1129,8 @@ local HELP = {
     "hide - hide Blizzard's compact party/raid frames by reparenting",
     "fps - 5 s frame-time sample",
     "spec - what the spec/talent APIs return (role source for per-role settings)",
+    "ranks <id> - can a lower rank be pinned (keys 0 / ALT-0 at your target), and how are ranks found",
+    "longmacro - CTRL-0 runs a >255-character macro whose last line casts on you",
     "traits [nodes] - how the talent trees are laid out in the trait system (nodes: every talent)",
     "selfcast [none|alt] - show the self-cast modifier; none/alt changes it (a global setting)",
     "mocast [on|off] - the client's mouseover cast: support and CVars",
@@ -1071,6 +1166,8 @@ SlashCmdList.RAIDPROBE = function(msg)
     elseif cmd == "fps" then fps()
     elseif cmd == "selfcast" then selfCast(arg)
     elseif cmd == "spec" then spec()
+    elseif cmd == "ranks" then ranks(arg)
+    elseif cmd == "longmacro" then longMacro()
     elseif cmd == "traits" then P.traitNodes = arg == "nodes"; traits()
     elseif cmd == "mocast" then mouseoverCast(arg)
     elseif cmd == "hoverkeys" then hoverKeys()
