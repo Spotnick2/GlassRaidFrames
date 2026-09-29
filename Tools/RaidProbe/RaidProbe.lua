@@ -934,18 +934,25 @@ end
 -- all cast at your TARGET. The log's "cast sent ... spell=<id>" says which rank.
 --------------------------------------------------------------------------------
 
-local testKeys
+-- One button per key, no modifier attributes: the first run's ALT-0 / CTRL-0
+-- presses all resolved to the plain-0 attributes, so each test now has its
+-- own button and binding, and measures only what it should.
+local keyButtons = {}
 
-local function testButton()
-    if testKeys then return testKeys end
-    local b = CreateFrame("Button", "RaidProbeRankKey", UIParent, "SecureActionButtonTemplate")
-    b:RegisterForClicks("AnyUp", "AnyDown")
-    b:SetAttribute("unit", "target")
-    b:SetScript("PostClick", function(_, mouse)
-        say("rank key clicked: " .. tostring(mouse) .. " type=" .. show(SecureButton_GetModifiedAttribute(b, "type", mouse))
-            .. " spell=" .. show(SecureButton_GetModifiedAttribute(b, "spell", mouse)))
+local function keyButton(key, label)
+    local b = keyButtons[key]
+    if not b then
+        b = CreateFrame("Button", "RaidProbeKey_" .. key:gsub("%W", "_"), UIParent, "SecureActionButtonTemplate")
+        b:RegisterForClicks("AnyUp", "AnyDown")
+        b:SetAttribute("unit", "target")
+        keyButtons[key] = b
+    end
+    b:SetScript("PostClick", function(_, mouse, down)
+        say(string.format("%s pressed (%s, %s): type=%s spell=%s", key, label, tostring(down and "down" or "up"),
+            show(b:GetAttribute("type")), show(b:GetAttribute("spell"))))
     end)
-    testKeys = b
+    ClearOverrideBindings(b)
+    SetOverrideBindingClick(b, true, key, b:GetName())
     return b
 end
 
@@ -958,48 +965,13 @@ local function ranks(arg)
     local okK, knownIt = pcall(C_SpellBook.IsSpellKnown, id)
     say(string.format("spell %d: name=%s subtext=%s known=%s", id, show(okN and name), show(okS and sub), show(okK and knownIt)))
     if not (okN and type(name) == "string") then return end
-    -- How many ranks can the client resolve from a rank-qualified name? (probe
-    -- only: the addon itself must not build names; this maps what exists)
-    local template = (okS and type(sub) == "string") and sub:gsub("%d+", "%%d") or nil
-    say("rank text template: " .. show(template))
-    if template then
-        for n = 1, 12 do
-            local q = name .. "(" .. template:format(n) .. ")"
-            local okI, info = pcall(C_Spell.GetSpellInfo, q)
-            if okI and type(info) == "table" and info.spellID then
-                local okK2, k2 = pcall(C_SpellBook.IsSpellKnown, info.spellID)
-                say(string.format("  %s -> id %s known=%s", q, show(info.spellID), show(okK2 and k2)))
-            end
-        end
-    end
-    -- Spellbook items with that exact spell name (lower ranks hidden in the UI?).
-    local okC, n = pcall(C_SpellBook.GetNumSpellBookSkillLines)
-    local seen = 0
-    if okC and type(n) == "number" then
-        for line = 1, n do
-            local okL, li = pcall(C_SpellBook.GetSpellBookSkillLineInfo, line)
-            if okL and type(li) == "table" and li.itemIndexOffset and li.numSpellBookItems then
-                for i = li.itemIndexOffset + 1, li.itemIndexOffset + li.numSpellBookItems do
-                    local okB, item = pcall(C_SpellBook.GetSpellBookItemInfo, i, Enum.SpellBookSpellBank.Player)
-                    if okB and type(item) == "table" and item.name == name then
-                        seen = seen + 1
-                        say(string.format("  spellbook #%d: id=%s subName=%s", i, show(item.spellID or item.actionID), show(item.subName)))
-                    end
-                end
-            end
-        end
-    end
-    say("spellbook entries named like it: " .. seen)
-    -- The two attribute forms, bound to keys 0 / ALT-0.
-    local b = testButton()
-    b:SetAttribute("type1", "spell")
-    b:SetAttribute("spell1", id)
-    b:SetAttribute("alt-type1", "spell")
-    b:SetAttribute("alt-spell1", (okS and type(sub) == "string" and sub ~= "") and (name .. "(" .. sub .. ")") or name)
-    ClearOverrideBindings(b)
-    SetOverrideBindingClick(b, true, "0", b:GetName())
-    SetOverrideBindingClick(b, true, "ALT-0", b:GetName())
-    say("target an enemy (or a friend for a heal) and press 0 (by ID) then ALT-0 (by '" .. show(b:GetAttribute("alt-spell1")) .. "')")
+    local byID = keyButton("0", "by numeric ID")
+    byID:SetAttribute("type", "spell")
+    byID:SetAttribute("spell", id)
+    local byName = keyButton("ALT-0", "by rank-qualified name")
+    byName:SetAttribute("type", "spell")
+    byName:SetAttribute("spell", (okS and type(sub) == "string" and sub ~= "") and (name .. "(" .. sub .. ")") or name)
+    say("target an enemy and press 0 (by ID " .. id .. "), then ALT-0 (by '" .. show(byName:GetAttribute("spell")) .. "')")
 end
 
 local function longMacro()
@@ -1012,10 +984,9 @@ local function longMacro()
     for i = 1, 14 do lines[#lines + 1] = "/cast [mod,nomod][@player,noexists] " .. name .. " " .. string.rep("x", 4) .. i end
     lines[#lines + 1] = "/cast [@player] " .. name
     local text = table.concat(lines, "\n")
-    local b = testButton()
-    b:SetAttribute("ctrl-type1", "macro")
-    b:SetAttribute("ctrl-macrotext1", text)
-    SetOverrideBindingClick(b, true, "CTRL-0", b:GetName())
+    local b = keyButton("CTRL-0", "long macro")
+    b:SetAttribute("type", "macro")
+    b:SetAttribute("macrotext", text)
     say(string.format("CTRL-0: a %d-character macro whose LAST line casts %s on you. Does it cast?", #text, name))
 end
 

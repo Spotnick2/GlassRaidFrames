@@ -205,6 +205,24 @@ trees is unmeasured.
 - **D. Alt-9** (the SELFCAST modifier on a *key press*) on the partner's frame cast **on her**.
   Alt self-casts on clicks only (item 2), so Alt-R rez keys work.
 
+### Ranks, macro length, self (1.60.1.70009, 2026-09-29, warlock Morphisto)
+- **A lower rank pins by its numeric spell ID.** With Shadow Bolt rank 3 known, a
+  `SecureActionButtonTemplate` with `spell = 686` (rank 1) sent `UNIT_SPELLCAST_SENT` spell=686,
+  twice. The attribute reaches `CastSpellByID`, which keeps the rank. **Bindings store the exact
+  rank's spell ID**, with no rank text and no names.
+- **The spellbook holds every rank as its own item** (`C_SpellBook.GetSpellBookItemInfo`: #30
+  id 686 "Rank 1", #31 id 695 "Rank 2", #32 id 705 "Rank 3"), although Blizzard's spellbook UI
+  shows only the top rank. `C_Spell.GetSpellInfo("Shadow Bolt(Rank n)")` also resolves each ID.
+- **Unresolved:** `ALT-0` / `CTRL-0` presses bound to the same button all resolved to the
+  unmodified `type1`/`spell1`. Either they were plain presses, or a modifier held on a key
+  binding doesn't select `alt-`/`ctrl-` attributes. The design doesn't depend on it (one
+  button per key), and the probe now uses one button per key.
+- **Solo, hovering your own frame:** key 9 (the `[party]`/`[raid]` macro) fired action button 9,
+  so `[party]` excludes the player when solo. Still to check in a group.
+- Test C revisited: the earlier log holds `cast sent: target=<stranger> spell=2050` with no key-9
+  press before it, around the Mouseover Cast test. To confirm with the owner whether Blizzard's
+  Mouseover Cast healed a hovered stranger.
+
 ### 9. Spec and role (1.60.1.70009, 2026-09-28, level-? priest, no talent points)
 - **One spec per class.** `GetNumSpecializationsForClassID(5) = 1`. `GetSpecialization() = 1`,
   and `GetSpecializationInfo(1)` = id 1487, name "Priest", **role DAMAGER**, pointsSpent 0; rows
