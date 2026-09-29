@@ -182,6 +182,50 @@ trees is unmeasured.
   `useparent-unit` on the box, whose `unit` can't be set in combat, with its container
   following the child's unit through `OnAttributeChanged`.
 
+### Click-casting routes: tests A-D (1.60.1.70009, 2026-09-29, priest + paladin party)
+- **A. Blizzard's Click Cast Bindings** (`C_ClickBindings`; Forever's `SecureUnitButton_OnClick`
+  gives it first say on every `SecureUnitButtonTemplate` frame, ours included):
+  - the spellbook shows **one entry per spell, at its highest rank** (warlock: Immolate "Rank 2",
+    Shadow Bolt "Rank 3"), so a spell binding casts the top rank;
+  - **macros can be bound** (the window takes the macro frame), which is how a rank is pinned;
+  - casting on our frames wasn't clearly confirmed yet;
+  - on that character "Target Unit Frame (Default)" read **Unbound**. Forever's handler then
+    refuses `type=target` clicks on every unit frame (`expectBinding` and `bindingType == None`
+    → return), ours included.
+- **B. Group-only hover key** (`/cast [@mouseover,help,nodead,party][…,raid] Lesser Heal`, then
+  `/click [@mouseover,noparty,noraid][@mouseover,noexists][@mouseover,harm][@mouseover,dead]
+  ActionButton9`):
+  - the partner's frame: Lesser Heal on her (`UnitInParty` true);
+  - **two strangers in the world: never healed**, and key 9 fired action button 9 (Smite) instead;
+  - nothing hovered: Smite fired;
+  - the `[party]`/`[raid]` conditionals apply to the @mouseover unit. **The owner's rule holds.**
+- **C. Blizzard's Mouseover Cast** (`enableMouseoverCast`): a stranger hovered in the world was
+  **not** healed. With probe item 8 (it casts on our frames in combat), it respects the rule
+  natively.
+- **D. Alt-9** (the SELFCAST modifier on a *key press*) on the partner's frame cast **on her**.
+  Alt self-casts on clicks only (item 2), so Alt-R rez keys work.
+
+### Ranks, macro length, self (1.60.1.70009, 2026-09-29, warlock Morphisto)
+- **A lower rank pins by its numeric spell ID.** With Shadow Bolt rank 3 known, a
+  `SecureActionButtonTemplate` with `spell = 686` (rank 1) sent `UNIT_SPELLCAST_SENT` spell=686,
+  twice. The attribute reaches `CastSpellByID`, which keeps the rank. **Bindings store the exact
+  rank's spell ID**, with no rank text and no names.
+- **The spellbook holds every rank as its own item** (`C_SpellBook.GetSpellBookItemInfo`: #30
+  id 686 "Rank 1", #31 id 695 "Rank 2", #32 id 705 "Rank 3"), although Blizzard's spellbook UI
+  shows only the top rank. `C_Spell.GetSpellInfo("Shadow Bolt(Rank n)")` also resolves each ID.
+- **A modifier held on a KEY binding does not select `alt-`/`ctrl-` attributes** (measured from
+  the log): `CTRL-0`, bound to a button whose `ctrl-type1` was a macro, resolved to the plain
+  `type1`/`spell1` and cast Shadow Bolt rank 1, as did `ALT-0`. Mouse clicks do resolve
+  modifier prefixes (item 2). So every key binding gets **its own button** with plain
+  attributes, which the design already does. The long-macro test must be rerun on its own
+  button.
+- **Solo, hovering your own frame:** key 9 (the `[party]`/`[raid]` macro) fired action button 9
+  (Eureka!, `UnitInParty` false), so `[party]` excludes the player when solo. Still to check in a
+  group.
+- Test C revisited: the earlier log holds `cast sent: target=<stranger> spell=2050` with no key-9
+  press before it, around the Mouseover Cast test. To confirm with the owner whether Blizzard's
+  Mouseover Cast healed a hovered stranger.
+
 ### 9. Spec and role (1.60.1.70009, 2026-09-28, level-? priest, no talent points)
 - **One spec per class.** `GetNumSpecializationsForClassID(5) = 1`. `GetSpecialization() = 1`,
   and `GetSpecializationInfo(1)` = id 1487, name "Priest", **role DAMAGER**, pointsSpent 0; rows

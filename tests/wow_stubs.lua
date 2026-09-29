@@ -594,6 +594,12 @@ Settings = {
         return c
     end,
     RegisterAddOnCategory = function(c) WoW.settings.addon = c end,
+    RegisterCanvasLayoutSubcategory = function(parent, frame, name)
+        local c = { frame = frame, name = name, parent = parent }
+        WoW.settings.subcategories = WoW.settings.subcategories or {}
+        table.insert(WoW.settings.subcategories, c)
+        return c
+    end,
     OpenToCategory = function(id) WoW.settings.opened = id end,
 }
 C_Texture = { GetAtlasExists = function(name) return WoW.atlases[name] == true end }

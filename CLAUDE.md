@@ -36,7 +36,8 @@ then the dispel box and sound (#4). Work goes through GitHub issues and PRs at
 
 TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` → `Frames.lua` →
 `Auras.lua` → `Header.lua` → `GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` →
-`GlassRaidFrames.lua` → `Options.lua`. Planned: `ClickCast.lua`, `Dispel.lua`.
+`ClickCast.lua` → `GlassRaidFrames.lua` → `Options.lua` → `ClickCastOptions.lua`. Planned:
+`Dispel.lua`.
 
 - **`Compat.lua`**: `GlassRaidFrames.API` is the only route to client APIs that moved or may be
   absent. It holds:
@@ -107,6 +108,53 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   on first show and re-synced on every show. Every control goes through **`GRF.Settings`**
   (`SetRole`, `SetShowSolo`, `SetHideBlizzard`, `Unlock`, `ResetPosition`), the helpers `/grf`
   also uses.
+- **`ClickCast.lua`** (#3): **one binding list per character and per role**
+  (`GlassRaidFramesCharDB.profiles[role].bindings`), covering mouse clicks on our frames and
+  keyboard keys while hovering. Rows are `{key = "SHIFT-R"}` or `{mouse = "shift-1"}` plus
+  `{spell = ID, pinned = true|nil}`: spells by ID, names resolved at apply time.
+  - **Mouse rows** are attributes on the 40 header children (`<alt-ctrl-shift->type<N>` =
+    `spell`). A pinned rank is **its own spell ID** (a numeric `spell` keeps the rank,
+    measured); unpinned uses the bare localized name (the highest rank). Blizzard's Click Cast
+    Bindings act first on the same click (Forever's `SecureUnitButton_OnClick`).
+  - **Key rows**: one hidden `SecureActionButtonTemplate` per key (a modifier held on a key
+    binding does **not** select modified attributes, measured), bound with
+    `SetOverrideBindingClick`. Its macro is `/cast [@mouseover,help,nodead,party][…,raid]
+    <spell>`, then `/click` of the key's own action button on the **exact complement**
+    (`[noparty,noraid][noexists][nohelp][dead]`). So **a stranger under the cursor never gets
+    the spell** (the owner's rule, measured), and anything else does the key's usual action.
+    Rez spells (`ClickCast.REZ`, by ID) swap dead/nodead. The fallback button comes from
+    `GetBindingAction(key)` (the base binding) matched to the bars' `.commandName`; a key bound
+    to anything else isn't taken over. Macros stay ≤ 255 characters (an 848-character one never
+    reached its end, measured).
+  - **One reconciliation** (`ClickCast.Apply`): desired vs installed, changing only what
+    differs, so our own override can't loop through `UPDATE_BINDINGS`. `ClickCast.Request()`
+    queues it through the combat queue (the installed bindings stay until combat ends:
+    `pending`). It re-runs on role changes, `SPELLS_CHANGED`, `UPDATE_BINDINGS`, and after the
+    build.
+  - Capturing an existing binding again returns that row untouched (it never erases its spell).
+    An unbound **modified** key (SHIFT-R) falls back, as the client does, to the plain key (R):
+    an action button there gets the `/click`, and any other command is noted as lost off-frame.
+    Only keys the client accepted count as installed, so a refused one is retried.
+    **A row installs only if its spell ID is learned** (`API.SpellKnown`, via `IsSpellKnown` /
+    `IsSpellInSpellBook`): a name alone proves nothing, since `C_Spell.GetSpellName` answers
+    for unlearned spells. After a respec, `SPELLS_CHANGED` clears the stale binding; the row
+    stays saved and flagged. The open editor repaints on every `Request`, not only after
+    `Apply`, so a role change in combat shows the new role's rows plus "pending" at once.
+    `ClickCast.onApplied` lets the page repaint after a queued apply. **Known limit:** with a
+    bar addon that binds through overrides (Bartender, ElvUI), the fallback clicks Blizzard's
+    button for the key's base binding, not the addon's.
+  - Warnings (`ClickCast.Warnings`): a mouse row on the SELFCAST modifier (clicks self-cast,
+    keys don't, measured), a row replacing the plain target/menu click, an unknown spell, a
+    macro too long, a key bound to a non-action command.
+- **`ClickCastOptions.lua`**: the "Click-casting" subcategory page (under Options.category).
+  - Rows show the binding, the spell (dragged from the spellbook: `GetCursorInfo()`'s 4th
+    return), a rank button (the spellbook holds every rank as its own item, grouped by the
+    client's own name at runtime) and Remove.
+  - A capture button takes the next key or click; bare modifiers are ignored, Esc cancels,
+    and it's refused in combat.
+  - It flags Blizzard's Mouseover Cast (**it casts on hovered strangers, measured**) with a
+    turn-off button, lists Blizzard's own spell/macro click bindings, and warns when its
+    "Target Unit Frame" is unbound.
 - **`Engine.lua`**: who gets painted and when, adapted from GlassUnitFrames' engine for frames
   whose unit changes:
   - a unit→frames map kept by `Engine.SetUnit`;

@@ -805,7 +805,7 @@ local function permKey(arg)
     -- or nothing, and the key does its action-bar action on your target.
     if arg == "group" then
         text = "/cast [@mouseover,help,nodead,party][@mouseover,help,nodead,raid] " .. name
-            .. "\n/click [@mouseover,noparty,noraid][@mouseover,noexists][@mouseover,harm][@mouseover,dead] ActionButton9"
+            .. "\n/click [@mouseover,noparty,noraid][@mouseover,noexists][@mouseover,nohelp][@mouseover,dead] ActionButton9"
     end
     b:SetAttribute("macrotext", text)
     b:SetScript("PostClick", function()
@@ -927,6 +927,70 @@ local function traits()
 end
 
 --------------------------------------------------------------------------------
+-- Milestone 2 checks (Codex review of the click-casting design, 2026-09-29):
+--   ranks <spellID>  can a LOWER rank be pinned, and how are lower ranks found?
+--   longmacro        does a secure macrotext over 255 characters run to its end?
+-- Keys: 0 = numeric spell ID, ALT-0 = "Name(Rank n)", CTRL-0 = the long macro,
+-- all cast at your TARGET. The log's "cast sent ... spell=<id>" says which rank.
+--------------------------------------------------------------------------------
+
+-- One button per key, no modifier attributes: the first run's ALT-0 / CTRL-0
+-- presses all resolved to the plain-0 attributes, so each test now has its
+-- own button and binding, and measures only what it should.
+local keyButtons = {}
+
+local function keyButton(key, label)
+    local b = keyButtons[key]
+    if not b then
+        b = CreateFrame("Button", "RaidProbeKey_" .. key:gsub("%W", "_"), UIParent, "SecureActionButtonTemplate")
+        b:RegisterForClicks("AnyUp", "AnyDown")
+        b:SetAttribute("unit", "target")
+        keyButtons[key] = b
+    end
+    b:SetScript("PostClick", function(_, mouse, down)
+        say(string.format("%s pressed (%s, %s): type=%s spell=%s", key, label, tostring(down and "down" or "up"),
+            show(b:GetAttribute("type")), show(b:GetAttribute("spell"))))
+    end)
+    ClearOverrideBindings(b)
+    SetOverrideBindingClick(b, true, key, b:GetName())
+    return b
+end
+
+local function ranks(arg)
+    if InCombatLockdown() then say("out of combat only") return end
+    local id = tonumber(arg)
+    if not id then say("usage: /rprobe ranks <spellID of a LOWER rank you know>") return end
+    local okN, name = pcall(C_Spell.GetSpellName, id)
+    local okS, sub = pcall(C_Spell.GetSpellSubtext, id)
+    local okK, knownIt = pcall(C_SpellBook.IsSpellKnown, id)
+    say(string.format("spell %d: name=%s subtext=%s known=%s", id, show(okN and name), show(okS and sub), show(okK and knownIt)))
+    if not (okN and type(name) == "string") then return end
+    local byID = keyButton("0", "by numeric ID")
+    byID:SetAttribute("type", "spell")
+    byID:SetAttribute("spell", id)
+    local byName = keyButton("ALT-0", "by rank-qualified name")
+    byName:SetAttribute("type", "spell")
+    byName:SetAttribute("spell", (okS and type(sub) == "string" and sub ~= "") and (name .. "(" .. sub .. ")") or name)
+    say("target an enemy and press 0 (by ID " .. id .. "), then ALT-0 (by '" .. show(byName:GetAttribute("spell")) .. "')")
+end
+
+local function longMacro()
+    if InCombatLockdown() then say("out of combat only") return end
+    local id = testSpell()
+    local name = id and spellName(id)
+    if not name then say("no test spell: /rprobe spell <id>") return end
+    local lines = {}
+    -- Lines that can never cast ([mod,nomod] is always false), then the real one.
+    for i = 1, 14 do lines[#lines + 1] = "/cast [mod,nomod][@player,noexists] " .. name .. " " .. string.rep("x", 4) .. i end
+    lines[#lines + 1] = "/cast [@player] " .. name
+    local text = table.concat(lines, "\n")
+    local b = keyButton("CTRL-0", "long macro")
+    b:SetAttribute("type", "macro")
+    b:SetAttribute("macrotext", text)
+    say(string.format("CTRL-0: a %d-character macro whose LAST line casts %s on you. Does it cast?", #text, name))
+end
+
+--------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
 
@@ -1036,6 +1100,8 @@ local HELP = {
     "hide - hide Blizzard's compact party/raid frames by reparenting",
     "fps - 5 s frame-time sample",
     "spec - what the spec/talent APIs return (role source for per-role settings)",
+    "ranks <id> - can a lower rank be pinned (keys 0 / ALT-0 at your target), and how are ranks found",
+    "longmacro - CTRL-0 runs a >255-character macro whose last line casts on you",
     "traits [nodes] - how the talent trees are laid out in the trait system (nodes: every talent)",
     "selfcast [none|alt] - show the self-cast modifier; none/alt changes it (a global setting)",
     "mocast [on|off] - the client's mouseover cast: support and CVars",
@@ -1071,6 +1137,8 @@ SlashCmdList.RAIDPROBE = function(msg)
     elseif cmd == "fps" then fps()
     elseif cmd == "selfcast" then selfCast(arg)
     elseif cmd == "spec" then spec()
+    elseif cmd == "ranks" then ranks(arg)
+    elseif cmd == "longmacro" then longMacro()
     elseif cmd == "traits" then P.traitNodes = arg == "nodes"; traits()
     elseif cmd == "mocast" then mouseoverCast(arg)
     elseif cmd == "hoverkeys" then hoverKeys()
