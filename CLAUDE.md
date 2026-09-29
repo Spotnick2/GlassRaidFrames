@@ -155,11 +155,16 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   - It flags Blizzard's Mouseover Cast (**it casts on hovered strangers, measured**) with a
     turn-off button, lists Blizzard's own spell/macro click bindings, and warns when its
     "Target Unit Frame" is unbound.
+- **The name is centred in the tile** (both ways) and shows the **first name**
+  (`Frames.ShortName`), as Cell does: Forever's surnames only got a centred name cut short. A
+  secret name (grouped) can't be split in Lua, so it goes to `SetText` whole. Dead/Offline is
+  small in the top-right corner.
 - **Tile size per role** (`profiles[role].size`, `/grf size`, width and height sliders on the
   main page). The default is **82×58** (Cell's look, measured side by side), and
   `GlassRaidFrames.xml` must match `Header.DEFAULT_W/H` (`test_toc`).
   - `Header.ApplySize` runs out of combat. It resizes the 40 precreated children, calls each
-    child's `relayout` (`Frames.Layout`: bar height, name font scaled by `Frames.NameSize`),
+    child's `relayout` (`Frames.Layout`: bar height, and the name font at about 28% of the tile's
+    height via `Frames.NameSize`, the room Cell's name takes),
     and resets the column offsets and the container. The header chains each child to the
     previous one (Forever's `SecureGroupHeaders.lua:211`), so columns re-flow on their own.
   - The container is centre-anchored, so the grid keeps its centre.

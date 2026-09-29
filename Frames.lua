@@ -64,15 +64,17 @@ function Frames.Setup(b)
     hp:SetFrameLevel(Glass.ContentLevel(body))
     b.health = hp
 
-    -- Dead/Offline sits at the end of the name line: the bottom edge belongs
-    -- to the debuff row, drawn above the glass. Empty, it takes no room.
+    -- Dead/Offline: small, in the top-right corner (the bottom edge belongs to
+    -- the debuff row, the middle to the name).
     local status = Glass.Font(g.top, 9, "RIGHT")
-    status:SetPoint("TOPRIGHT", body, "TOPRIGHT", -inset - 3, -inset - 4)
+    status:SetPoint("TOPRIGHT", body, "TOPRIGHT", -inset - 3, -inset - 3)
     b.statusText = status
 
-    local name = Glass.Font(g.top, 10, "LEFT")
-    name:SetPoint("TOPLEFT", body, "TOPLEFT", inset + 3, -inset - 3)
-    name:SetPoint("RIGHT", status, "LEFT", -2, 0)
+    -- The name, centred in the tile both ways, as Cell draws it (owner's
+    -- side-by-side screenshots).
+    local name = Glass.Font(g.top, 10, "CENTER")
+    name:SetPoint("LEFT", body, "LEFT", inset + 3, 0)
+    name:SetPoint("RIGHT", body, "RIGHT", -inset - 3, 0)
     b.nameText = name
 
     local ind = {}
@@ -94,10 +96,19 @@ function Frames.BarHeight(b)
     return b:GetHeight() - 2 * Glass.Inset("small")
 end
 
--- The name grows with the tile: 10 at the old 38-unit height, about 13 at the
--- default 58, never under 9 or over 16.
+-- The name grows with the tile, taking the room Cell's does (its glyphs span
+-- about 30% of the frame's height): 16 at the default 58, 9 to 22.
 function Frames.NameSize(h)
-    return math.max(9, math.min(16, math.floor(h * 0.22 + 0.5)))
+    return math.max(9, math.min(22, math.floor(h * 0.28 + 0.5)))
+end
+
+-- The name a tile shows: the first name, as Cell does ("Draku"). Forever's
+-- characters have surnames, and a surname only gets a centred name cut to
+-- "Morph...". A secret name (grouped, ForeverUI's note) can't be split in Lua:
+-- it goes to the client whole.
+function Frames.ShortName(full)
+    if API.IsSecret(full) or type(full) ~= "string" then return full end
+    return full:match("^(%S+)") or full
 end
 
 -- After a resize (Header.ApplySize): the bar follows the tile's height, the
@@ -117,8 +128,9 @@ end
 
 Engine.SetPainter("name", function(b, u)
     if not UnitExists(u) then return end
-    -- GetUnitName(u, false): UnitName returns only the first name on Forever.
-    b.nameText:SetText(GetUnitName(u, false))
+    -- GetUnitName(u, false) (UnitName's second return is the surname on
+    -- Forever), then the first name for the tile.
+    b.nameText:SetText(Frames.ShortName(GetUnitName(u, false)))
 end)
 
 local function classColor(u)

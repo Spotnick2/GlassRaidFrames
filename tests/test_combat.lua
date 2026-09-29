@@ -14,7 +14,7 @@ WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
 flush()
 eq(#GRF.Header.children, 40, "combat ends: the frames are built")
-check(childFor("party2") and childFor("party2").nameText._text == "Member 2", "and painted")
+check(childFor("party2") and childFor("party2").nameText._text == "Member", "and painted")
 
 -- In combat: members leave and join, the group converts; the header does it.
 WoW.combat = true

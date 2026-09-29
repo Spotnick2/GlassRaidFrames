@@ -40,17 +40,26 @@ check(c1.body and not c1.body._protected, "the visuals live on an insecure body"
 local me, p1 = childFor("player"), childFor("party1")
 check(me and p1 and childFor("party2"), "party members have frames")
 eq(me:GetParent(), H.headers[1], "the party is in header 1")
-eq(me.nameText._text, "Karuzo Elegia", "the name is painted")
+eq(me.nameText._text, "Karuzo", "the first name is painted (as Cell shows it)")
 eq(p1.health._value, 100, "health painted")
 eq(p1.health._max, 150, "max health painted")
 check(p1.health._color and math.abs(p1.health._color[1] - 0.53) < 1e-6, "the bar takes the class colour")
 
--- Dead/Offline is on the name line, right-aligned; the name stops before it
--- (the bottom edge is the debuff row's; code review).
-local sp = p1.statusText._points[1]
-eq(sp[1], "TOPRIGHT", "the status sits top-right")
-local np = p1.nameText._points[2]
-eq(np[2], p1.statusText, "the name ends where the status begins")
+-- The name is centred in the tile both ways, as Cell draws it; Dead/Offline
+-- sits small in the top-right corner.
+local np1, np2 = p1.nameText._points[1], p1.nameText._points[2]
+eq(np1[1] .. "/" .. np1[3] .. "/" .. np1[5], "LEFT/LEFT/0", "the name spans the tile, vertically centred")
+eq(np2[1] .. "/" .. np2[3] .. "/" .. np2[5], "RIGHT/RIGHT/0", "(both sides)")
+eq(p1.statusText._points[1][1], "TOPRIGHT", "the status sits top-right")
+check(WoW.methodsCalled["FontString:SetJustifyH"], "the name is justified (centred by Glass.Font's argument)")
+
+-- A secret name (grouped, ForeverUI's note) can't be split: it goes whole.
+WoW.secretFields = { name = true }
+WoW.fire("UNIT_NAME_UPDATE", "party1"); flush()
+check(WoW.IsSecret(p1.nameText._text), "a secret name reaches the client whole")
+eq(next(GRF.paintFailures), nil, "without a failure")
+WoW.secretFields = {}
+WoW.fire("UNIT_NAME_UPDATE", "party1"); flush()
 
 -- Offline and dead.
 WoW.units.party1.connected = false
@@ -123,7 +132,7 @@ WoW.fire("GROUP_ROSTER_UPDATE"); flush()
 eq(#WoW.blocked, 0, "a combat conversion touches nothing protected (" .. table.concat(WoW.blocked, ", ") .. ")")
 local r7 = childFor("raid7")
 check(r7 and r7:GetParent() == H.headers[2], "raid7 (group 2) sits in header 2")
-eq(r7.nameText._text, "Raider 7", "its name is painted in combat")
+eq(r7.nameText._text, "Raider", "its name is painted in combat")
 eq(r7.debuffs._modelUnit, "raid7", "its debuff row moved to the new unit in combat")
 eq(childFor("party1"), nil, "party tokens are gone in the raid")
 eq(GRF.Engine._test.framesByUnit.party1[p1], nil, "the engine forgot the old unit")
@@ -141,7 +150,7 @@ flush()
 WoW.units.raid7.name = "Someone Else"
 WoW.units.raid7.guid = "GUID-someone-else"
 WoW.fire("GROUP_ROSTER_UPDATE"); flush()
-eq(r7.nameText._text, "Someone Else", "a reused token repaints its name")
+eq(r7.nameText._text, "Someone", "a reused token repaints its name")
 WoW.combat = false
 
 done("test_frames")
