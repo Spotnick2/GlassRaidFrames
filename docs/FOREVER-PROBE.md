@@ -182,6 +182,29 @@ trees is unmeasured.
   `useparent-unit` on the box, whose `unit` can't be set in combat, with its container
   following the child's unit through `OnAttributeChanged`.
 
+### Click-casting routes: tests A-D (1.60.1.70009, 2026-09-29, priest + paladin party)
+- **A. Blizzard's Click Cast Bindings** (`C_ClickBindings`; Forever's `SecureUnitButton_OnClick`
+  gives it first say on every `SecureUnitButtonTemplate` frame, ours included):
+  - the spellbook shows **one entry per spell, at its highest rank** (warlock: Immolate "Rank 2",
+    Shadow Bolt "Rank 3"), so a spell binding casts the top rank;
+  - **macros can be bound** (the window takes the macro frame), which is how a rank is pinned;
+  - casting on our frames wasn't clearly confirmed yet;
+  - on that character "Target Unit Frame (Default)" read **Unbound**. Forever's handler then
+    refuses `type=target` clicks on every unit frame (`expectBinding` and `bindingType == None`
+    → return), ours included.
+- **B. Group-only hover key** (`/cast [@mouseover,help,nodead,party][…,raid] Lesser Heal`, then
+  `/click [@mouseover,noparty,noraid][@mouseover,noexists][@mouseover,harm][@mouseover,dead]
+  ActionButton9`):
+  - the partner's frame: Lesser Heal on her (`UnitInParty` true);
+  - **two strangers in the world: never healed**, and key 9 fired action button 9 (Smite) instead;
+  - nothing hovered: Smite fired;
+  - the `[party]`/`[raid]` conditionals apply to the @mouseover unit. **The owner's rule holds.**
+- **C. Blizzard's Mouseover Cast** (`enableMouseoverCast`): a stranger hovered in the world was
+  **not** healed. With probe item 8 (it casts on our frames in combat), it respects the rule
+  natively.
+- **D. Alt-9** (the SELFCAST modifier on a *key press*) on the partner's frame cast **on her**.
+  Alt self-casts on clicks only (item 2), so Alt-R rez keys work.
+
 ### 9. Spec and role (1.60.1.70009, 2026-09-28, level-? priest, no talent points)
 - **One spec per class.** `GetNumSpecializationsForClassID(5) = 1`. `GetSpecialization() = 1`,
   and `GetSpecializationInfo(1)` = id 1487, name "Priest", **role DAMAGER**, pointsSpent 0; rows
