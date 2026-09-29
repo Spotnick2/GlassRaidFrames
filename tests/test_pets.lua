@@ -8,6 +8,8 @@ party(2)
 WoW.SetUnit("pet", { name = "Grol", class = "WARRIOR", health = 300, maxHealth = 300 })
 WoW.SetUnit("partypet1", { name = "Wolf", class = "WARRIOR", health = 200, maxHealth = 250 })
 GlassRaidFramesCharDB = { role = "HEALER" }
+local announced = {}
+rawset(_G, "EventRegistry", { TriggerEvent = function(_, event, ...) announced[#announced + 1] = { event, ... } end })
 local GRF = loadAddon()
 local H = GRF.Header
 
@@ -33,8 +35,10 @@ check(not pets._shown, "pets are off by default")
 for _, c in ipairs(H.petChildren) do check(c.unit == nil, "a hidden pet tile has no unit in the engine") break end
 check(next(GRF.Engine._test.framesByUnit.pet or {}) == nil, "nothing paints 'pet' while pets are hidden")
 
--- /grf pets turns them on for this role: pets get tiles.
+-- /grf pets turns them on for this role: pets get tiles; announced (Codex).
+announced = {}
 SlashCmdList.GLASSRAIDFRAMES("pets")
+check(#announced > 0 and announced[#announced][1] == GRF.LAYOUT_EVENT, "turning pets on is announced")
 check(pets._shown, "shown once turned on")
 eq(GRF.Profile().showPets, true, "saved in the role's profile")
 WoW.layoutHeaders(); flush()
@@ -68,7 +72,9 @@ eq(mine:GetWidth(), select(1, H.TileSize()), "as wide as the others")
 SlashCmdList.GLASSRAIDFRAMES("size 100 60")
 eq(mine:GetWidth(), 100, "a resize reaches pet tiles")
 eq(mine:GetHeight(), H.PetHeight(), "at the pet height")
-eq(pets._height, H.PetHeight(), "the pet header is one tile tall (its LEFT anchor centres on it)")
+eq(pets._height, H.PetHeight(), "the pet header is one tile tall")
+-- The default pet column follows a width change (Codex: it stayed at the old offset).
+eq(petAnchor()[4], 1 * (100 + H.GAP), "a resize re-places the default pet column")
 
 -- Mouse bindings reach pet tiles; hover keys don't target pets ([party]).
 rawset(_G, "C_Spell", { GetSpellName = function() return "Renew" end, GetSpellSubtext = function() return "Rank 1" end })
@@ -112,8 +118,10 @@ local pm = GRF.Movers._test.petMover()
 check(pm and pm._shown, "unlock mode has a pets mover")
 eq(pm._points[#pm._points][2], pc, "anchored to the pet block")
 UIParent._center = { 682, 384 }
+announced = {}
 pm._scripts.OnDragStart(pm); pm._center = { 900, 300 }; pm._scripts.OnUpdate(pm); pm._scripts.OnDragStop(pm)
 eq(GRF.Profile().petPos.x, 218, "the pets' own spot is saved (x)")
+check(#announced > 0 and announced[#announced][1] == GRF.LAYOUT_EVENT, "a saved pet drag is announced")
 eq(GRF.Profile().pos, nil, "without moving the grid's")
 eq(petAnchor()[1], "CENTER", "the pets now sit at their own spot")
 raid(40); WoW.layoutHeaders(); WoW.fire("GROUP_ROSTER_UPDATE"); WoW.flushTimers()
@@ -122,6 +130,23 @@ GRF.Movers.Lock()
 SlashCmdList.GLASSRAIDFRAMES("reset")
 eq(GRF.Profile().petPos, nil, "reset forgets the pets' spot too")
 eq(petAnchor()[2], H.container, "and puts them back beside the groups")
+
+-- A roster change that re-places the pets is announced.
+announced = {}
+raid(8); WoW.SetUnit("raidpet3", { name = "Imp", class = "WARLOCK", health = 100, maxHealth = 100 })
+WoW.layoutHeaders(); WoW.fire("GROUP_ROSTER_UPDATE"); WoW.flushTimers()
+check(#announced > 0, "a roster re-placement is announced")
+
+-- Unlocked role switches keep the pet mover in step (Codex): off with a role
+-- that hides pets, back with one that shows them.
+GRF.Movers.Unlock()
+local pmv = GRF.Movers._test.petMover()
+check(pmv and pmv._shown, "healer (pets on): the pet mover shows")
+GRF.Settings.SetRole("caster")
+check(not pmv._shown, "switch to caster (pets off): the pet mover goes")
+GRF.Settings.SetRole("healer")
+check(GRF.Movers._test.petMover()._shown, "back to healer: it returns")
+GRF.Movers.Lock()
 
 -- In combat the toggle waits; nothing protected is touched.
 WoW.combat = true

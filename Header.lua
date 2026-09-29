@@ -118,6 +118,8 @@ function Header.ApplySize()
         h:SetPoint("TOPLEFT", c, "TOPLEFT", (group - 1) * (tw + Header.GAP), 0)
     end
     c:SetSize(Header.Size())
+    -- The default pet column's offset is counted in tile widths: re-place it.
+    Header.PlacePets()
     return true
 end
 
@@ -265,6 +267,8 @@ function Header.SetPetPosition(x, y, save)
     pc:SetPoint("CENTER", UIParent, "CENTER", x, y)
     local prof = save and GRF.Profile and GRF.Profile()
     if prof then prof.petPos = { x = x, y = y } end
+    -- Saved means settled: the announced rectangle includes the pets.
+    if save and GRF.Announce then GRF.Announce() end
     return true
 end
 
@@ -408,7 +412,11 @@ API.RegisterEvents(rescaler, { "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" })
 -- out of combat (a protected re-anchor).
 local rosterWatch = CreateFrame("Frame")
 rosterWatch:SetScript("OnEvent", function()
-    C_Timer.After(0, function() GRF.WhenOutOfCombat("placepets", Header.PlacePets, false) end)
+    C_Timer.After(0, function()
+        GRF.WhenOutOfCombat("placepets", function()
+            if Header.PlacePets() and Header.PetsShown() and GRF.Announce then GRF.Announce() end
+        end, false)
+    end)
 end)
 API.RegisterEvents(rosterWatch, { "GROUP_ROSTER_UPDATE" })
 

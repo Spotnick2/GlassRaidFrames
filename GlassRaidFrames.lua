@@ -90,6 +90,8 @@ local function applyRole()
     GRF.Header.ApplySize()   -- the size is per role too
     GRF.Header.ApplyPets()   -- and showing pets
     GRF.Header.SetPosition(GRF.Header.PositionOf())
+    -- Unlocked: the movers follow the role (the pet mover appears or goes).
+    if GRF.Movers.IsUnlocked() then GRF.Movers.Unlock() end
     GRF.Announce()
 end
 
@@ -188,6 +190,7 @@ function Settings.SetShowPets(on)
     whenOutOfCombat("pets", function()
         GRF.Header.ApplyPets()
         if GRF.Movers.IsUnlocked() then GRF.Movers.Unlock() end   -- the pet mover follows
+        GRF.Announce()   -- the rectangle grew or shrank (applyRole announces its own, once placed)
     end)
     return true
 end
