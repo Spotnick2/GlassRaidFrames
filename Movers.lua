@@ -31,6 +31,7 @@ end
 
 local function reattach()
     mover:ClearAllPoints()
+    mover:SetSize(Header.Size())   -- the grid's size may have changed (resize)
     mover:SetAllPoints(Header.container)
 end
 

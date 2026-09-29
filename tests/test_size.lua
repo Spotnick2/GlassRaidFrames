@@ -1,0 +1,104 @@
+-- Resizable tiles, per role: every child, its bar and name, the columns and
+-- the container follow; out of combat only; the options' sliders drive it.
+dofile("tests/wow_stubs.lua")
+dofile("tests/harness.lua")
+
+UIParent._width, UIParent._height = 1365, 768
+party(2)
+GlassRaidFramesCharDB = { role = "HEALER" }
+local GRF = loadAddon()
+local H = GRF.Header
+local function child(i) return H.children[i] end
+local function gridPoint() local p = H.container._points; return p[#p] end
+
+-- Default: Cell's look.
+eq(child(1):GetWidth(), 82, "default width (Cell's look)")
+eq(child(1):GetHeight(), 58, "default height")
+eq(child(1).health._height, 58 - 2 * GRF.Glass.Inset("small"), "the bar fills the tile's height")
+eq(child(1).nameText._font[2], GRF.Frames.NameSize(58) + GRF.Glass.FONTS[GRF.Glass.fontKey].bump, "the name scales with it")
+local gw, gh = H.Size()
+eq(H.container._width, gw, "the container is the grid's size")
+eq(gw, 8 * 82 + 7 * H.GAP, "8 columns")
+eq(gh, 5 * 58 + 4 * H.GAP, "5 rows")
+
+-- /grf size: every tile, bar, name, column and the container follow; the
+-- grid keeps its centre.
+local before = gridPoint()
+SlashCmdList.GLASSRAIDFRAMES("size 100 40")
+eq(GRF.Profile().size.w, 100, "saved in the role's profile (w)")
+eq(GRF.Profile().size.h, 40, "(h)")
+for _, i in ipairs({ 1, 17, 40 }) do
+    eq(child(i):GetWidth(), 100, "child " .. i .. " is resized (w)")
+    eq(child(i):GetHeight(), 40, "child " .. i .. " is resized (h)")
+end
+eq(child(1).health._height, 40 - 2 * GRF.Glass.Inset("small"), "the bar follows")
+eq(child(1).nameText._font[2], GRF.Frames.NameSize(40) + GRF.Glass.FONTS[GRF.Glass.fontKey].bump, "the name follows")
+local hp = H.headers[3]._points[#H.headers[3]._points]
+eq(hp[4], 2 * (100 + H.GAP), "column 3 moves over by the new width")
+eq(H.container._width, 8 * 100 + 7 * H.GAP, "the container follows")
+local after = gridPoint()
+eq(after[4], before[4], "the grid keeps its centre (x)")
+eq(after[5], before[5], "(y)")
+check(chatHas("100 x 40"), "/grf size says the new size")
+
+-- Out-of-range sizes are clamped; a malformed save falls back.
+SlashCmdList.GLASSRAIDFRAMES("size 999 5")
+eq(child(1):GetWidth(), H.MAX_W, "width is clamped to the maximum")
+eq(child(1):GetHeight(), H.MIN_H, "height to the minimum")
+GRF.Profile().size = { w = "big", h = 50 }
+H.ApplySize()
+eq(child(1):GetWidth(), H.DEFAULT_W, "a malformed width falls back to the default")
+eq(child(1):GetHeight(), 50, "the valid height is kept")
+
+-- Per role: each role has its own size; switching follows.
+SlashCmdList.GLASSRAIDFRAMES("size 90 45")
+GRF.Settings.SetRole("caster")
+eq(child(1):GetWidth(), H.DEFAULT_W, "the caster role has its own (default) size")
+SlashCmdList.GLASSRAIDFRAMES("size 60 30")
+GRF.Settings.SetRole("healer")
+eq(child(1):GetWidth(), 90, "back to healer: its size returns")
+eq(GRF.db.profiles.CASTER.size.w, 60, "the caster's is kept")
+
+-- Reset.
+SlashCmdList.GLASSRAIDFRAMES("size reset")
+eq(GRF.Profile().size, nil, "reset forgets the role's size")
+eq(child(1):GetWidth(), H.DEFAULT_W, "and goes back to the default")
+
+-- In combat: the size change waits; nothing protected is touched.
+WoW.combat = true
+WoW.blocked = {}
+SlashCmdList.GLASSRAIDFRAMES("size 70 50")
+eq(child(1):GetWidth(), H.DEFAULT_W, "no resize in combat")
+eq(#WoW.blocked, 0, "and nothing protected touched")
+check(not H.ApplySize(), "a direct resize is refused in combat")
+eq(#WoW.blocked, 0, "without touching the protected tiles")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+eq(child(1):GetWidth(), 70, "resized when combat ends")
+
+-- An unlocked mover follows the new grid size.
+GRF.Movers.Unlock()
+SlashCmdList.GLASSRAIDFRAMES("size 80 40")
+local mv = GRF.Movers._test.mover()
+eq(mv._width, select(1, H.Size()), "the mover takes the new grid size")
+GRF.Movers.Lock()
+
+-- The options' sliders: dragging saves; refreshing the panel doesn't.
+local O = GRF.Options._test
+O.panel._scripts.OnShow(O.panel)
+local ws, hs = O.controls.width, O.controls.height
+eq(ws._value, 80, "the width slider shows the role's width")
+local saves = 0
+local realSet = GRF.Settings.SetSize
+GRF.Settings.SetSize = function(...) saves = saves + 1; return realSet(...) end
+O.panel._scripts.OnShow(O.panel)
+eq(saves, 0, "opening the panel doesn't save a size")
+GRF.Settings.SetSize = realSet
+ws:SetValue(110)
+eq(child(1):GetWidth(), 110, "dragging the width slider resizes")
+hs:SetValue(48)
+eq(child(1):GetHeight(), 48, "the height slider too")
+eq(child(1):GetWidth(), 110, "keeping the width")
+
+eq(next(GRF.paintFailures), nil, "no failures")
+done("test_size")

@@ -86,10 +86,29 @@ function Frames.Setup(b)
     b.indicators = ind
 
     if GRF.Auras then GRF.Auras.Attach(b) end
+    b.relayout = Frames.Layout
+    Frames.Layout(b)
 end
 
 function Frames.BarHeight(b)
     return b:GetHeight() - 2 * Glass.Inset("small")
+end
+
+-- The name grows with the tile: 10 at the old 38-unit height, about 13 at the
+-- default 58, never under 9 or over 16.
+function Frames.NameSize(h)
+    return math.max(9, math.min(16, math.floor(h * 0.22 + 0.5)))
+end
+
+-- After a resize (Header.ApplySize): the bar follows the tile's height, the
+-- name its size. Glass.Font registered the fonts; the same file is re-set at
+-- the new size (Glass.lua is the pinned GlassUnitFrames copy: not changed).
+function Frames.Layout(b)
+    local h = b:GetHeight()
+    if type(h) ~= "number" or h <= 0 then return end
+    b.health:SetHeight(Frames.BarHeight(b))
+    local f = Glass.FONTS[Glass.fontKey] or Glass.FONTS.arial
+    b.nameText:SetFont(f.file, Frames.NameSize(h) + f.bump, "")
 end
 
 --------------------------------------------------------------------------------

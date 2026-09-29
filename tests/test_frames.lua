@@ -24,7 +24,8 @@ end
 check(H.headers[1]:GetAttribute("showParty") and H.headers[1]:GetAttribute("showPlayer"),
     "header 1 carries the party and the player")
 check(not H.headers[2]:GetAttribute("showParty"), "the other headers are raid-only")
-eq(H.children[1]:GetWidth(), 76, "the child size comes from the XML template")
+eq(H.children[1]:GetWidth(), H.DEFAULT_W, "the child size is the default (Cell's look)")
+eq(H.children[1]:GetHeight(), H.DEFAULT_H, "(height)")
 
 -- Every child: target/menu on every modifier (no fallback from shift-type1
 -- to type1, probe item 2), the up edge only, and an insecure body.

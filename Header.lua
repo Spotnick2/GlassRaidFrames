@@ -23,7 +23,12 @@ GRF.Header = Header
 
 Header.GROUPS = 8
 Header.PER_GROUP = 5
-Header.TILE_W, Header.TILE_H = 76, 38   -- must match GlassRaidFrames.xml
+-- The default tile, Cell's look (the owner's 66x46 at Cell's own scale,
+-- measured side by side). Must match GlassRaidFrames.xml. A role can resize
+-- (profiles[role].size), within Header.MIN/MAX.
+Header.DEFAULT_W, Header.DEFAULT_H = 82, 58
+Header.MIN_W, Header.MAX_W = 50, 160
+Header.MIN_H, Header.MAX_H = 24, 100
 Header.GAP = 4
 Header.TEMPLATE = "GlassRaidFramesUnitTemplate"
 
@@ -39,10 +44,46 @@ Header.HEALER_POS = { x = 0, y = -120 }
 Header.SIDE_Y = 60
 Header.SIDE_MARGIN = 30
 
+local function clamp(v, lo, hi)
+    if type(v) ~= "number" or v ~= v then return nil end
+    return math.max(lo, math.min(hi, math.floor(v + 0.5)))
+end
+
+-- The current role's tile size, validated (a bad save falls back).
+function Header.TileSize()
+    local prof = GRF.Profile and GRF.Profile()
+    local s = prof and prof.size
+    local w = type(s) == "table" and clamp(s.w, Header.MIN_W, Header.MAX_W)
+    local h = type(s) == "table" and clamp(s.h, Header.MIN_H, Header.MAX_H)
+    return w or Header.DEFAULT_W, h or Header.DEFAULT_H
+end
+
+-- The whole grid (8 columns of 5).
 function Header.Size()
-    local w = Header.GROUPS * Header.TILE_W + (Header.GROUPS - 1) * Header.GAP
-    local h = Header.PER_GROUP * Header.TILE_H + (Header.PER_GROUP - 1) * Header.GAP
+    local tw, th = Header.TileSize()
+    local w = Header.GROUPS * tw + (Header.GROUPS - 1) * Header.GAP
+    local h = Header.PER_GROUP * th + (Header.PER_GROUP - 1) * Header.GAP
     return w, h
+end
+
+-- Resize every tile to the current role's size, out of combat. The header
+-- chains each child to the previous one (SecureGroupHeaders.lua:211), so a
+-- column re-flows by itself; only the columns' offsets and the container are
+-- ours. Keeps the grid's centre where it was.
+function Header.ApplySize()
+    local c = Header.container
+    if not c or InCombatLockdown() then return false end
+    local tw, th = Header.TileSize()
+    for _, child in ipairs(Header.children) do
+        child:SetSize(tw, th)
+        if child.relayout then child:relayout() end
+    end
+    for group, h in pairs(Header.headers) do
+        h:ClearAllPoints()
+        h:SetPoint("TOPLEFT", c, "TOPLEFT", (group - 1) * (tw + Header.GAP), 0)
+    end
+    c:SetSize(Header.Size())
+    return true
 end
 
 local function sane(v) return type(v) == "number" and v == v and v > -2000 and v < 2000 end
@@ -113,7 +154,7 @@ local function newHeader(group, parent)
     h:SetAttribute("sortMethod", "INDEX")
     h:SetAttribute("maxColumns", 1)
     h:SetAttribute("unitsPerColumn", Header.PER_GROUP)
-    h:SetPoint("TOPLEFT", parent, "TOPLEFT", (group - 1) * (Header.TILE_W + Header.GAP), 0)
+    h:SetPoint("TOPLEFT", parent, "TOPLEFT", (group - 1) * (Header.DEFAULT_W + Header.GAP), 0)
     -- Precreate every child (a header only makes children while shown).
     h:SetAttribute("startingIndex", 1 - Header.PER_GROUP)
     h:Show()
@@ -150,6 +191,7 @@ function Header.Build(setup)
             i = i + 1
         end
     end
+    Header.ApplySize()   -- the role's own size, if it isn't the template's
     if #Header.children < Header.GROUPS * Header.PER_GROUP then
         API.Fail("header", "precreated " .. #Header.children .. " of "
             .. Header.GROUPS * Header.PER_GROUP .. " children")

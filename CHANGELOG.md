@@ -12,6 +12,8 @@
   lower middle; the others default to the left side. Moving the frames only moves them for
   your current role.
 - Options under Game Menu > Options > AddOns > Glass Raid Frames (`/grf options`).
+- Resizable frames, per role (width and height sliders, or `/grf size <w> <h>`). The default is
+  larger, like Cell's, with the name growing with the frame.
 - Click-casting (Options > AddOns > Glass Raid Frames > Click-casting): bind a spell to any key
   or modifier+click, per role. Keys work while you hover a group member's frame and never hit
   a stranger in the world; anywhere else they do their usual action-bar action. Drag spells

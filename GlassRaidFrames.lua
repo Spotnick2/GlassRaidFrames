@@ -87,6 +87,7 @@ local function applyRole()
     -- The bindings follow the role too (they're per role).
     if GRF.ClickCast then GRF.ClickCast.Request() end
     if not GRF.Header.container then return end
+    GRF.Header.ApplySize()   -- the size is per role too
     GRF.Header.SetPosition(GRF.Header.PositionOf())
     GRF.Announce()
 end
@@ -138,6 +139,26 @@ function Settings.SetHideBlizzard(on)
     if on then whenOutOfCombat("blizzard", function() if GRF.db.hideBlizzard then GRF.Blizzard.HideAll() end end) end
 end
 
+-- The current role's tile size; nil for either = back to the default.
+function Settings.SetSize(w, h)
+    local prof = GRF.Profile()
+    if not prof then return false end
+    if w == nil and h == nil then
+        prof.size = nil
+    else
+        local cw, ch = GRF.Header.TileSize()
+        prof.size = { w = w or cw, h = h or ch }
+    end
+    whenOutOfCombat("size", function()
+        -- The container is anchored by its centre, so the grid keeps it.
+        if GRF.Header.ApplySize() then
+            if GRF.Movers.IsUnlocked() then GRF.Movers.Unlock() end   -- the mover follows the new size
+            GRF.Announce()
+        end
+    end)
+    return true
+end
+
 function Settings.Unlock() return GRF.Movers.Unlock() end
 -- The reset belongs to the role it was asked for: queued in combat, it must
 -- not land on whatever role is current when combat ends (Codex review).
@@ -181,6 +202,16 @@ local function slash(msg)
     elseif cmd == "role" then
         if arg ~= "" and not Settings.SetRole(arg) then say("roles: auto, healer, caster, melee, tank") end
         say(roleLine())
+    elseif cmd == "size" then
+        local w, h = (msg or ""):match("^%s*%S+%s+(%d+)%s+(%d+)")
+        if (msg or ""):lower():match("^%s*size%s+reset") then
+            Settings.SetSize(nil, nil)
+        elseif w then
+            Settings.SetSize(tonumber(w), tonumber(h))
+        end
+        local tw, th = GRF.Header.TileSize()
+        say("tile size for " .. tostring(GRF.role):lower() .. ": " .. tw .. " x " .. th
+            .. "  (/grf size <width> <height>, /grf size reset)")
     elseif cmd == "solo" then
         Settings.SetShowSolo(not GRF.db.showSolo)
         say("show frames when solo: " .. (GRF.db.showSolo and "on" or "off"))
@@ -199,6 +230,7 @@ local function slash(msg)
         say("/grf role [auto|healer|caster|melee|tank] - settings follow your role; " .. roleLine())
         say("/grf unlock | lock - move the group frames for this role (out of combat)")
         say("/grf reset - this role's default position")
+        say("/grf size <width> <height> | reset - this role's tile size")
         say("/grf solo - show your own frame when not in a group")
         say("/grf blizzard - toggle hiding Blizzard's party/raid frames")
         say("/grf failures - what failed to build or register")

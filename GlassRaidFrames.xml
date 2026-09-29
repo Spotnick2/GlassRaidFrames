@@ -3,9 +3,11 @@
          snippets are broken on Forever, and the header measured fine without one
          (docs/FOREVER-PROBE.md, item 1). The size must come from the template,
          because nothing else sizes a child before the header lays it out.
+         It's the default size (Header.DEFAULT_W/H); a role's own size is applied
+         to the precreated children out of combat (Header.ApplySize).
          Everything else (clicks, bindings, the glass) is set up in Lua, out of
          combat, on the 40 children precreated by Header.lua. -->
     <Button name="GlassRaidFramesUnitTemplate" inherits="SecureUnitButtonTemplate" virtual="true">
-        <Size x="76" y="38"/>
+        <Size x="82" y="58"/>
     </Button>
 </Ui>

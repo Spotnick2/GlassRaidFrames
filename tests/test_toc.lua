@@ -43,6 +43,17 @@ end
 
 -- Two places that must agree, never derived from each other (porting guide §0).
 loadAddon()
+
+-- The XML template's size and Header's default must agree (the template
+-- sizes children before Header.ApplySize can).
+do
+    local xml = io.open("GlassRaidFrames.xml"):read("*a")
+    local w, h = xml:match('<Size%s+x="(%d+)"%s+y="(%d+)"')
+    local GRFH = GlassRaidFrames.Header
+    eq(tonumber(w), GRFH.DEFAULT_W, "GlassRaidFrames.xml width = Header.DEFAULT_W")
+    eq(tonumber(h), GRFH.DEFAULT_H, "GlassRaidFrames.xml height = Header.DEFAULT_H")
+end
+
 eq(GlassRaidFrames.MEASURED_ON_BUILD, "1.60.1.70009", "MEASURED_ON_BUILD")
 
 -- Every texture the material names exists in Media/.

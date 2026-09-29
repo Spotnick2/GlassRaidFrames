@@ -155,6 +155,16 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   - It flags Blizzard's Mouseover Cast (**it casts on hovered strangers, measured**) with a
     turn-off button, lists Blizzard's own spell/macro click bindings, and warns when its
     "Target Unit Frame" is unbound.
+- **Tile size per role** (`profiles[role].size`, `/grf size`, width and height sliders on the
+  main page). The default is **82×58** (Cell's look, measured side by side), and
+  `GlassRaidFrames.xml` must match `Header.DEFAULT_W/H` (`test_toc`).
+  - `Header.ApplySize` runs out of combat. It resizes the 40 precreated children, calls each
+    child's `relayout` (`Frames.Layout`: bar height, name font scaled by `Frames.NameSize`),
+    and resets the column offsets and the container. The header chains each child to the
+    previous one (Forever's `SecureGroupHeaders.lua:211`), so columns re-flow on their own.
+  - The container is centre-anchored, so the grid keeps its centre.
+  - Sizes are clamped to `Header.MIN/MAX`. It re-applies on role change.
+  - `Glass.lua` stays the pinned copy: the name font is re-set with the same file.
 - **`Engine.lua`**: who gets painted and when, adapted from GlassUnitFrames' engine for frames
   whose unit changes:
   - a unit→frames map kept by `Engine.SetUnit`;
