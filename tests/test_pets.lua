@@ -47,6 +47,12 @@ eq(wolf.nameText._text, "Wolf", "a pet's name is painted")
 eq(wolf.health._value, 200, "its health too")
 eq(wolf.health._color[1], GRF.Frames.PET[1], "pets get the pet colour, not a creature class")
 eq(mine.health._color[1], GRF.Frames.PET[1], "(yours too)")
+-- Your own pet reads "unchecked" range, like you: it never fades (seen in game).
+WoW.tick(0.3)
+eq(mine.body._alpha, 1, "your own pet's tile doesn't fade")
+WoW.units.partypet1.inRange = false
+WoW.tick(0.3)
+eq(wolf.body._alpha, GRF.Frames.OUT_OF_RANGE_ALPHA, "another player's pet out of range still fades")
 
 -- Shorter tiles, following resizes; the header one tile tall (point LEFT).
 eq(mine:GetHeight(), H.PetHeight(), "pet tiles are shorter")

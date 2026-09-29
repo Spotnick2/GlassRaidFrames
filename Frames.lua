@@ -303,11 +303,14 @@ Engine.SetPainter("target", function(b, u)
 end)
 
 -- UnitInRange is secret even out of combat (measured): hand it to the
--- client. Your own unit reads "unchecked" (false), so it never fades, and
--- neither does an offline one (its grey bar already says so).
+-- client. Your own units read "unchecked" (false): you and your own pet never
+-- fade (EllesmereUI does the same for your pet; measured here: your pet's tile
+-- faded while it stood next to you). Nor does an offline unit (its grey bar
+-- already says so).
 Engine.SetPainter("range", function(b, u)
     local body = b.body
-    if plain(UnitIsUnit, u, "player") == true or plain(UnitIsConnected, u) == false
+    if plain(UnitIsUnit, u, "player") == true or plain(UnitIsUnit, u, "pet") == true
+        or plain(UnitIsConnected, u) == false
         or not body.SetAlphaFromBoolean then
         body:SetAlpha(1)
         return

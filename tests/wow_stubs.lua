@@ -631,7 +631,7 @@ function UnitInRange(u)
     if not WoW.units[u] then return false, false end
     local s = WoW.Secret(u .. ".inRange")
     -- Your own unit is "unchecked": inRange reads false (EllesmereUI, on Forever).
-    WoW.rangeTruth[s] = u ~= "player" and WoW.units[u].inRange ~= false
+    WoW.rangeTruth[s] = u ~= "player" and u ~= "pet" and WoW.units[u].inRange ~= false
     return s, WoW.Secret(u .. ".checkedRange")
 end
 function Methods.SetAlphaFromBoolean(w, v, yes, no)
