@@ -197,6 +197,9 @@ UIParent._width = 1024
 WoW.fire("UI_SCALE_CHANGED")
 local sp2 = GRF.Header.container._points
 eq(sp2[#sp2][4], select(1, GRF.Header.DefaultPosition("CASTER")), "the side default follows the new width")
+check(#announced > 0 and announced[#announced][1] == GRF.LAYOUT_EVENT, "the automatic move is announced (Codex review)")
+local announcedX = announced[#announced][3]
+eq(announcedX, 1024 / 2 + sp2[#sp2][4] - select(1, GRF.Header.Size()) / 2, "with the new rectangle")
 GRF.db.profiles.CASTER.pos = { x = 5, y = 5 }
 local before = #sp2
 WoW.fire("DISPLAY_SIZE_CHANGED")
@@ -218,6 +221,40 @@ WoW.refuseEvents = nil
 local reported = false
 for _, line in ipairs(GRF.eventFailures) do if line:find("TRAIT_CONFIG_UPDATED") then reported = true end end
 check(reported, "a refused talent event shows in /grf failures")
+
+-- A reset asked for in combat belongs to the role that asked (Codex review):
+-- reset as healer, switch to caster, combat ends -> the healer spot is
+-- forgotten, the caster's is kept, and the caster grid doesn't move.
+WoW.reset()
+UIParent._width, UIParent._height = 1365, 768
+party(1)
+GlassRaidFramesCharDB = { role = "HEALER" }
+GRF = loadAddon({ db = { profiles = { HEALER = { pos = { x = 10, y = 10 } }, CASTER = { pos = { x = 30, y = 30 } } } } })
+WoW.combat = true
+GRF.Settings.ResetPosition()
+GRF.Settings.SetRole("caster")
+WoW.combat = false
+announced = {}
+WoW.fire("PLAYER_REGEN_ENABLED")
+-- No detour via the healer default: every announcement is the caster's spot.
+check(#announced > 0, "the move is announced")
+for _, a in ipairs(announced) do
+    eq(a[3], 1365 / 2 + 30 - select(1, GRF.Header.Size()) / 2, "every announcement carries the caster rectangle")
+end
+eq(GRF.db.profiles.HEALER.pos, nil, "the healer's spot is reset")
+eq(GRF.db.profiles.CASTER.pos and GRF.db.profiles.CASTER.pos.x, 30, "the caster's spot is kept")
+local cp = GRF.Header.container._points
+eq(cp[#cp][4], 30, "and the caster grid stays at its spot")
+-- Resets for two roles queued in one fight both happen.
+WoW.combat = true
+GRF.Settings.ResetPosition()             -- caster
+GRF.Settings.SetRole("healer")
+GRF.db.profiles.HEALER.pos = { x = 11, y = 11 }
+GRF.Settings.ResetPosition()             -- healer
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+eq(GRF.db.profiles.CASTER.pos, nil, "the caster reset happened")
+eq(GRF.db.profiles.HEALER.pos, nil, "and the healer reset too")
 
 -- A bad saved pick is reset to auto.
 WoW.reset()

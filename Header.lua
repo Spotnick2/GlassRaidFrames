@@ -171,7 +171,10 @@ rescaler:SetScript("OnEvent", function()
     if not Header.container then return end
     local prof = GRF.Profile and GRF.Profile()
     if prof and prof.pos then return end   -- a saved spot stays where it was put
-    GRF.WhenOutOfCombat("rescale", function() Header.SetPosition(Header.PositionOf()) end, false)
+    GRF.WhenOutOfCombat("rescale", function()
+        -- Not saved (it's still the default), but it moved: tell other addons.
+        if Header.SetPosition(Header.PositionOf()) and GRF.Announce then GRF.Announce() end
+    end, false)
 end)
 API.RegisterEvents(rescaler, { "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" })
 

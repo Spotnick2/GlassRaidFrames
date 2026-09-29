@@ -134,7 +134,13 @@ function Settings.SetHideBlizzard(on)
 end
 
 function Settings.Unlock() return GRF.Movers.Unlock() end
-function Settings.ResetPosition() whenOutOfCombat("reset", function() GRF.Movers.Reset() end) end
+-- The reset belongs to the role it was asked for: queued in combat, it must
+-- not land on whatever role is current when combat ends (Codex review).
+-- One queue slot per role, so resets for two roles don't merge.
+function Settings.ResetPosition()
+    local role = GRF.role
+    whenOutOfCombat("reset:" .. tostring(role), function() GRF.Movers.Reset(role) end)
+end
 
 --------------------------------------------------------------------------------
 -- /grf
