@@ -35,6 +35,15 @@ Header.TEMPLATE = "GlassRaidFramesUnitTemplate"
 Header.headers = {}
 Header.children = {}
 
+-- Pets (#13): a SecureGroupPetHeaderTemplate under the grid, rows of 8,
+-- shorter tiles. EllesmereUI ships one on Forever; unmeasured by us, hence
+-- off by default. The header picks pet/partypetN/raidpetN itself
+-- (SecureGroupHeaders.lua GetPetUnit), in and out of combat.
+Header.PET_COUNT = 20      -- precreated; more pets than this in a raid don't show
+Header.PETS_PER_ROW = 8
+Header.PET_HEIGHT = 0.6    -- of the tile height
+Header.petChildren = {}
+
 -- Default positions per role (#7): the healer's grid in the lower middle,
 -- between GlassUnitFrames' player and target frames; the others on the left
 -- side, so the Cooldown Manager keeps the centre. UIParent is 768 units tall
@@ -81,6 +90,22 @@ function Header.ApplySize()
             local ok, err = pcall(child.relayout, child)
             if not ok then API.Fail("relayout", err) end
         end
+    end
+    local ph = Header.PetHeight()
+    for _, child in ipairs(Header.petChildren) do
+        child:SetSize(tw, ph)
+        if child.relayout then
+            local ok, err = pcall(child.relayout, child)
+            if not ok then API.Fail("relayout", err) end
+        end
+    end
+    local pets = Header.petHeader
+    if pets then
+        -- point LEFT: child1's LEFT sits on the header's vertical middle, so
+        -- the header must be one pet tall (the same stale-size trap as width).
+        pets:SetSize(tw, ph)
+        pets:SetAttribute("xOffset", Header.GAP)
+        pets:SetAttribute("columnSpacing", Header.GAP)
     end
     for group, h in pairs(Header.headers) do
         -- The header centres its first child on its OWN width (child1's TOP on
@@ -171,6 +196,69 @@ local function newHeader(group, parent)
     return h
 end
 
+function Header.PetHeight()
+    local _, th = Header.TileSize()
+    return math.max(24, math.floor(th * Header.PET_HEIGHT + 0.5))
+end
+
+-- Every tile, group and pet (click-casting binds them all).
+function Header.AllChildren()
+    local all = {}
+    for _, c in ipairs(Header.children) do all[#all + 1] = c end
+    for _, c in ipairs(Header.petChildren) do all[#all + 1] = c end
+    return all
+end
+
+local function dress(child, setup)
+    local ok, err = pcall(setup, child)
+    if not ok then API.Fail("setup", err) end
+    child:HookScript("OnAttributeChanged", childUnitChanged)
+    Engine.Register(child)
+    -- The header may have assigned a unit before our hook existed.
+    childUnitChanged(child, "unit", child:GetAttribute("unit"))
+end
+
+local function newPetHeader(parent, setup)
+    local h = CreateFrame("Frame", "GlassRaidFramesPets", parent, "SecureGroupPetHeaderTemplate")
+    h:SetAttribute("template", Header.TEMPLATE)
+    h:SetAttribute("templateType", "Button")
+    h:SetAttribute("showRaid", true)
+    h:SetAttribute("showParty", true)
+    h:SetAttribute("showPlayer", true)
+    h:SetAttribute("showSolo", true)
+    h:SetAttribute("point", "LEFT")
+    h:SetAttribute("xOffset", Header.GAP)
+    h:SetAttribute("sortMethod", "INDEX")
+    h:SetAttribute("unitsPerColumn", Header.PETS_PER_ROW)
+    h:SetAttribute("maxColumns", math.ceil(Header.PET_COUNT / Header.PETS_PER_ROW))
+    h:SetAttribute("columnAnchorPoint", "TOP")
+    h:SetAttribute("columnSpacing", Header.GAP)
+    -- Under the grid; moves with it.
+    h:SetPoint("TOPLEFT", parent, "BOTTOMLEFT", 0, -2 * Header.GAP)
+    h:SetAttribute("startingIndex", 1 - Header.PET_COUNT)
+    h:Show()
+    h:SetAttribute("startingIndex", 1)
+    local i = 1
+    while true do
+        local child = h:GetAttribute("child" .. i)
+        if not child then break end
+        table.insert(Header.petChildren, child)
+        dress(child, setup)
+        i = i + 1
+    end
+    return h
+end
+
+-- Pets shown or hidden for the current role (profiles[role].showPets).
+-- Out of combat: hiding a secure header is protected.
+function Header.ApplyPets()
+    local h = Header.petHeader
+    if not h or InCombatLockdown() then return false end
+    local prof = GRF.Profile and GRF.Profile()
+    h:SetShown(prof and prof.showPets == true)
+    return true
+end
+
 -- Build once, out of combat (the build step of the combat queue).
 function Header.Build(setup)
     if Header.container then return end
@@ -191,14 +279,16 @@ function Header.Build(setup)
             local child = h:GetAttribute("child" .. i)
             if not child then break end
             table.insert(Header.children, child)
-            local ok, err = pcall(setup, child)
-            if not ok then API.Fail("setup", err) end
-            child:HookScript("OnAttributeChanged", childUnitChanged)
-            Engine.Register(child)
-            -- The header may have assigned a unit before our hook existed.
-            childUnitChanged(child, "unit", child:GetAttribute("unit"))
+            dress(child, setup)
             i = i + 1
         end
+    end
+    local okP, pets = pcall(newPetHeader, c, setup)
+    if okP and pets then
+        Header.petHeader = pets
+        Header.ApplyPets()
+    else
+        API.Fail("pet header", pets)
     end
     Header.ApplySize()   -- the role's own size, if it isn't the template's
     if #Header.children < Header.GROUPS * Header.PER_GROUP then

@@ -169,7 +169,10 @@ end
 function CreateFrame(ftype, name, parent, template)
     local w = newWidget(ftype, parent, name)
     w._template = template
-    if template == "SecureGroupHeaderTemplate" then w._isHeader = true end
+    if template == "SecureGroupHeaderTemplate" or template == "SecureGroupPetHeaderTemplate" then
+        w._isHeader = true
+        w._isPetHeader = template == "SecureGroupPetHeaderTemplate"
+    end
     if template and (template:find("Secure") or WoW.secureTemplates[template]) then
         local p = w
         while p do p._protected = true; p = p._parent end
@@ -648,7 +651,30 @@ end
 -- WoW.templateSizes[template] = { w, h } stands in for the XML <Size>.
 --------------------------------------------------------------------------------
 
+-- Pets as Forever's SecureGroupPetHeader_Update finds them (GetPetUnit):
+-- raidpetN in a raid; the player's pet and partypetN otherwise.
+local function petUnits(h)
+    local a, list = h._attrs, {}
+    if WoW.raid then
+        if not a.showRaid then return list end
+        local byIndex = {}
+        for u, r in pairs(WoW.raid) do
+            local pet = "raidpet" .. r.index
+            if WoW.units[pet] then byIndex[#byIndex + 1] = { r.index, pet } end
+        end
+        table.sort(byIndex, function(x, y) return x[1] < y[1] end)
+        for _, e in ipairs(byIndex) do list[#list + 1] = e[2] end
+        return list
+    end
+    if (a.showPlayer or a.showSolo) and WoW.units.pet then list[#list + 1] = "pet" end
+    for i = 1, 4 do
+        if a.showParty and WoW.units["partypet" .. i] then list[#list + 1] = "partypet" .. i end
+    end
+    return list
+end
+
 local function headerUnits(h)
+    if h._isPetHeader then return petUnits(h) end
     local a = h._attrs
     local list = {}
     if WoW.raid and a.showRaid then

@@ -249,7 +249,8 @@ function ClickCast.Apply()
     ClickCast.notes = {}
     local attrs, keys, problems = ClickCast.Desired(ClickCast.Rows())
     ClickCast.problems = problems
-    local children = GRF.Header and GRF.Header.children or {}
+    -- Group and pet tiles alike: mouse bindings work on a pet's tile too.
+    local children = GRF.Header and GRF.Header.AllChildren() or {}
 
     -- No children yet (the grid isn't built): nothing to record as installed,
     -- or the attributes would never reach them. The build applies again.

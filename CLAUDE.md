@@ -176,6 +176,16 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   (`Frames.ShortName`), as Cell does: Forever's surnames only got a centred name cut short. A
   secret name (grouped) can't be split in Lua, so it goes to `SetText` whole. Dead/Offline is
   small in the top-right corner.
+- **Pets** (#13): a `SecureGroupPetHeaderTemplate` (`Header.petHeader`) under the grid.
+  - Rows of `PETS_PER_ROW` 8, tiles at `PET_HEIGHT` 60% of the tile height.
+  - 20 children precreated and dressed like the rest (`Header.petChildren`).
+  - The header picks `pet`/`partypetN`/`raidpetN` itself (Forever's `GetPetUnit`).
+  - Shown per role (`profiles[role].showPets`, off by default; `/grf pets`, an options
+    checkbox), toggled out of combat.
+  - Point LEFT: child1 centres on the header's height, so `ApplySize` sizes the header too.
+  - Mouse bindings reach pet tiles (`Header.AllChildren`). Hover keys don't target pets,
+    because `[party]`/`[raid]` exclude them; they fall back safely.
+  - EllesmereUI ships this template on Forever; we haven't measured it in game.
 - **Tile size per role** (`profiles[role].size`, `/grf size`, width and height sliders on the
   main page). The default is **82×58** (Cell's look, measured side by side), and
   `GlassRaidFrames.xml` must match `Header.DEFAULT_W/H` (`test_toc`).
