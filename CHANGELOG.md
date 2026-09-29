@@ -12,6 +12,11 @@
   lower middle; the others default to the left side. Moving the frames only moves them for
   your current role.
 - Options under Game Menu > Options > AddOns > Glass Raid Frames (`/grf options`).
+- Click-casting (Options > AddOns > Glass Raid Frames > Click-casting): bind a spell to any key
+  or modifier+click, per role. Keys work while you hover a group member's frame and never hit
+  a stranger in the world; anywhere else they do their usual action-bar action. Drag spells
+  from your spellbook, and pin a lower rank with one click. Resurrection binds aim at dead
+  group members.
 - Blizzard's party and raid frames are hidden (`/grf blizzard` toggles it).
 - `/grf unlock` to move the frames, `/grf reset`, `/grf solo` to show your own frame when not
   in a group.

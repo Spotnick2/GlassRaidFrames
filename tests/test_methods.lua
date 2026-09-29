@@ -35,6 +35,25 @@ for _, key in ipairs({ "solo", "blizzard" }) do
     local cb = O.controls[key]
     cb._scripts.OnClick(cb)
 end
+-- The Click-casting page: shown, a key captured, a row painted.
+rawset(_G, "C_CVar", { GetCVar = function() return "0" end, SetCVar = function() return true end })
+rawset(_G, "IsControlKeyDown", function() return false end)
+rawset(_G, "GetBindingAction", function() return nil end)
+rawset(_G, "SetOverrideBindingClick", function() end)
+rawset(_G, "ClearOverrideBindings", function() end)
+rawset(_G, "GetModifiedClick", function() return "ALT" end)
+rawset(_G, "GetCursorInfo", function() return nil end)
+rawset(_G, "C_Spell", { GetSpellName = function() return "Renew" end, GetSpellSubtext = function() return "Rank 1" end,
+                        GetSpellTexture = function() return 1 end })
+local CT = GlassRaidFrames.ClickCastOptions._test
+CT.page:Show()
+local cap = CT.capture()
+cap._scripts.OnClick(cap, "LeftButton")
+cap._scripts.OnKeyDown(cap, "5")
+GlassRaidFrames.ClickCast.Rows()[1].spell = 139
+GlassRaidFrames.ClickCastOptions.Refresh()
+WoW.tick()
+
 -- Unlock mode and a drag, so the mover's methods are checked too.
 GlassRaidFrames.Movers.Unlock()
 local mv = GlassRaidFrames.Movers._test.mover()

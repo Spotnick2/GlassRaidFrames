@@ -84,6 +84,8 @@ end
 
 -- Move the grid to the current role's position and say so. Out of combat.
 local function applyRole()
+    -- The bindings follow the role too (they're per role).
+    if GRF.ClickCast then GRF.ClickCast.Request() end
     if not GRF.Header.container then return end
     GRF.Header.SetPosition(GRF.Header.PositionOf())
     GRF.Announce()
@@ -226,6 +228,8 @@ boot:SetScript("OnEvent", function(_, event, arg1)
             local ok, err = pcall(GRF.Header.Build, GRF.Frames.Setup)
             if not ok then API.Fail("build", err) end
             if GRF.db.hideBlizzard then GRF.Blizzard.HideAll() end
+            local okC, errC = pcall(GRF.ClickCast.Apply)
+            if not okC then API.Fail("clickcast", errC) end
             GRF.Announce()
         end, "frames will appear when combat ends")
         -- Talents arrive after load (PLAYER_TALENT_UPDATE at login, measured).

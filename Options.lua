@@ -212,6 +212,7 @@ local function register()
     if category or not (Settings and Settings.RegisterCanvasLayoutCategory) then return end
     category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
     Settings.RegisterAddOnCategory(category)
+    Options.category = category   -- the Click-casting page registers under it
 end
 
 -- Open the panel; false when the Settings framework can't.
