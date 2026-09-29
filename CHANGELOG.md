@@ -12,6 +12,7 @@
   lower middle; the others default to the left side. Moving the frames only moves them for
   your current role.
 - Options under Game Menu > Options > AddOns > Glass Raid Frames (`/grf options`).
+- Pets: an option to show pets (per role, off by default, `/grf pets`) in a column of their own right after your last group, movable on their own in unlock mode.
 - Incoming heals show on the health bars, as on Glass Unit Frames.
 - A thin power bar under the health bar. The frame's glass rim lights up on mouse-over, and your
   target's frame gets a coloured rim.

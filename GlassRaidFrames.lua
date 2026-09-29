@@ -88,7 +88,10 @@ local function applyRole()
     if GRF.ClickCast then GRF.ClickCast.Request() end
     if not GRF.Header.container then return end
     GRF.Header.ApplySize()   -- the size is per role too
+    GRF.Header.ApplyPets()   -- and showing pets
     GRF.Header.SetPosition(GRF.Header.PositionOf())
+    -- Unlocked: the movers follow the role (the pet mover appears or goes).
+    if GRF.Movers.IsUnlocked() then GRF.Movers.Unlock() end
     GRF.Announce()
 end
 
@@ -179,6 +182,19 @@ function Settings.SetSize(w, h)
     return true
 end
 
+-- Pets for the current role (the pet row under the grid).
+function Settings.SetShowPets(on)
+    local prof = GRF.Profile()
+    if not prof then return false end
+    prof.showPets = on == true or nil
+    whenOutOfCombat("pets", function()
+        GRF.Header.ApplyPets()
+        if GRF.Movers.IsUnlocked() then GRF.Movers.Unlock() end   -- the pet mover follows
+        GRF.Announce()   -- the rectangle grew or shrank (applyRole announces its own, once placed)
+    end)
+    return true
+end
+
 function Settings.Unlock() return GRF.Movers.Unlock() end
 -- The reset belongs to the role it was asked for: queued in combat, it must
 -- not land on whatever role is current when combat ends (Codex review).
@@ -237,6 +253,9 @@ local function slash(msg)
         local tw, th = GRF.Header.TileSize()
         say("tile size for " .. tostring(GRF.role):lower() .. ": " .. tw .. " x " .. th
             .. "  (/grf size <width> <height>, /grf size reset)")
+    elseif cmd == "pets" then
+        Settings.SetShowPets(not (GRF.Profile() and GRF.Profile().showPets))
+        say("pets for " .. tostring(GRF.role):lower() .. ": " .. ((GRF.Profile() and GRF.Profile().showPets) and "shown" or "hidden"))
     elseif cmd == "solo" then
         Settings.SetShowSolo(not GRF.db.showSolo)
         say("show frames when solo: " .. (GRF.db.showSolo and "on" or "off"))
@@ -257,6 +276,7 @@ local function slash(msg)
         say("/grf reset - this role's default position")
         say("/grf size <width> <height> | reset - this role's tile size")
         say("/grf solo - show your own frame when not in a group")
+        say("/grf pets - show or hide pets (this role)")
         say("/grf blizzard - toggle hiding Blizzard's party/raid frames")
         say("/grf failures - what failed to build or register")
         say("/grf version - client build vs the measured one")
