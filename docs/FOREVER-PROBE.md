@@ -213,12 +213,15 @@ trees is unmeasured.
 - **The spellbook holds every rank as its own item** (`C_SpellBook.GetSpellBookItemInfo`: #30
   id 686 "Rank 1", #31 id 695 "Rank 2", #32 id 705 "Rank 3"), although Blizzard's spellbook UI
   shows only the top rank. `C_Spell.GetSpellInfo("Shadow Bolt(Rank n)")` also resolves each ID.
-- **Unresolved:** `ALT-0` / `CTRL-0` presses bound to the same button all resolved to the
-  unmodified `type1`/`spell1`. Either they were plain presses, or a modifier held on a key
-  binding doesn't select `alt-`/`ctrl-` attributes. The design doesn't depend on it (one
-  button per key), and the probe now uses one button per key.
-- **Solo, hovering your own frame:** key 9 (the `[party]`/`[raid]` macro) fired action button 9,
-  so `[party]` excludes the player when solo. Still to check in a group.
+- **A modifier held on a KEY binding does not select `alt-`/`ctrl-` attributes** (measured from
+  the log): `CTRL-0`, bound to a button whose `ctrl-type1` was a macro, resolved to the plain
+  `type1`/`spell1` and cast Shadow Bolt rank 1, as did `ALT-0`. Mouse clicks do resolve
+  modifier prefixes (item 2). So every key binding gets **its own button** with plain
+  attributes, which the design already does. The long-macro test must be rerun on its own
+  button.
+- **Solo, hovering your own frame:** key 9 (the `[party]`/`[raid]` macro) fired action button 9
+  (Eureka!, `UnitInParty` false), so `[party]` excludes the player when solo. Still to check in a
+  group.
 - Test C revisited: the earlier log holds `cast sent: target=<stranger> spell=2050` with no key-9
   press before it, around the Mouseover Cast test. To confirm with the owner whether Blizzard's
   Mouseover Cast healed a hovered stranger.
