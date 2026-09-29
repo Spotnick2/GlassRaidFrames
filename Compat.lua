@@ -210,6 +210,32 @@ function API.AtlasExists(name)
     return atlasKnown[name]
 end
 
+-- Heal prediction, as GlassUnitFrames measured it (its Compat.lua): one
+-- calculator per frame, clamped to maximum health where the client offers
+-- the mode. nil when the API is absent.
+function API.NewHealCalculator()
+    local create = rawget(_G, "CreateUnitHealPredictionCalculator")
+    if not (create and rawget(_G, "UnitGetDetailedHealPrediction")) then return nil end
+    local ok, calc = pcall(create)
+    if not ok or not calc then return nil end
+    -- DinoUF (incheal.lua, v2.3): on Forever the bar rendered EMPTY until the
+    -- overflow percent was set to 1.
+    if calc.SetIncomingHealOverflowPercent then pcall(calc.SetIncomingHealOverflowPercent, calc, 1) end
+    local modes = Enum and Enum.UnitIncomingHealClampMode
+    if modes and modes.MaximumHealth ~= nil and calc.SetIncomingHealClampMode then
+        pcall(calc.SetIncomingHealClampMode, calc, modes.MaximumHealth)
+    end
+    return calc
+end
+
+-- (all incoming heals, maximum health), both as the client returns them
+-- (secret). GetIncomingHeals' FIRST return is the all-healer total.
+function API.IncomingHeals(unit, calc)
+    UnitGetDetailedHealPrediction(unit, "player", calc)
+    local incoming = calc:GetIncomingHeals()
+    return incoming, calc:GetMaximumHealth()
+end
+
 -- Class colour from the documented API (RAID_CLASS_COLORS is a FrameXML
 -- table the dump cannot confirm). Returns r, g, b or nil.
 function API.ClassColor(classFile)

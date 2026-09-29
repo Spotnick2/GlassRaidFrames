@@ -20,6 +20,7 @@ panel.name = "Glass Raid Frames"
 -- would leave the page blank (code review).
 panel:Hide()
 local controls = {}      -- refresh callbacks, run on every OnShow
+local refreshing = false -- set while syncing controls, so a slider's SetValue doesn't save
 local category
 
 local content = CreateFrame("Frame", nil, panel)
@@ -127,6 +128,41 @@ local function radios(options, get, set)
     return group
 end
 
+-- Hand-built slider (GlassUnitFrames' idiom): label and value on one line,
+-- the track under it. Whole numbers.
+local SLIDER_W = 240
+local function slider(text, min, max, get, set)
+    local fs = label(text)
+    local value = label("")
+    value:SetPoint("LEFT", fs, "LEFT", SLIDER_W + 12, 0)
+    place(fs, 18, 4)
+    local s = CreateFrame("Slider", nil, content)
+    s:SetSize(SLIDER_W, 16)
+    s:SetOrientation("HORIZONTAL")
+    s:SetMinMaxValues(min, max)
+    s:SetValueStep(1)
+    if s.SetObeyStepOnDrag then s:SetObeyStepOnDrag(true) end
+    local track = s:CreateTexture(nil, "BACKGROUND")
+    track:SetPoint("LEFT", s, "LEFT", 0, 0)
+    track:SetPoint("RIGHT", s, "RIGHT", 0, 0)
+    track:SetHeight(6)
+    track:SetColorTexture(0.25, 0.25, 0.3, 0.9)
+    s:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+    place(s, 26, 8)
+    s:SetScript("OnValueChanged", function(_, v)
+        v = math.floor(v + 0.5)
+        value:SetText(tostring(v))
+        if refreshing then return end
+        set(v)
+    end)
+    controls[#controls + 1] = function()
+        local v = get()
+        s:SetValue(v)
+        value:SetText(tostring(v))
+    end
+    return s
+end
+
 local function checkbox(text, get, set)
     local cb = checkButton(text, false)
     place(cb, 28, 4)
@@ -184,6 +220,33 @@ local function build()
     reset:SetPoint("LEFT", unlock, "RIGHT", 8, 0)
     col.y = col.y - 30
 
+    header("Size")
+    note("Each frame's size, for the current role. The frames resize out of combat.")
+    local H = GRF.Header
+    -- A drag fires a value change per step: resize once it pauses (0.1 s), not
+    -- 40 tiles plus an announcement to other addons on every tick.
+    -- Each tick SAVES at once, to the role being edited; only the resize waits
+    -- for the drag to pause, and it reads whatever is saved then (a role switch
+    -- or a Default size meanwhile can't be overwritten: Codex review).
+    local scheduled = false
+    local function later(w, h)
+        S.SaveSize(GRF.role, w, h)
+        if scheduled then return end
+        scheduled = true
+        C_Timer.After(0.1, function()
+            scheduled = false
+            S.ApplySize()
+        end)
+    end
+    controls.width = slider("Width", H.MIN_W, H.MAX_W, function() return (H.TileSize()) end,
+        function(v) later(v, nil) end)
+    controls.height = slider("Height", H.MIN_H, H.MAX_H, function() return select(2, H.TileSize()) end,
+        function(v) later(nil, v) end)
+    place(button("Default size", 160, function()
+        S.SetSize(nil, nil)
+        controls.refreshAll()
+    end), 30, 4)
+
     header("Frames")
     controls.solo = checkbox("Show your own frame when not in a group",
         function() return GRF.db.showSolo end, S.SetShowSolo)
@@ -193,10 +256,12 @@ local function build()
 end
 
 function controls.refreshAll()
+    refreshing = true
     for i, fn in ipairs(controls) do
         local ok, err = pcall(fn)
         if not ok then API.Fail("options control " .. i, err) end   -- shows in /grf failures
     end
+    refreshing = false
 end
 
 panel:SetScript("OnShow", function(self)

@@ -155,6 +155,47 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   - It flags Blizzard's Mouseover Cast (**it casts on hovered strangers, measured**) with a
     turn-off button, lists Blizzard's own spell/macro click bindings, and warns when its
     "Target Unit Frame" is unbound.
+- **Incoming heals** (GlassUnitFrames' recipe, `API.NewHealCalculator` / `API.IncomingHeals`
+  from its Compat):
+  - a translucent bar with the health bar's **full** width, anchored at the health fill's moving
+    edge and clipped at the bar's end;
+  - overflow percent 1 (DinoUF saw an empty bar without it);
+  - a `heal` channel on `UNIT_HEAL_PREDICTION` and health events, **never spellcast events**
+    (they showed damage as heals);
+  - cleared for dead or offline units;
+  - it follows resizes through `Frames.Layout`.
+- **Power bar, hover and target** (Cell's, in glass):
+  - A thin `Glass.Bar` along the bottom (`Frames.PowerHeight`, 3-6), coloured by power token
+    (`Frames.POWER`), with secret values straight to the bar. The health bar takes the rest.
+  - **Hover:** a white additive copy of the glass rim, shown from insecure
+    `OnEnter`/`OnLeave` hooks.
+  - **Target:** a tinted rim (`Frames.TARGET`) on `PLAYER_TARGET_CHANGED` (a `target`
+    channel). `UnitIsUnit(u, "target")` can be secret, so a secret answer goes through
+    `SetAlphaFromBoolean`.
+- **The name is centred in the tile** (both ways) and shows the **first name**
+  (`Frames.ShortName`), as Cell does: Forever's surnames only got a centred name cut short. A
+  secret name (grouped) can't be split in Lua, so it goes to `SetText` whole. Dead/Offline is
+  small in the top-right corner.
+- **Tile size per role** (`profiles[role].size`, `/grf size`, width and height sliders on the
+  main page). The default is **82×58** (Cell's look, measured side by side), and
+  `GlassRaidFrames.xml` must match `Header.DEFAULT_W/H` (`test_toc`).
+  - `Header.ApplySize` runs out of combat. It resizes the 40 precreated children, calls each
+    child's `relayout` (`Frames.Layout`: bar height, and the name font at about 28% of the tile's
+    height via `Frames.NameSize`, the room Cell's name takes),
+    and resets the column offsets and the container. The header chains each child to the
+    previous one (Forever's `SecureGroupHeaders.lua:211`), so columns re-flow on their own.
+  - **Each header's width is set too.** A header centres its first child on its own width
+    (`SecureGroupHeaders.lua:202`) and only sets that width in its own layout pass, so a stale
+    width shifts the column.
+  - A saved spot keeps its centre (the container is centre-anchored). A role still on its
+    default is re-placed, because the side default is computed from the grid's width.
+  - Each tile's relayout runs under `pcall`, so one failure never half-resizes the grid.
+  - Sizes are clamped to `Header.MIN/MAX` (height ≥ 36, below which the debuff row covers the
+    name). It re-applies on role change.
+  - The sliders save at once but resize when the drag pauses (0.1 s), silently in combat.
+  - Known: `Glass.lua`'s font registry keeps the names' original size. `Glass.SetFont` (unused
+    here) would reset them until the next resize.
+  - `Glass.lua` stays the pinned copy: the name font is re-set with the same file.
 - **`Engine.lua`**: who gets painted and when, adapted from GlassUnitFrames' engine for frames
   whose unit changes:
   - a unit→frames map kept by `Engine.SetUnit`;

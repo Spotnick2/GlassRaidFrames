@@ -24,7 +24,8 @@ end
 check(H.headers[1]:GetAttribute("showParty") and H.headers[1]:GetAttribute("showPlayer"),
     "header 1 carries the party and the player")
 check(not H.headers[2]:GetAttribute("showParty"), "the other headers are raid-only")
-eq(H.children[1]:GetWidth(), 76, "the child size comes from the XML template")
+eq(H.children[1]:GetWidth(), H.DEFAULT_W, "the child size is the default (Cell's look)")
+eq(H.children[1]:GetHeight(), H.DEFAULT_H, "(height)")
 
 -- Every child: target/menu on every modifier (no fallback from shift-type1
 -- to type1, probe item 2), the up edge only, and an insecure body.
@@ -39,17 +40,88 @@ check(c1.body and not c1.body._protected, "the visuals live on an insecure body"
 local me, p1 = childFor("player"), childFor("party1")
 check(me and p1 and childFor("party2"), "party members have frames")
 eq(me:GetParent(), H.headers[1], "the party is in header 1")
-eq(me.nameText._text, "Karuzo Elegia", "the name is painted")
+eq(me.nameText._text, "Karuzo", "the first name is painted (as Cell shows it)")
 eq(p1.health._value, 100, "health painted")
 eq(p1.health._max, 150, "max health painted")
 check(p1.health._color and math.abs(p1.health._color[1] - 0.53) < 1e-6, "the bar takes the class colour")
 
--- Dead/Offline is on the name line, right-aligned; the name stops before it
--- (the bottom edge is the debuff row's; code review).
-local sp = p1.statusText._points[1]
-eq(sp[1], "TOPRIGHT", "the status sits top-right")
-local np = p1.nameText._points[2]
-eq(np[2], p1.statusText, "the name ends where the status begins")
+-- The name is centred in the tile both ways, as Cell draws it; Dead/Offline
+-- sits small in the top-right corner.
+local np1, np2 = p1.nameText._points[1], p1.nameText._points[2]
+eq(np1[1] .. "/" .. np1[3] .. "/" .. np1[5], "LEFT/LEFT/0", "the name spans the tile, vertically centred")
+eq(np2[1] .. "/" .. np2[3] .. "/" .. np2[5], "RIGHT/RIGHT/0", "(both sides)")
+eq(p1.statusText._points[1][1], "TOPRIGHT", "the status sits top-right")
+check(WoW.methodsCalled["FontString:SetJustifyH"], "the name is justified (centred by Glass.Font's argument)")
+
+-- A secret name (grouped, ForeverUI's note) can't be split: it goes whole.
+WoW.secretFields = { name = true }
+WoW.fire("UNIT_NAME_UPDATE", "party1"); flush()
+check(WoW.IsSecret(p1.nameText._text), "a secret name reaches the client whole")
+eq(next(GRF.paintFailures), nil, "without a failure")
+WoW.secretFields = {}
+WoW.fire("UNIT_NAME_UPDATE", "party1"); flush()
+
+-- Incoming heals (GlassUnitFrames' recipe): the full health-bar width, from
+-- the fill's moving edge, clipped; the client does the arithmetic.
+check(p1.healCalc and p1.healPred, "every tile predicts heals")
+local hpAnchor = p1.healPred._points[#p1.healPred._points]
+eq(hpAnchor[2], p1.health:GetStatusBarTexture(), "the heal bar starts at the health fill's moving edge")
+eq(p1.healCalc.overflow, 1, "overflow 1 (DinoUF: the bar was empty without it)")
+WoW.units.party1.incoming = 30
+WoW.fire("UNIT_HEAL_PREDICTION", "party1"); flush()
+eq(p1.healPred._value, 30, "incoming heals on the bar")
+eq(p1.healPred._max, 150, "against max health")
+WoW.secretFields = { incoming = true, maxHealth = true }
+WoW.fire("UNIT_HEAL_PREDICTION", "party1"); flush()
+check(WoW.IsSecret(p1.healPred._value), "secret heals go straight to the bar")
+eq(next(GRF.paintFailures), nil, "without a failure")
+WoW.secretFields = {}
+WoW.units.party1.dead = true
+WoW.fire("UNIT_HEALTH", "party1"); flush()
+eq(p1.healPred._value, 0, "a dead unit shows no incoming heal")
+WoW.units.party1.dead = false
+WoW.units.party1.incoming = nil
+WoW.fire("UNIT_HEAL_PREDICTION", "party1"); flush()
+check(not WoW.KNOWN_EVENTS.UNIT_SPELLCAST_START or not GRF.Engine._test.events._events.UNIT_SPELLCAST_START,
+    "never refreshed from spellcast events (they showed damage as heals)")
+
+-- The power bar along the bottom: coloured by power type, secret-safe.
+eq(me.power._value, 500, "power painted")
+eq(me.power._max, 500, "max power painted")
+eq(me.power._color[3], GRF.Frames.POWER.MANA[3], "mana is blue")
+WoW.units.party1.powerToken = "RAGE"
+WoW.fire("UNIT_DISPLAYPOWER", "party1"); flush()
+eq(p1.power._color[1], GRF.Frames.POWER.RAGE[1], "rage is red")
+WoW.secretFields = { power = true, maxPower = true }
+WoW.fire("UNIT_POWER_UPDATE", "party1"); flush()
+check(WoW.IsSecret(p1.power._value), "secret power goes straight to the bar")
+eq(next(GRF.paintFailures), nil, "without a failure")
+WoW.secretFields = {}
+
+-- Hover: the white glass rim shows while the mouse is on the tile.
+eq(p1.hoverRim._alpha, 0, "no hover rim at rest")
+p1._scripts.OnEnter(p1)
+eq(p1.hoverRim._alpha, 1, "the hover rim shows on mouse-over")
+p1._scripts.OnLeave(p1)
+eq(p1.hoverRim._alpha, 0, "and goes on leave")
+
+-- Target: the tinted rim on your target's tile only.
+WoW.units.target = WoW.units.party1
+WoW.fire("PLAYER_TARGET_CHANGED"); flush()
+eq(p1.targetRim._alpha, 1, "your target's tile shows the target rim")
+eq(me.targetRim._alpha, 0, "the others don't")
+WoW.secretFields = { targetIsUnit = true }
+local realIsUnit = UnitIsUnit
+rawset(_G, "UnitIsUnit", function(a, b) return WoW.Secret("isUnit") end)
+WoW.rangeTruth = WoW.rangeTruth or {}
+WoW.fire("PLAYER_TARGET_CHANGED"); flush()
+check(p1.targetRim._alphaFromBoolean, "a secret 'is my target' goes through SetAlphaFromBoolean")
+eq(next(GRF.paintFailures), nil, "without a failure")
+rawset(_G, "UnitIsUnit", realIsUnit)
+WoW.secretFields = {}
+WoW.units.target = nil
+WoW.fire("PLAYER_TARGET_CHANGED"); flush()
+eq(p1.targetRim._alpha, 0, "no target: no rim")
 
 -- Offline and dead.
 WoW.units.party1.connected = false
@@ -122,7 +194,7 @@ WoW.fire("GROUP_ROSTER_UPDATE"); flush()
 eq(#WoW.blocked, 0, "a combat conversion touches nothing protected (" .. table.concat(WoW.blocked, ", ") .. ")")
 local r7 = childFor("raid7")
 check(r7 and r7:GetParent() == H.headers[2], "raid7 (group 2) sits in header 2")
-eq(r7.nameText._text, "Raider 7", "its name is painted in combat")
+eq(r7.nameText._text, "Raider", "its name is painted in combat")
 eq(r7.debuffs._modelUnit, "raid7", "its debuff row moved to the new unit in combat")
 eq(childFor("party1"), nil, "party tokens are gone in the raid")
 eq(GRF.Engine._test.framesByUnit.party1[p1], nil, "the engine forgot the old unit")
@@ -140,7 +212,7 @@ flush()
 WoW.units.raid7.name = "Someone Else"
 WoW.units.raid7.guid = "GUID-someone-else"
 WoW.fire("GROUP_ROSTER_UPDATE"); flush()
-eq(r7.nameText._text, "Someone Else", "a reused token repaints its name")
+eq(r7.nameText._text, "Someone", "a reused token repaints its name")
 WoW.combat = false
 
 done("test_frames")
