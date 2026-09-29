@@ -13,6 +13,10 @@ rawset(_G, "C_Spell", {
     GetSpellName = function(id) return SPELLS[id] and SPELLS[id][1] end,
     GetSpellSubtext = function(id) return SPELLS[id] and SPELLS[id][2] end,
 })
+-- Learned spells (C_SpellBook.IsSpellKnown). A name alone proves nothing.
+local LEARNED = { [2061] = true, [2060] = true, [10963] = true, [139] = true, [2006] = true, [17] = true }
+rawset(_G, "C_SpellBook", { IsSpellKnown = function(id) return LEARNED[id] == true end })
+Enum.SpellBookSpellBank = { Player = 0 }
 -- Base key bindings (what the player bound) and our overrides.
 local BASE = { ["1"] = "ACTIONBUTTON1", ["3"] = "ACTIONBUTTON3", ["SHIFT-R"] = nil, W = "MOVEFORWARD" }
 rawset(_G, "GetBindingAction", function(key, checkOverride) return BASE[key] end)
@@ -143,8 +147,29 @@ flush()
 eq(c:GetAttribute("shift-spell3"), nil, "an unknown spell isn't bound")
 check(table.concat(CC.Warnings(ghost), ";"):find("unknown"), "and says so")
 
+-- A spell the client names but this character hasn't learned is saved,
+-- not installed, and flagged (Codex review: GetSpellName answers for
+-- unlearned spells too).
+SPELLS[25314] = { "Greater Heal", "Rank 4" }
+local unlearned = CC.Set("shift-5", true, 25314, true)
+flush()
+eq(c:GetAttribute("shift-spell5"), nil, "an unlearned spell is not installed")
+check(table.concat(CC.Warnings(unlearned), ";"):find("not learned"), "the row says it isn't learned")
+check(#CC.Rows() > 0 and unlearned.spell == 25314, "the row itself is kept")
+-- A respec: a bound, learned spell is lost; SPELLS_CHANGED clears it.
+local lost = CC.Set("shift-4", true, 139)
+flush()
+eq(c:GetAttribute("shift-spell4"), "Renew", "bound while learned")
+LEARNED[139] = nil
+WoW.fire("SPELLS_CHANGED"); flush()
+eq(c:GetAttribute("shift-spell4"), nil, "unlearned by a respec: the stale click is cleared")
+check(table.concat(CC.Warnings(lost), ";"):find("not learned"), "and flagged")
+LEARNED[139] = true
+CC.Remove(lost); CC.Remove(unlearned); flush()
+
 -- A macro over 255 characters never reaches its end (measured): refused.
 SPELLS[4242] = { string.rep("Very Long Localized Spell Name ", 5), "Rank 9" }
+LEARNED[4242] = true
 local long = CC.Set("3", false, 4242, true)
 flush()
 eq(overrides["3"], nil, "a key whose macro wouldn't fit isn't bound")

@@ -141,6 +141,25 @@ function API.SpellBookSpells()
     return out
 end
 
+-- Whether the player has learned this exact spell ID (a rank's own ID
+-- counts: measured known=true for each learned Shadow Bolt rank). A name
+-- alone proves nothing: C_Spell.GetSpellName answers for unlearned spells.
+-- Blizzard's own click-binding UI drops spells failing IsSpellInSpellBook.
+function API.SpellKnown(id)
+    local SB = rawget(_G, "C_SpellBook")
+    if not SB then return false end
+    local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
+    if SB.IsSpellKnown then
+        local ok, known = pcall(SB.IsSpellKnown, id, bank)
+        if ok and not API.IsSecret(known) then return known == true end
+    end
+    if SB.IsSpellInSpellBook then
+        local ok, inBook = pcall(SB.IsSpellInSpellBook, id, bank, false)
+        if ok and not API.IsSecret(inBook) then return inBook == true end
+    end
+    return false
+end
+
 -- Blizzard's click-binding profile (a list), or nil when absent.
 function API.ClickBindingProfile()
     local CB = rawget(_G, "C_ClickBindings")

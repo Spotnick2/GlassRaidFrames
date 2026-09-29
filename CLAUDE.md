@@ -135,6 +135,11 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
     An unbound **modified** key (SHIFT-R) falls back, as the client does, to the plain key (R):
     an action button there gets the `/click`, and any other command is noted as lost off-frame.
     Only keys the client accepted count as installed, so a refused one is retried.
+    **A row installs only if its spell ID is learned** (`API.SpellKnown`, via `IsSpellKnown` /
+    `IsSpellInSpellBook`): a name alone proves nothing, since `C_Spell.GetSpellName` answers
+    for unlearned spells. After a respec, `SPELLS_CHANGED` clears the stale binding; the row
+    stays saved and flagged. The open editor repaints on every `Request`, not only after
+    `Apply`, so a role change in combat shows the new role's rows plus "pending" at once.
     `ClickCast.onApplied` lets the page repaint after a queued apply. **Known limit:** with a
     bar addon that binds through overrides (Bartender, ElvUI), the fallback clicks Blizzard's
     button for the key's base binding, not the addon's.

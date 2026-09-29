@@ -16,6 +16,7 @@ SPELLS[25314] = { "Greater Heal", "Rank 4" }
 local BOOK = { 139, 2060, 10963, 10964, 25314 }
 local FUTURE = { [25314] = true }   -- listed, not learned (Enum.SpellBookItemType.FutureSpell)
 rawset(_G, "C_SpellBook", {
+    IsSpellKnown = function(id) return SPELLS[id] ~= nil and not FUTURE[id] end,
     GetNumSpellBookSkillLines = function() return 1 end,
     GetSpellBookSkillLineInfo = function() return { itemIndexOffset = 0, numSpellBookItems = #BOOK } end,
     GetSpellBookItemInfo = function(i)
@@ -140,6 +141,21 @@ end
 offButton._scripts.OnClick(offButton)
 eq(cvars.enableMouseoverCast, "0", "the button turns Mouseover Cast off")
 check(not T.mouseoverWarn()._shown, "and the warning goes")
+
+-- The open editor follows a role change in combat at once (Codex review):
+-- the new role's rows, the pending banner; the old binds stay installed.
+local healerRows = GRF.ClickCast.Rows()
+check(#healerRows > 0 and T.rows[1]._shown, "the healer's rows are on screen")
+WoW.combat = true
+SlashCmdList.GLASSRAIDFRAMES("role caster")
+eq(GRF.role, "CASTER", "the role switched in combat")
+check(not T.rows[1]._shown, "the editor shows the caster's (empty) list at once")
+check(T.status()._text:find("Changes apply when combat ends"), "with the pending banner")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+SlashCmdList.GLASSRAIDFRAMES("role healer")
+flush()
+check(T.rows[1]._shown and T.rows[1].row == healerRows[1], "back to healer: its rows again")
 
 -- The page repaints itself when a queued change lands after combat.
 WoW.combat = true

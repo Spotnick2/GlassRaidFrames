@@ -189,7 +189,13 @@ function ClickCast.Desired(rows)
     local attrs, keys, problems = {}, {}, {}
     local buttons = actionButtons()
     for _, row in ipairs(rows) do
-        if row.mouse then
+        -- A row for a spell this character hasn't learned (a respec, another
+        -- character's list) stays saved but isn't installed: the click or key
+        -- keeps its normal job, and the row says why (Codex review).
+        local learned = row.spell ~= nil and API.SpellKnown(row.spell)
+        if row.spell and not learned and API.SpellName(row.spell) then
+            problems[row] = "not learned on this character"
+        elseif row.mouse then
             local mods, button = ClickCast.ParseMouse(row.mouse)
             local value = mods and ClickCast.AttributeValue(row)
             if value then
@@ -282,10 +288,13 @@ function ClickCast.Apply()
 end
 
 -- Ask for a reconciliation: now, or when combat ends (the installed bindings
--- keep working until then; the options show it as pending).
+-- keep working until then; the options show it as pending). The open editor
+-- repaints either way, so it always shows the current role's rows (Codex
+-- review: a role change in combat left the old role's rows editable).
 function ClickCast.Request()
     if InCombatLockdown() then ClickCast.pending = true end
     GRF.WhenOutOfCombat("clickcast", ClickCast.Apply, false)
+    if ClickCast.pending and ClickCast.onApplied then pcall(ClickCast.onApplied) end
 end
 
 -- Anything that can change a spell's name/rank or a key's base binding.
