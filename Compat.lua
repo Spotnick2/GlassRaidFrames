@@ -96,6 +96,16 @@ function API.SafeFrame(ftype, parent, template, proof)
     return CreateFrame(ftype, nil, parent), false
 end
 
+-- Fire a callback event on Retail's EventRegistry (usable on 70009, probe
+-- item 9) for other addons; false when it's absent. Never throws.
+function API.TriggerEvent(event, ...)
+    local reg = rawget(_G, "EventRegistry")
+    if not (reg and reg.TriggerEvent) then return false end
+    local ok, err = pcall(reg.TriggerEvent, reg, event, ...)
+    if not ok then API.Fail("event " .. event, err) end
+    return ok
+end
+
 -- The one place failures are recorded (first error per key), read by
 -- /grf failures and the tests.
 GRF.paintFailures = GRF.paintFailures or {}

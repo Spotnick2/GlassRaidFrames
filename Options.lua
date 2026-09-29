@@ -15,6 +15,10 @@ GRF.Options = Options
 
 local panel = CreateFrame("Frame", "GlassRaidFramesOptions")
 panel.name = "Glass Raid Frames"
+-- Hidden until Settings shows it: a frame born shown and parentless can be
+-- reparented into a visible canvas and shown without OnShow firing, which
+-- would leave the page blank (code review).
+panel:Hide()
 local controls = {}      -- refresh callbacks, run on every OnShow
 local category
 

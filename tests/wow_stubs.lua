@@ -231,6 +231,7 @@ function Methods.HookScript(w, name, fn)
 end
 function Methods.RegisterEvent(w, e)
     if not WoW.KNOWN_EVENTS[e] then error("Attempt to register unknown event \"" .. e .. "\"", 2) end
+    if WoW.refuseEvents and WoW.refuseEvents[e] then return false end   -- the client's refusal
     w._events[e] = true
     return true
 end
@@ -269,6 +270,17 @@ end
 function Methods.GetLeft(w) return edge(w, "x", -1) end
 function Methods.GetRight(w) return edge(w, "x", 1) end
 function Methods.GetBottom(w) return edge(w, "y", -1) end
+-- GetRect for a frame placed CENTER-on-UIParent-CENTER (the grid): left and
+-- bottom from UIParent's size, else from a test-set _center, else nil.
+function Methods.GetRect(w)
+    local p = w._points[#w._points]
+    local W, H = w._width or 0, w._height or 0
+    if p and p[1] == "CENTER" and p[2] == UIParent and p[3] == "CENTER" and (UIParent._width or 0) > 0 then
+        return UIParent._width / 2 + p[4] - W / 2, UIParent._height / 2 + p[5] - H / 2, W, H
+    end
+    if w._center then return w._center[1] - W / 2, w._center[2] - H / 2, W, H end
+    return nil
+end
 function Methods.GetTop(w) return edge(w, "y", 1) end
 function Methods.StopMovingOrSizing(w)
     if guard(w, "StopMovingOrSizing") then

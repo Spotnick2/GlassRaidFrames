@@ -43,6 +43,10 @@ check(not M.IsUnlocked(), "combat locks")
 check(not M.Unlock(), "and unlocking is refused in combat")
 WoW.combat = false
 
+local announced = {}
+rawset(_G, "EventRegistry", { TriggerEvent = function(_, event, ...) announced[#announced + 1] = { event, ... } end })
+UIParent._width, UIParent._height = 1024, 768
+
 -- Combat starting mid-drag keeps and SAVES the spot the grid followed to
 -- (PLAYER_REGEN_DISABLED fires before lockdown; code review).
 M.Unlock()
@@ -54,6 +58,7 @@ WoW.combat = true
 check(not M.IsUnlocked(), "combat mid-drag locks")
 eq(GRF.Profile().pos.x, -200, "the dragged-to position is saved (x)")
 eq(GRF.Profile().pos.y, -200, "(y)")
+check(#announced > 0 and announced[#announced][1] == GRF.LAYOUT_EVENT, "and announces it (code review)")
 WoW.combat = false
 eq(mv._width, select(1, H.Size()), "the mover has an explicit size")
 check(WoW.methodsCalled["Frame:SetDontSavePosition"], "the client doesn't save the mover's position")

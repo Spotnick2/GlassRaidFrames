@@ -46,7 +46,6 @@ function Header.Size()
 end
 
 local function sane(v) return type(v) == "number" and v == v and v > -2000 and v < 2000 end
-Header.Sane = sane
 
 function Header.DefaultPosition(role)
     if role == "HEALER" then return Header.HEALER_POS.x, Header.HEALER_POS.y end
@@ -74,6 +73,9 @@ function Header.SetPosition(x, y, save)
     c:SetPoint("CENTER", UIParent, "CENTER", x, y)
     local prof = save and GRF.Profile and GRF.Profile()
     if prof then prof.pos = { x = x, y = y } end
+    -- Saved means settled (drag stop, combat mid-drag, reset): tell other
+    -- addons. Live drag updates (save = false) don't spam them.
+    if save and GRF.Announce then GRF.Announce() end
     return true
 end
 
@@ -162,4 +164,15 @@ function Header.SetShowSolo(on)
     return true
 end
 
-Header._test = { childUnitChanged = childUnitChanged }
+-- The side default depends on UIParent's width: re-place an unsaved role's
+-- grid when the UI scale or resolution changes (out of combat).
+local rescaler = CreateFrame("Frame")
+rescaler:SetScript("OnEvent", function()
+    if not Header.container then return end
+    local prof = GRF.Profile and GRF.Profile()
+    if prof and prof.pos then return end   -- a saved spot stays where it was put
+    GRF.WhenOutOfCombat("rescale", function() Header.SetPosition(Header.PositionOf()) end, false)
+end)
+API.RegisterEvents(rescaler, { "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" })
+
+Header._test = { childUnitChanged = childUnitChanged, rescaler = rescaler }

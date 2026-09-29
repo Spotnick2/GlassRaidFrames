@@ -69,7 +69,14 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   priority order:
   1. the per-character manual pick (`GlassRaidFramesCharDB.role`, `"auto"` = none);
   2. the talent tree with the most points;
-  3. a class default.
+  3. **the last role the talents gave** (`GlassRaidFramesCharDB.talentRole`): the talent API
+     doesn't answer at `ADDON_LOADED` or during a loading screen, and a build doesn't change
+     without a talent event, so this beats guessing;
+  4. a class default.
+
+  Settling at login is quiet. Chat says "role: … (talents)" only on a respec (talents changing a
+  talent-given role). `Role.Watch(onChange, register)` takes the caller's reporting registrar
+  (`API.RegisterEvents`).
 
   **Self-contained like `Glass.lua`** (no engine, frames or saved variables), so GlassUnitFrames
   can lift it for its #35. Forever has one spec per class (always DAMAGER), so the spec API is
@@ -82,12 +89,19 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   is the current role's table; `Header.PositionOf/SetPosition` and `Movers.Reset` read and write it.
   Defaults: `Header.HEALER_POS` (lower middle, between GlassUnitFrames' player and target) and
   the **left side for caster, melee and tank**, x computed from `UIParent:GetWidth()`. A position
-  saved before roles existed (`db.pos`) migrates into the current role once. A role change
-  (talent events via `Role.Watch`, or a pick) re-applies through the combat queue and
-  **announces `GlassRaidFrames.LayoutChanged` (role, left, bottom, width, height) on
-  `EventRegistry`**, as do drag stops and resets. GlassUnitFrames listens; neither needs the
+  saved before roles existed (`db.pos`) is copied into **every** role without one (the role
+  isn't known yet at load). An unsaved role's side grid is re-placed on `UI_SCALE_CHANGED` /
+  `DISPLAY_SIZE_CHANGED`. A role change (talent events via `Role.Watch`, or a pick) re-applies
+  through the combat queue and **announces `GlassRaidFrames.LayoutChanged` (role, left, bottom,
+  width, height)** through `API.TriggerEvent` (EventRegistry). Every *saved* position (drag stop,
+  combat mid-drag) announces from `Header.SetPosition`, and resets announce too. Nothing is
+  announced without a placed grid. GlassUnitFrames listens; neither needs the
   other. New per-role settings go in the profile, not at the top of the DB.
-- **`Options.lua`**: Game Menu > Options > AddOns > Glass Raid Frames (`/grf options`).
+- **`Options.lua`**: Game Menu > Options > AddOns > Glass Raid Frames (`/grf options`). The panel
+  is created **hidden**, so Settings' `Show()` always fires `OnShow`. The Unlock button closes
+  Settings with **`SettingsPanel:Close(true)`**: plain `Close()` goes back to the Game Menu, whose
+  Esc handlers call the protected `SpellStopCasting` (ADDON_ACTION_FORBIDDEN blamed on us,
+  measured).
   GlassUnitFrames' idiom: a canvas panel registered at `PLAYER_LOGIN`, `UIRadioButtonTemplate` /
   `UICheckButtonTemplate` through `API.SafeFrame` with fallback art, no `UIDropDownMenu`, built
   on first show and re-synced on every show. Every control goes through **`GRF.Settings`**

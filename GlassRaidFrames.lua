@@ -25,6 +25,7 @@ local function ensureDefaults()
     if type(GlassRaidFramesCharDB) ~= "table" then GlassRaidFramesCharDB = {} end
     local char = GlassRaidFramesCharDB
     if char.role ~= "auto" and not Role.VALID[char.role] then char.role = "auto" end
+    if not Role.VALID[char.talentRole] then char.talentRole = nil end
     return db, char
 end
 
@@ -75,11 +76,10 @@ end
 -- EventRegistry is usable on 70009 (probe item 9).
 GRF.LAYOUT_EVENT = "GlassRaidFrames.LayoutChanged"
 function GRF.Announce()
-    local reg = rawget(_G, "EventRegistry")
-    if not (reg and reg.TriggerEvent and GRF.role) then return end
+    if not GRF.role then return end
     local l, b, w, h = GRF.Header.Rect()
-    local ok, err = pcall(reg.TriggerEvent, reg, GRF.LAYOUT_EVENT, GRF.role, l, b, w, h)
-    if not ok then API.Fail("announce", err) end
+    if not l then return end   -- no grid (not built, or it failed): nothing to announce
+    API.TriggerEvent(GRF.LAYOUT_EVENT, GRF.role, l, b, w, h)
 end
 
 -- Move the grid to the current role's position and say so. Out of combat.
@@ -90,17 +90,20 @@ local function applyRole()
 end
 
 -- Work out the role again (talents may have changed, or the manual pick);
--- re-apply only when it changed.
+-- re-apply only when it changed. Chat only for a real respec: talents
+-- changing a role that talents gave before. Settling at login (class or
+-- remembered role, then the first talent answer) stays quiet.
 local function evaluateRole(quiet)
-    local role, source = Role.Get(GRF.char.role)
+    local previousSource = GRF.roleSource
+    local role, source = Role.Get(GRF.char.role, GRF.char.talentRole)
+    if source == "talents" then GRF.char.talentRole = role end
     GRF.roleSource = source
     if role == GRF.role then return end
-    local first = GRF.role == nil
+    local respec = source == "talents" and (previousSource == "talents" or previousSource == "remembered")
     GRF.role = role
-    if not first and not quiet then say("role: " .. role:lower() .. " (" .. source .. ")") end
+    if respec and not quiet then say("role: " .. role:lower() .. " (talents)") end
     whenOutOfCombat("role", applyRole, false)
 end
-GRF.EvaluateRole = evaluateRole
 
 --------------------------------------------------------------------------------
 -- Settings: the apply-and-save helpers shared by /grf and the options panel.
@@ -201,10 +204,13 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         if arg1 ~= ADDON then return end
         GRF.db, GRF.char = ensureDefaults()
         evaluateRole(true)
-        -- A position saved before roles existed becomes this role's.
+        -- A position saved before roles existed: every role without one gets
+        -- it (the talents aren't read yet, so which role is yours isn't known).
         if type(GRF.db.pos) == "table" then
-            local prof = GRF.Profile()
-            if prof.pos == nil then prof.pos = GRF.db.pos end
+            for _, role in ipairs(Role.ROLES) do
+                local prof = GRF.db.profiles[role]
+                if prof.pos == nil then prof.pos = { x = GRF.db.pos.x, y = GRF.db.pos.y } end
+            end
             GRF.db.pos = nil
         end
         -- Secure frames can't be built under lockdown. Loading normally runs
@@ -217,7 +223,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
             GRF.Announce()
         end, "frames will appear when combat ends")
         -- Talents arrive after load (PLAYER_TALENT_UPDATE at login, measured).
-        GRF.roleWatcher = Role.Watch(function() evaluateRole(false) end)
+        GRF.roleWatcher = Role.Watch(function() evaluateRole(false) end, API.RegisterEvents)
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- arg1 = isInitialLogin: warn at a real login, never on /reload.
         if arg1 and API.ClientBuild() ~= GRF.MEASURED_ON_BUILD then

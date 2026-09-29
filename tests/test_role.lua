@@ -71,26 +71,39 @@ eq(GRF.role, "CASTER", "the most points in Shadow: caster")
 eq(GRF.roleSource, "talents", "from the talents")
 x = at()
 eq(x, sx, "the grid moved to the side")
-check(chatHas("role: caster %(talents%)"), "the change is announced in chat")
+check(not chatHas("role: caster"), "settling from the class default is quiet (no chat at every login)")
+eq(GRF.char.talentRole, "CASTER", "the talent answer is remembered per character")
 eq(announced[#announced][1], GRF.LAYOUT_EVENT, "other addons hear about it")
 eq(announced[#announced][2], "CASTER", "with the role")
+eq(type(announced[#announced][3]), "number", "and the grid's rectangle")
+
+-- A talent API blip (a loading screen) keeps the remembered role: no jump
+-- to the class default (code review).
+traitsAvailable = false
+WoW.fire("PLAYER_ENTERING_WORLD", false, true)
+eq(GRF.role, "CASTER", "a blank talent answer keeps the remembered role")
+eq(GRF.roleSource, "remembered", "and says so")
+traitsAvailable = true
+WoW.fire("PLAYER_TALENT_UPDATE")
+eq(GRF.roleSource, "talents", "talents answering again take over")
 
 -- The stray off-canvas node (5 ranks at x 9280, y 21300) doesn't count:
 -- Holy leads 4 to 3 only without it.
 ranks = { 0, 4, 3 }
 WoW.fire("PLAYER_TALENT_UPDATE")
 eq(GRF.role, "HEALER", "the off-canvas node is ignored")
+check(chatHas("role: healer %(talents%)"), "a respec (talents to talents) is announced in chat")
 
 -- A layout that isn't three trees: don't guess, use the class.
 local saved = COLUMNS
 COLUMNS = { { 1020, 1620 }, { 5020, 5620 } }
 ranks = { 0, 9, 0 }
 WoW.fire("PLAYER_TALENT_UPDATE")
-eq(GRF.roleSource, "class", "an unexpected layout falls back to the class")
+eq(GRF.roleSource, "remembered", "an unexpected layout keeps the remembered role, not a guess")
 COLUMNS = saved
 traitsAvailable = false
 WoW.fire("PLAYER_TALENT_UPDATE")
-eq(GRF.roleSource, "class", "no trait config: the class")
+eq(GRF.roleSource, "remembered", "no trait config: the remembered role")
 traitsAvailable = true
 
 -- Positions are per role: a drag in one role never moves another's.
@@ -142,6 +155,70 @@ ranks = { 1, 7, 2 }
 WoW.fire("PLAYER_TALENT_UPDATE")
 eq(GRF.role, "TANK", "a Protection paladin is a tank")
 
+-- Login: the talents aren't readable at ADDON_LOADED. A remembered role
+-- builds the grid in its own spot straight away (code review: it used to be
+-- built at the class spot, then jump and print at every /reload).
+WoW.reset()
+UIParent._width, UIParent._height = 1365, 768
+party(1)
+traitsAvailable = false
+GlassRaidFramesCharDB = { role = "auto", talentRole = "CASTER" }
+GRF = loadAddon({ db = { profiles = { CASTER = { pos = { x = -300, y = 40 } } } } })
+local lp = GRF.Header.container._points
+eq(#lp, 1, "the grid is placed once (no jump)")
+eq(lp[1][4], -300, "in the remembered role's spot")
+eq(GRF.role, "CASTER", "with the remembered role")
+traitsAvailable = true
+ranks = { 0, 0, 7 }
+WoW.fire("PLAYER_TALENT_UPDATE")
+eq(#GRF.Header.container._points, 1, "the talents agreeing moves nothing")
+check(not chatHas("role:"), "and says nothing")
+
+-- Migration: a position saved before roles goes to every role without one.
+WoW.reset()
+UIParent._width, UIParent._height = 1365, 768
+party(1)
+GlassRaidFramesCharDB = nil
+GRF = loadAddon({ db = { pos = { x = 203, y = -333 }, profiles = { TANK = { pos = { x = 1, y = 2 } } } } })
+for _, r in ipairs({ "HEALER", "CASTER", "MELEE" }) do
+    eq(GRF.db.profiles[r].pos and GRF.db.profiles[r].pos.x, 203, "the old position reaches " .. r)
+end
+eq(GRF.db.profiles.TANK.pos.x, 1, "a role with its own position keeps it")
+eq(GRF.db.pos, nil, "the old key is gone")
+
+-- A UI scale change re-places an unsaved role's side grid (code review).
+WoW.reset()
+UIParent._width, UIParent._height = 1365, 768
+party(1)
+GlassRaidFramesCharDB = { role = "CASTER" }
+GlassRaidFramesDB = nil
+GRF = loadAddon()
+UIParent._width = 1024
+WoW.fire("UI_SCALE_CHANGED")
+local sp2 = GRF.Header.container._points
+eq(sp2[#sp2][4], select(1, GRF.Header.DefaultPosition("CASTER")), "the side default follows the new width")
+GRF.db.profiles.CASTER.pos = { x = 5, y = 5 }
+local before = #sp2
+WoW.fire("DISPLAY_SIZE_CHANGED")
+eq(#GRF.Header.container._points, before, "a saved spot is left alone")
+
+-- No grid, no announcement (code review: it used to send nils).
+announced = {}
+GRF.Header.container._points = {}
+GRF.Announce()
+eq(#announced, 0, "nothing is announced without a placed grid")
+
+-- A talent event the client refuses is reported, not swallowed (code review).
+WoW.reset()
+UIParent._width, UIParent._height = 1365, 768
+party(1)
+WoW.refuseEvents = { TRAIT_CONFIG_UPDATED = true }
+GRF = loadAddon()
+WoW.refuseEvents = nil
+local reported = false
+for _, line in ipairs(GRF.eventFailures) do if line:find("TRAIT_CONFIG_UPDATED") then reported = true end end
+check(reported, "a refused talent event shows in /grf failures")
+
 -- A bad saved pick is reset to auto.
 WoW.reset()
 UIParent._width = 1365
@@ -150,7 +227,10 @@ GlassRaidFramesCharDB = { role = "WIZARD" }
 GRF = loadAddon()
 eq(GRF.char.role, "auto", "an unknown saved pick becomes auto")
 
--- The options panel: registered under AddOns, built on show, wired to Settings.
+-- The options panel: hidden until Settings shows it (else a reparent into a
+-- visible canvas could skip OnShow and leave the page blank), registered
+-- under AddOns, built on show, wired to Settings.
+check(not GRF.Options._test.panel._shown, "the panel starts hidden")
 eq(WoW.settings.addon and WoW.settings.addon.name, "Glass Raid Frames", "registered under Options > AddOns")
 local O = GRF.Options._test
 O.panel._scripts.OnShow(O.panel)

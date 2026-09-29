@@ -62,7 +62,6 @@ local function build()
         self.dragging = false
         follow(true)
         reattach()
-        if GRF.Announce then GRF.Announce() end
     end)
     mover:SetScript("OnMouseUp", function(_, button)
         if button == "RightButton" then Movers.Lock() end
@@ -105,7 +104,7 @@ function Movers.Reset()
     local prof = GRF.Profile and GRF.Profile()
     if prof then prof.pos = nil end
     local ok = Header.SetPosition(Header.DefaultPosition(GRF.role))
-    if GRF.Announce then GRF.Announce() end
+    if ok and GRF.Announce then GRF.Announce() end
     return ok
 end
 

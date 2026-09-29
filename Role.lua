@@ -119,25 +119,40 @@ function Role.FromTalents(class)
     return best and roles[best] or nil
 end
 
--- The role in effect and where it came from: "manual", "talents" or "class".
--- `manual` is the saved per-character pick ("auto" or nil = none).
-function Role.Get(manual)
+-- The role in effect and where it came from: "manual", "talents",
+-- "remembered" or "class". `manual` is the saved per-character pick ("auto"
+-- or nil = none). `remembered` is the last role the talents gave (the caller
+-- saves it): the talent API doesn't answer at ADDON_LOADED or during a
+-- loading screen, and a talent build doesn't change without a talent event,
+-- so the last answer beats the class default.
+function Role.Get(manual, remembered)
     if Role.VALID[manual] then return manual, "manual" end
     local class = playerClass()
     local fromTalents = Role.FromTalents(class)
     if fromTalents then return fromTalents, "talents" end
+    if Role.VALID[remembered] then return remembered, "remembered" end
     return Role.CLASS_DEFAULT[class] or "CASTER", "class"
 end
+
+Role.EVENTS = { "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED", "ACTIVE_TALENT_GROUP_CHANGED",
+                "CHARACTER_POINTS_CHANGED", "PLAYER_ENTERING_WORLD" }
 
 -- Watch the events that can change the talent answer (measured: PLAYER_TALENT_UPDATE
 -- fires at login and on /reload; the others are the dump's talent/config
 -- events) and call onChange() on any of them; the caller re-evaluates.
-function Role.Watch(onChange)
+-- `register(frame, events)` is the caller's reporting registrar (GlassRaidFrames:
+-- API.RegisterEvents); without one, failures are kept in Role.failures.
+Role.failures = {}
+function Role.Watch(onChange, register)
     local f = CreateFrame("Frame")
     f:SetScript("OnEvent", function() onChange() end)
-    for _, e in ipairs({ "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED", "ACTIVE_TALENT_GROUP_CHANGED",
-                         "CHARACTER_POINTS_CHANGED", "PLAYER_ENTERING_WORLD" }) do
-        pcall(f.RegisterEvent, f, e)
+    if register then
+        register(f, Role.EVENTS)
+    else
+        for _, e in ipairs(Role.EVENTS) do
+            local ok, r = pcall(f.RegisterEvent, f, e)
+            if not ok or r == false then Role.failures[#Role.failures + 1] = e end
+        end
     end
     return f
 end
