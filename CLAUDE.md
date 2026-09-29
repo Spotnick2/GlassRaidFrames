@@ -155,6 +155,15 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   - It flags Blizzard's Mouseover Cast (**it casts on hovered strangers, measured**) with a
     turn-off button, lists Blizzard's own spell/macro click bindings, and warns when its
     "Target Unit Frame" is unbound.
+- **Incoming heals** (GlassUnitFrames' recipe, `API.NewHealCalculator` / `API.IncomingHeals`
+  from its Compat):
+  - a translucent bar with the health bar's **full** width, anchored at the health fill's moving
+    edge and clipped at the bar's end;
+  - overflow percent 1 (DinoUF saw an empty bar without it);
+  - a `heal` channel on `UNIT_HEAL_PREDICTION` and health events, **never spellcast events**
+    (they showed damage as heals);
+  - cleared for dead or offline units;
+  - it follows resizes through `Frames.Layout`.
 - **Power bar, hover and target** (Cell's, in glass):
   - A thin `Glass.Bar` along the bottom (`Frames.PowerHeight`, 3-6), coloured by power token
     (`Frames.POWER`), with secret values straight to the bar. The health bar takes the rest.

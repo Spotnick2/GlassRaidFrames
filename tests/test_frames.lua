@@ -61,6 +61,30 @@ eq(next(GRF.paintFailures), nil, "without a failure")
 WoW.secretFields = {}
 WoW.fire("UNIT_NAME_UPDATE", "party1"); flush()
 
+-- Incoming heals (GlassUnitFrames' recipe): the full health-bar width, from
+-- the fill's moving edge, clipped; the client does the arithmetic.
+check(p1.healCalc and p1.healPred, "every tile predicts heals")
+local hpAnchor = p1.healPred._points[#p1.healPred._points]
+eq(hpAnchor[2], p1.health:GetStatusBarTexture(), "the heal bar starts at the health fill's moving edge")
+eq(p1.healCalc.overflow, 1, "overflow 1 (DinoUF: the bar was empty without it)")
+WoW.units.party1.incoming = 30
+WoW.fire("UNIT_HEAL_PREDICTION", "party1"); flush()
+eq(p1.healPred._value, 30, "incoming heals on the bar")
+eq(p1.healPred._max, 150, "against max health")
+WoW.secretFields = { incoming = true, maxHealth = true }
+WoW.fire("UNIT_HEAL_PREDICTION", "party1"); flush()
+check(WoW.IsSecret(p1.healPred._value), "secret heals go straight to the bar")
+eq(next(GRF.paintFailures), nil, "without a failure")
+WoW.secretFields = {}
+WoW.units.party1.dead = true
+WoW.fire("UNIT_HEALTH", "party1"); flush()
+eq(p1.healPred._value, 0, "a dead unit shows no incoming heal")
+WoW.units.party1.dead = false
+WoW.units.party1.incoming = nil
+WoW.fire("UNIT_HEAL_PREDICTION", "party1"); flush()
+check(not WoW.KNOWN_EVENTS.UNIT_SPELLCAST_START or not GRF.Engine._test.events._events.UNIT_SPELLCAST_START,
+    "never refreshed from spellcast events (they showed damage as heals)")
+
 -- The power bar along the bottom: coloured by power type, secret-safe.
 eq(me.power._value, 500, "power painted")
 eq(me.power._max, 500, "max power painted")

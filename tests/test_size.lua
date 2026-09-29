@@ -33,6 +33,8 @@ for _, i in ipairs({ 1, 17, 40 }) do
     eq(child(i):GetHeight(), 40, "child " .. i .. " is resized (h)")
 end
 eq(child(1).health._height + child(1).power._height + 1, 40 - 2 * GRF.Glass.Inset("small"), "the bars follow")
+eq(child(1).healPred._width, 100 - 2 * GRF.Glass.Inset("small"), "the heal bar keeps the health bar's full width")
+eq(child(1).healPred._height, child(1).health._height, "and its height")
 eq(child(1).nameText._font[2], GRF.Frames.NameSize(40) + GRF.Glass.FONTS[GRF.Glass.fontKey].bump, "the name follows")
 local hp = H.headers[3]._points[#H.headers[3]._points]
 eq(hp[4], 2 * (100 + H.GAP), "column 3 moves over by the new width")

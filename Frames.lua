@@ -26,6 +26,8 @@ Frames.POWER = { MANA = { 0.25, 0.55, 1 }, RAGE = { 0.95, 0.2, 0.2 }, ENERGY = {
 -- The glass versions of Cell's hover and target borders: a second rim over the
 -- tile's own, white on hover, tinted on your target.
 Frames.HOVER = { 1, 1, 1, 0.9 }
+-- Incoming heals: GlassUnitFrames' colour.
+Frames.HEAL = { 0.35, 0.95, 0.55, 0.45 }
 Frames.TARGET = { 1, 0.35, 0.5, 1 }
 Frames.OFFLINE = { 0.45, 0.45, 0.45 }
 Frames.FALLBACK = { 0.35, 0.8, 0.45 }   -- no readable class
@@ -71,6 +73,28 @@ function Frames.Setup(b)
     hp:SetPoint("TOPRIGHT", body, "TOPRIGHT", -inset, -inset)
     hp:SetFrameLevel(Glass.ContentLevel(body))
     b.health = hp
+
+    -- Incoming heals (GlassUnitFrames' recipe): a translucent bar with the
+    -- health bar's FULL width, starting at the health fill's moving edge and
+    -- clipped at the bar's end (a bar squeezed into the missing part would
+    -- understate heals). The client does all the arithmetic on the secrets.
+    local calc = API.NewHealCalculator()
+    if calc then
+        local clip = CreateFrame("Frame", nil, hp)
+        clip:SetAllPoints(hp)
+        clip:SetClipsChildren(true)
+        clip:SetFrameLevel(hp:GetFrameLevel() + 3)
+        local pred = CreateFrame("StatusBar", nil, clip)
+        pred:SetFrameLevel(clip:GetFrameLevel())
+        pred:SetStatusBarTexture(Glass.MEDIA .. "bar_fill")
+        pred:SetStatusBarColor(Frames.HEAL[1], Frames.HEAL[2], Frames.HEAL[3])
+        pred:SetAlpha(Frames.HEAL[4])
+        pred:SetMinMaxValues(0, 1)
+        pred:SetValue(0)
+        pred:GetStatusBarTexture():AddMaskTexture(Glass.Mask(pred, "bar_mask", 8, 0, hp))
+        pred:SetPoint("TOPLEFT", hp:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
+        b.healCalc, b.healPred = calc, pred
+    end
 
     -- The power bar along the bottom, as Cell's (a thin glass bar; secret
     -- values go straight to it). The health bar gives up that height.
@@ -161,6 +185,9 @@ function Frames.Layout(b)
     if type(h) ~= "number" or h <= 0 then return end
     b.health:SetHeight(Frames.BarHeight(b))
     b.power:SetHeight(Frames.PowerHeight(b))
+    if b.healPred then
+        b.healPred:SetSize(b:GetWidth() - 2 * Glass.Inset("small"), Frames.BarHeight(b))
+    end
     local f = Glass.FONTS[Glass.fontKey] or Glass.FONTS.arial
     b.nameText:SetFont(f.file, Frames.NameSize(h) + f.bump, "")
 end
@@ -232,6 +259,18 @@ Engine.SetPainter("indicators", function(b, u)
     else
         ind.role:Hide()
     end
+end)
+
+Engine.SetPainter("heal", function(b, u)
+    local pred = b.healPred
+    if not (pred and UnitExists(u)) then return end
+    if plain(UnitIsConnected, u) == false or plain(UnitIsDeadOrGhost, u) == true then
+        pred:SetMinMaxValues(0, 1)
+        pred:SetValue(0)
+        return
+    end
+    local incoming, maxHealth = API.IncomingHeals(u, b.healCalc)
+    Glass.SetBar(pred, maxHealth, incoming, true)
 end)
 
 Engine.SetPainter("power", function(b, u)

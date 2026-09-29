@@ -24,9 +24,12 @@ Engine.CHANNEL_EVENTS = {
     name       = { "UNIT_NAME_UPDATE" },
     health     = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS" },
     power      = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_CONNECTION" },
+    -- Incoming heals. Never refresh from spellcast events: DinoUF saw damage
+    -- casts show up as heals there (GlassUnitFrames' rule).
+    heal       = { "UNIT_HEAL_PREDICTION", "UNIT_MAXHEALTH", "UNIT_HEALTH", "UNIT_CONNECTION" },
     indicators = {},   -- group-wide events only (below)
 }
-Engine.ORDER = { "name", "health", "power", "indicators", "target", "range" }
+Engine.ORDER = { "name", "health", "heal", "power", "indicators", "target", "range" }
 Engine.RANGE_INTERVAL = 0.25
 
 local painters = {}
