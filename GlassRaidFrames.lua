@@ -104,6 +104,9 @@ local function evaluateRole(quiet)
     local respec = source == "talents" and (previousSource == "talents" or previousSource == "remembered")
     GRF.role = role
     if respec and not quiet then say("role: " .. role:lower() .. " (talents)") end
+    -- The bindings are per role: request them now, so a change in combat
+    -- shows as pending while the old role's stay installed.
+    if GRF.ClickCast then GRF.ClickCast.Request() end
     whenOutOfCombat("role", applyRole, false)
 end
 

@@ -12,13 +12,19 @@ rawset(_G, "C_Spell", {
     GetSpellTexture = function(id) return SPELLS[id] and 1000 + id end,
 })
 -- The spellbook holds every rank as its own item (measured).
-local BOOK = { 139, 2060, 10963, 10964 }
+SPELLS[25314] = { "Greater Heal", "Rank 4" }
+local BOOK = { 139, 2060, 10963, 10964, 25314 }
+local FUTURE = { [25314] = true }   -- listed, not learned (Enum.SpellBookItemType.FutureSpell)
 rawset(_G, "C_SpellBook", {
     GetNumSpellBookSkillLines = function() return 1 end,
     GetSpellBookSkillLineInfo = function() return { itemIndexOffset = 0, numSpellBookItems = #BOOK } end,
-    GetSpellBookItemInfo = function(i) local id = BOOK[i]; return id and { spellID = id, name = SPELLS[id][1] } end,
+    GetSpellBookItemInfo = function(i)
+        local id = BOOK[i]
+        return id and { spellID = id, name = SPELLS[id][1], itemType = FUTURE[id] and 2 or 1, isPassive = false, isOffSpec = false }
+    end,
 })
 Enum.SpellBookSpellBank = { Player = 0 }
+Enum.SpellBookItemType = { Spell = 1, FutureSpell = 2 }
 Enum.ClickBindingType = { None = 0, Interaction = 1, Spell = 2, Macro = 3, PetAction = 4 }
 Enum.ClickBindingInteraction = { Target = 1, OpenContextMenu = 2 }
 local profile = { { type = 1, actionID = 2, button = "RightButton", modifiers = 0 },
@@ -46,8 +52,9 @@ GlassRaidFramesCharDB = { role = "HEALER" }
 local GRF = loadAddon()
 local T = GRF.ClickCastOptions._test
 
--- Registered under the main page.
+-- Registered under the main page, by the main page itself (in order).
 check(sub and sub.parent == GRF.Options.category, "the Click-casting page sits under Glass Raid Frames")
+check(GRF.Options.category ~= nil, "registered after the main category exists")
 eq(sub.name, "Click-casting", "named Click-casting")
 check(not T.page._shown, "created hidden (OnShow always fires)")
 T.page:Show()
@@ -104,8 +111,9 @@ eq(r1.rank._text, "Rank 1", "the button shows the rank")
 r1.rank._scripts.OnClick(r1.rank)
 eq(rowsData[1].spell, 10963, "then rank 2")
 r1.rank._scripts.OnClick(r1.rank)
+eq(rowsData[1].spell, 10964, "then rank 3")
 r1.rank._scripts.OnClick(r1.rank)
-eq(rowsData[1].pinned, nil, "past the last rank: back to highest")
+eq(rowsData[1].pinned, nil, "past the last LEARNED rank (rank 4 is only listed): back to highest")
 eq(rowsData[1].spell, 10964, "on the top rank's ID")
 
 -- A single-rank spell has no rank button.
@@ -132,6 +140,16 @@ end
 offButton._scripts.OnClick(offButton)
 eq(cvars.enableMouseoverCast, "0", "the button turns Mouseover Cast off")
 check(not T.mouseoverWarn()._shown, "and the warning goes")
+
+-- The page repaints itself when a queued change lands after combat.
+WoW.combat = true
+GRF.ClickCast.Set("shift-3", true, 139)
+GRF.ClickCastOptions.Refresh()
+local statusText = T.status()
+check(statusText._text:find("Changes apply when combat ends"), "an edit in combat shows as pending")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+eq(statusText._text, "", "and the banner clears by itself when it applies")
 
 -- In combat: capture is refused; edits wait (pending).
 WoW.combat = true

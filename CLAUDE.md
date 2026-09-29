@@ -131,6 +131,13 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
     queues it through the combat queue (the installed bindings stay until combat ends:
     `pending`). It re-runs on role changes, `SPELLS_CHANGED`, `UPDATE_BINDINGS`, and after the
     build.
+  - Capturing an existing binding again returns that row untouched (it never erases its spell).
+    An unbound **modified** key (SHIFT-R) falls back, as the client does, to the plain key (R):
+    an action button there gets the `/click`, and any other command is noted as lost off-frame.
+    Only keys the client accepted count as installed, so a refused one is retried.
+    `ClickCast.onApplied` lets the page repaint after a queued apply. **Known limit:** with a
+    bar addon that binds through overrides (Bartender, ElvUI), the fallback clicks Blizzard's
+    button for the key's base binding, not the addon's.
   - Warnings (`ClickCast.Warnings`): a mouse row on the SELFCAST modifier (clicks self-cast,
     keys don't, measured), a row replacing the plain target/menu click, an unknown spell, a
     macro too long, a key bound to a non-action command.

@@ -17,7 +17,11 @@ rawset(_G, "C_Spell", {
 local BASE = { ["1"] = "ACTIONBUTTON1", ["3"] = "ACTIONBUTTON3", ["SHIFT-R"] = nil, W = "MOVEFORWARD" }
 rawset(_G, "GetBindingAction", function(key, checkOverride) return BASE[key] end)
 local overrides, clears = {}, 0
-rawset(_G, "SetOverrideBindingClick", function(owner, _, key, name) overrides[key] = name end)
+local refuse = {}
+rawset(_G, "SetOverrideBindingClick", function(owner, _, key, name)
+    if refuse[key] then error("refused " .. key) end
+    overrides[key] = name
+end)
 rawset(_G, "ClearOverrideBindings", function() overrides = {}; clears = clears + 1 end)
 local selfCast = "ALT"
 rawset(_G, "GetModifiedClick", function(what) return what == "SELFCAST" and selfCast or nil end)
@@ -145,6 +149,52 @@ local long = CC.Set("3", false, 4242, true)
 flush()
 eq(overrides["3"], nil, "a key whose macro wouldn't fit isn't bound")
 check(table.concat(CC.Warnings(long), ";"):find("too long"), "and the options say why")
+
+-- Capturing a binding that already exists keeps its spell (code review:
+-- re-pressing Shift-R used to erase the rez).
+local rez
+for _, r in ipairs(CC.Rows()) do if r.key == "SHIFT-R" then rez = r end end
+local again = CC.Set("SHIFT-R", false, nil)
+eq(again, rez, "re-capturing returns the existing row")
+eq(rez.spell, 2006, "and keeps its spell")
+flush()
+check(overrides["SHIFT-R"] ~= nil, "the rez key stays bound")
+
+-- An unbound modified key falls back like the client does, to the plain
+-- key: an action button there is clicked; any other command is only noted.
+BASE.R = "ACTIONBUTTON5"
+CC.Request(); flush()
+check(kb["SHIFT-R"]:GetAttribute("macrotext"):find("ActionButton5", 1, true), "Shift-R falls back to what R does (bar slot 5)")
+BASE.R = "REPLY"
+CC.Request(); flush()
+check(not kb["SHIFT-R"]:GetAttribute("macrotext"):find("/click", 1, true), "R bound to REPLY: no /click line")
+check(overrides["SHIFT-R"] ~= nil, "the rez key is still bound")
+check(table.concat(CC.Warnings(rez), ";"):find("REPLY"), "and the options say REPLY is lost off-frame")
+BASE.R = nil
+
+-- A key the client refuses isn't recorded as installed: retried later.
+refuse["F"] = true
+local frow = CC.Set("F", false, 139)
+flush()
+eq(overrides.F, nil, "a refused key isn't bound")
+check(table.concat(CC.Warnings(frow), ";"):find("refused"), "and says so")
+refuse["F"] = nil
+WoW.fire("SPELLS_CHANGED"); flush()
+check(overrides.F ~= nil, "the next reconciliation retries it")
+GRF.paintFailures["bind F"] = nil
+CC.Remove(frow); flush()
+
+-- A role change in combat marks the bindings pending at once (the old
+-- role's stay installed until combat ends).
+WoW.combat = true
+CC.pending = false
+GRF.Settings.SetRole("caster")
+check(CC.pending, "a role change in combat is pending for click-casting")
+check(overrides["1"] ~= nil, "the healer keys stay installed meanwhile")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+eq(overrides["1"], nil, "switched when combat ends")
+GRF.Settings.SetRole("healer"); flush()
 
 eq(next(GRF.paintFailures), nil, "no failures")
 done("test_clickcast")

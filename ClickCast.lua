@@ -84,16 +84,10 @@ end
 -- Resolving a row (client data: all through pcall)
 --------------------------------------------------------------------------------
 
-local function plainString(fn, ...)
-    local ok, v = pcall(fn, ...)
-    if ok and type(v) == "string" and v ~= "" and not API.IsSecret(v) then return v end
-    return nil
-end
-
 -- What a spell attribute gets: the pinned rank's ID, or the bare localized
 -- name (the highest rank known). nil when the client doesn't know the spell.
 function ClickCast.AttributeValue(row)
-    local name = plainString(C_Spell.GetSpellName, row.spell)
+    local name = row.spell and API.SpellName(row.spell)
     if not name then return nil end
     if row.pinned then return row.spell end
     return name
@@ -102,10 +96,10 @@ end
 -- What a /cast line gets: "Name(Rank n)" for a pinned rank (both localized,
 -- from the ID), else the bare name.
 function ClickCast.CastText(row)
-    local name = plainString(C_Spell.GetSpellName, row.spell)
+    local name = row.spell and API.SpellName(row.spell)
     if not name then return nil end
     if row.pinned then
-        local sub = plainString(C_Spell.GetSpellSubtext, row.spell)
+        local sub = API.SpellSubtext(row.spell)
         if sub then return name .. "(" .. sub .. ")" end
     end
     return name
@@ -131,12 +125,28 @@ ClickCast.ActionButtons = actionButtons
 -- The frame a key falls back to: nil (unbound: no fallback), a frame name, or
 -- false plus the command when the key does something we can't click (then we
 -- leave the key alone rather than take its command away).
+-- An unbound MODIFIED key (SHIFT-R) falls back, as the client does, to the
+-- plain key's binding (R): an action button there is clicked; anything else
+-- is simply not reproduced (the options say so). Returns: frame name, or nil,
+-- or false plus the command when the key's OWN binding is a non-action one.
 function ClickCast.Fallback(key, buttons)
+    buttons = buttons or actionButtons()
     local ok, action = pcall(GetBindingAction, key)   -- the base binding, not our override
-    if not ok or type(action) ~= "string" or action == "" then return nil end
-    local frame = (buttons or actionButtons())[action]
-    if frame then return frame end
-    return false, action
+    if ok and type(action) == "string" and action ~= "" then
+        local frame = buttons[action]
+        if frame then return frame end
+        return false, action
+    end
+    local plain = key:match("^[%u]+%-(.+)$") and key:gsub("^ALT%-", ""):gsub("^CTRL%-", ""):gsub("^SHIFT%-", "")
+    if plain and plain ~= key then
+        local okP, plainAction = pcall(GetBindingAction, plain)
+        if okP and type(plainAction) == "string" and plainAction ~= "" then
+            local frame = buttons[plainAction]
+            if frame then return frame end
+            return nil, nil, plainAction   -- the plain key's command is lost off-frame
+        end
+    end
+    return nil
 end
 
 -- The key's macro, or nil plus a reason.
@@ -146,8 +156,9 @@ function ClickCast.KeyMacro(row, buttons)
     local rez = ClickCast.REZ[row.spell]
     local alive, notAlive = rez and "dead" or "nodead", rez and "nodead" or "dead"
     local text = "/cast [@mouseover,help," .. alive .. ",party][@mouseover,help," .. alive .. ",raid] " .. cast
-    local fallback, command = ClickCast.Fallback(row.key, buttons)
+    local fallback, command, lostPlain = ClickCast.Fallback(row.key, buttons)
     if fallback == false then return nil, "key is bound to " .. command .. ", not an action button" end
+    if lostPlain then ClickCast.notes[row] = "off a frame it no longer does " .. lostPlain end
     if fallback then
         text = text .. "\n/click [@mouseover,noparty,noraid][@mouseover,noexists][@mouseover,nohelp][@mouseover,"
             .. notAlive .. "] " .. fallback
@@ -199,7 +210,9 @@ local installedAttrs, installedKeys = {}, {}
 local keyButtons = {}   -- KEY -> hidden secure button
 local owner              -- the override bindings' owner (one frame, cleared as a whole)
 ClickCast.problems = {}
+ClickCast.notes = {}     -- [row] = a non-blocking remark for the options
 ClickCast.pending = false
+ClickCast.onApplied = nil   -- set by the options page: repaint after each Apply
 
 local function same(a, b)
     for k, v in pairs(a) do if b[k] ~= v then return false end end
@@ -227,6 +240,7 @@ end
 function ClickCast.Apply()
     if InCombatLockdown() then return false end
     ClickCast.pending = false
+    ClickCast.notes = {}
     local attrs, keys, problems = ClickCast.Desired(ClickCast.Rows())
     ClickCast.problems = problems
     local children = GRF.Header and GRF.Header.children or {}
@@ -246,14 +260,24 @@ function ClickCast.Apply()
     if not same(keys, installedKeys) then
         owner = owner or CreateFrame("Frame", "GlassRaidFramesKeyOwner", UIParent)
         ClearOverrideBindings(owner)
+        local bound = {}
         for key, text in pairs(keys) do
             local b = keyButton(key)
             b:SetAttribute("macrotext", text)
             local ok, err = pcall(SetOverrideBindingClick, owner, true, key, b:GetName())
-            if not ok then API.Fail("bind " .. key, err) end
+            if ok then
+                bound[key] = text
+            else
+                -- Not recorded as installed, so the next reconciliation retries it.
+                API.Fail("bind " .. key, err)
+                for _, row in ipairs(ClickCast.Rows()) do
+                    if row.key == key then problems[row] = "the client refused this key" end
+                end
+            end
         end
-        installedKeys = keys
+        installedKeys = bound
     end
+    if ClickCast.onApplied then pcall(ClickCast.onApplied) end
     return true
 end
 
@@ -273,11 +297,14 @@ API.RegisterEvents(watcher, { "SPELLS_CHANGED", "UPDATE_BINDINGS" })
 -- Editing (the options call these; each re-applies)
 --------------------------------------------------------------------------------
 
--- Add or replace the row for a binding; returns the row.
+-- Add or replace the row for a binding; returns the row. With no spell (a
+-- freshly captured binding), an existing row is returned untouched: capturing
+-- a binding twice must never erase its spell.
 function ClickCast.Set(bind, isMouse, spell, pinned)
     local rows = ClickCast.Rows()
     for _, row in ipairs(rows) do
         if (isMouse and row.mouse == bind) or (not isMouse and row.key == bind) then
+            if spell == nil then return row end
             row.spell, row.pinned = spell, pinned or nil
             ClickCast.Request()
             return row
@@ -303,6 +330,7 @@ end
 function ClickCast.Warnings(row)
     local out = {}
     if ClickCast.problems[row] then out[#out + 1] = ClickCast.problems[row] end
+    if ClickCast.notes[row] then out[#out + 1] = ClickCast.notes[row] end
     if row.mouse then
         local ok, mod = pcall(GetModifiedClick, "SELFCAST")
         if ok and type(mod) == "string" and mod ~= "NONE" and ClickCast.UsesModifier(row, mod) then

@@ -31,26 +31,8 @@ local MODIFIER_KEYS = { LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true
                         LMETA = true, RMETA = true }
 local ROLE_NAMES = { HEALER = "Healer", CASTER = "Caster", MELEE = "Melee", TANK = "Tank" }
 
-local function label(parent, text, template)
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
-    fs:SetJustifyH("LEFT")
-    fs:SetText(text)
-    return fs
-end
-
-local function button(parent, text, width, onClick)
-    local b, templated = API.SafeFrame("Button", parent, "UIPanelButtonTemplate", "Text")
-    b:SetSize(width, 22)
-    if not templated then
-        local bg = b:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints(b)
-        bg:SetColorTexture(0.2, 0.2, 0.25, 0.9)
-        b:SetNormalFontObject("GameFontHighlight")
-    end
-    b:SetText(text)
-    b:SetScript("OnClick", onClick)
-    return b
-end
+local label = function(...) return GRF.Options.Label(...) end
+local button = function(...) return GRF.Options.Button(...) end
 
 -- "Shift + Left click" / "Shift-R key", in the player's words.
 function CCO.BindingText(row)
@@ -69,33 +51,25 @@ end
 
 --------------------------------------------------------------------------------
 -- Ranks: the spellbook holds every rank as its own item (measured), though
--- Blizzard's UI shows only the top one. Items are grouped by the client's own
--- (localized) name at runtime: nothing is compared against a stored name.
+-- Blizzard's UI shows only the top one. Learned spells only (API.SpellBookSpells
+-- skips future ones), grouped by the client's own (localized) name at runtime:
+-- nothing is compared against a stored name. One spellbook pass per refresh.
 --------------------------------------------------------------------------------
 
+local rankMap   -- name -> { spellID, ... } (lowest rank first), rebuilt per refresh
+
+local function buildRankMap()
+    rankMap = {}
+    for _, s in ipairs(API.SpellBookSpells()) do
+        rankMap[s.name] = rankMap[s.name] or {}
+        table.insert(rankMap[s.name], s.spellID)
+    end
+end
+
 function CCO.Ranks(spellID)
-    local okN, name = pcall(C_Spell.GetSpellName, spellID)
-    if not (okN and type(name) == "string") then return {} end
-    local found = {}
-    local SB = rawget(_G, "C_SpellBook")
-    if not (SB and SB.GetNumSpellBookSkillLines and SB.GetSpellBookSkillLineInfo and SB.GetSpellBookItemInfo) then
-        return {}   -- no spellbook API: no rank choice, the row still works (highest rank)
-    end
-    local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
-    local okC, n = pcall(SB.GetNumSpellBookSkillLines)
-    if not (okC and type(n) == "number") then return {} end
-    for line = 1, n do
-        local okL, li = pcall(SB.GetSpellBookSkillLineInfo, line)
-        if okL and type(li) == "table" and li.itemIndexOffset and li.numSpellBookItems then
-            for i = li.itemIndexOffset + 1, li.itemIndexOffset + li.numSpellBookItems do
-                local okB, item = pcall(SB.GetSpellBookItemInfo, i, bank)
-                if okB and type(item) == "table" and item.name == name and item.spellID then
-                    found[#found + 1] = item.spellID
-                end
-            end
-        end
-    end
-    return found   -- spellbook order: lowest rank first
+    if not rankMap then buildRankMap() end
+    local name = API.SpellName(spellID)
+    return (name and rankMap[name]) or {}
 end
 
 -- Next rank choice: highest (unpinned) -> rank 1 -> rank 2 ... -> highest.
@@ -117,8 +91,7 @@ end
 local function rankText(row)
     if not row.spell then return "" end
     if not row.pinned then return "highest rank" end
-    local ok, sub = pcall(C_Spell.GetSpellSubtext, row.spell)
-    return (ok and type(sub) == "string" and sub ~= "") and sub or "pinned"
+    return API.SpellSubtext(row.spell) or "pinned"
 end
 
 --------------------------------------------------------------------------------
@@ -183,10 +156,8 @@ local function paintRow(r, row)
     r.row = row
     r.bind:SetText(CCO.BindingText(row))
     if row.spell then
-        local okN, name = pcall(C_Spell.GetSpellName, row.spell)
-        local okT, tex = pcall(C_Spell.GetSpellTexture, row.spell)
-        r.spell:SetText((okN and name) or ("spell " .. row.spell))
-        r.slot.icon:SetTexture(okT and tex or nil)
+        r.spell:SetText(API.SpellName(row.spell) or ("spell " .. row.spell))
+        r.slot.icon:SetTexture(API.SpellTexture(row.spell))
     else
         r.spell:SetText("|cff80ff80drag a spell here|r")
         r.slot.icon:SetTexture(nil)
@@ -237,10 +208,8 @@ local function mouseoverCastOn()
 end
 
 local function blizzardText()
-    local CB = rawget(_G, "C_ClickBindings")
-    if not (CB and CB.GetProfileInfo) then return "" end
-    local ok, profile = pcall(CB.GetProfileInfo)
-    if not (ok and type(profile) == "table") then return "" end
+    local profile = API.ClickBindingProfile()
+    if not profile then return "" end
     local lines, target = {}, false
     local T = Enum and Enum.ClickBindingType or {}
     local I = Enum and Enum.ClickBindingInteraction or {}
@@ -270,6 +239,7 @@ end
 
 function CCO.Refresh()
     if not page.built then return end
+    rankMap = nil   -- the spellbook may have changed: one fresh pass
     header:SetText("Bindings for |cffffffff" .. (ROLE_NAMES[GRF.role] or "?") .. "|r (this character)")
     status:SetText(GRF.ClickCast.pending and "|cffffd040Changes apply when combat ends.|r" or "")
     mouseoverWarn:SetShown(mouseoverCastOn())
@@ -338,16 +308,18 @@ page:SetScript("OnShow", function(self)
     CCO.Refresh()
 end)
 
--- Registered under the main page, once that exists (PLAYER_LOGIN, after Options.lua).
-local reg = CreateFrame("Frame")
-API.RegisterEvents(reg, { "PLAYER_LOGIN" })
-reg:SetScript("OnEvent", function()
-    local parent = GRF.Options and GRF.Options.category
-    if parent and Settings and Settings.RegisterCanvasLayoutSubcategory then
-        local ok, err = pcall(Settings.RegisterCanvasLayoutSubcategory, parent, page, page.name)
-        if not ok then API.Fail("click-casting page", err) end
+-- Registered by Options.lua, right after the main page (in order).
+function CCO.Register(parent)
+    if not (parent and Settings and Settings.RegisterCanvasLayoutSubcategory) then
+        API.Fail("click-casting page", "no parent category or no Settings subcategory API")
+        return
     end
-end)
+    local ok, err = pcall(Settings.RegisterCanvasLayoutSubcategory, parent, page, page.name)
+    if not ok then API.Fail("click-casting page", err) end
+end
 
-CCO._test = { page = page, rows = rows, capture = function() return capture end,
+-- Repaint after every reconciliation (a queued one lands after combat).
+GRF.ClickCast.onApplied = function() if page:IsShown() then CCO.Refresh() end end
+
+CCO._test = { page = page, rows = rows, capture = function() return capture end, status = function() return status end,
               blizzList = function() return blizzList end, mouseoverWarn = function() return mouseoverWarn end }

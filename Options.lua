@@ -38,12 +38,14 @@ local CHECK_ART = {
 }
 local RADIO_ART = "Interface\\Buttons\\UI-RadioButton"   -- 4 cells: normal, checked, highlight, pushed
 
-local function label(text, template)
-    local fs = content:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+-- Shared with the Click-casting page (one copy of the fallback styling).
+function Options.Label(parent, text, template)
+    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
     fs:SetJustifyH("LEFT")
     fs:SetText(text)
     return fs
 end
+local function label(text, template) return Options.Label(content, text, template) end
 
 local col = { x = 16, y = -16 }
 local function place(region, height, indent)
@@ -63,8 +65,8 @@ local function note(text)
     return fs
 end
 
-local function button(text, width, onClick)
-    local b, templated = API.SafeFrame("Button", content, "UIPanelButtonTemplate", "Text")
+function Options.Button(parent, text, width, onClick)
+    local b, templated = API.SafeFrame("Button", parent, "UIPanelButtonTemplate", "Text")
     b:SetSize(width, 22)
     if not templated then
         local bg = b:CreateTexture(nil, "BACKGROUND")
@@ -76,6 +78,7 @@ local function button(text, width, onClick)
     b:SetScript("OnClick", onClick)
     return b
 end
+local function button(text, width, onClick) return Options.Button(content, text, width, onClick) end
 
 local function checkButton(text, radio)
     local cb, templated = API.SafeFrame("CheckButton", content, radio and "UIRadioButtonTemplate" or "UICheckButtonTemplate", "text")
@@ -212,7 +215,10 @@ local function register()
     if category or not (Settings and Settings.RegisterCanvasLayoutCategory) then return end
     category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
     Settings.RegisterAddOnCategory(category)
-    Options.category = category   -- the Click-casting page registers under it
+    Options.category = category
+    -- The Click-casting page, under this one: registered here, in order,
+    -- rather than by its own PLAYER_LOGIN handler (no ordering between frames).
+    if GRF.ClickCastOptions then GRF.ClickCastOptions.Register(category) end
 end
 
 -- Open the panel; false when the Settings framework can't.

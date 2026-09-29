@@ -96,6 +96,60 @@ function API.SafeFrame(ftype, parent, template, proof)
     return CreateFrame(ftype, nil, parent), false
 end
 
+-- A spell's localized name / rank text from its ID, or nil (unknown, secret
+-- or empty). Every name the addon shows or casts comes through here.
+local function plainString(fn, ...)
+    if not fn then return nil end
+    local ok, v = pcall(fn, ...)
+    if ok and type(v) == "string" and v ~= "" and not API.IsSecret(v) then return v end
+    return nil
+end
+function API.SpellName(id) return plainString(C_Spell and C_Spell.GetSpellName, id) end
+function API.SpellSubtext(id) return plainString(C_Spell and C_Spell.GetSpellSubtext, id) end
+function API.SpellTexture(id)
+    local ok, tex = pcall(C_Spell.GetSpellTexture, id)
+    if ok and not API.IsSecret(tex) then return tex end
+    return nil
+end
+
+-- Every LEARNED, active spell in the player's spellbook, as { spellID, name }
+-- in spellbook order (lowest rank first). Skips future spells, passives and
+-- off-spec entries, as Blizzard's own spellbook does
+-- (Blizzard_PlayerSpellsFrame.lua). Empty when the API is absent.
+function API.SpellBookSpells()
+    local out = {}
+    local SB = rawget(_G, "C_SpellBook")
+    if not (SB and SB.GetNumSpellBookSkillLines and SB.GetSpellBookSkillLineInfo and SB.GetSpellBookItemInfo) then
+        return out
+    end
+    local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
+    local future = Enum and Enum.SpellBookItemType and Enum.SpellBookItemType.FutureSpell
+    local okC, n = pcall(SB.GetNumSpellBookSkillLines)
+    if not (okC and type(n) == "number") then return out end
+    for line = 1, n do
+        local okL, li = pcall(SB.GetSpellBookSkillLineInfo, line)
+        if okL and type(li) == "table" and li.itemIndexOffset and li.numSpellBookItems then
+            for i = li.itemIndexOffset + 1, li.itemIndexOffset + li.numSpellBookItems do
+                local okB, item = pcall(SB.GetSpellBookItemInfo, i, bank)
+                if okB and type(item) == "table" and item.spellID and type(item.name) == "string"
+                    and (future == nil or item.itemType ~= future) and not item.isPassive and not item.isOffSpec then
+                    out[#out + 1] = { spellID = item.spellID, name = item.name }
+                end
+            end
+        end
+    end
+    return out
+end
+
+-- Blizzard's click-binding profile (a list), or nil when absent.
+function API.ClickBindingProfile()
+    local CB = rawget(_G, "C_ClickBindings")
+    if not (CB and CB.GetProfileInfo) then return nil end
+    local ok, profile = pcall(CB.GetProfileInfo)
+    if ok and type(profile) == "table" then return profile end
+    return nil
+end
+
 -- Fire a callback event on Retail's EventRegistry (usable on 70009, probe
 -- item 9) for other addons; false when it's absent. Never throws.
 function API.TriggerEvent(event, ...)
