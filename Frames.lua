@@ -31,6 +31,7 @@ Frames.HEAL = { 0.35, 0.95, 0.55, 0.45 }
 Frames.TARGET = { 1, 0.35, 0.5, 1 }
 Frames.OFFLINE = { 0.45, 0.45, 0.45 }
 Frames.FALLBACK = { 0.35, 0.8, 0.45 }   -- no readable class
+Frames.PET = { 0.3, 0.85, 0.4 }         -- pets: one colour, as Blizzard's frames (their creature class misleads)
 
 -- Roles come back on Forever, but everyone is DAMAGER unless assigned
 -- (measured): only tanks and healers get an icon, so it means something.
@@ -204,6 +205,7 @@ Engine.SetPainter("name", function(b, u)
 end)
 
 local function classColor(u)
+    if plain(UnitIsPlayer, u) == false then return Frames.PET[1], Frames.PET[2], Frames.PET[3] end
     local _, class = UnitClass(u)
     local r, g, bl = API.ClassColor(class)
     if r then return r, g, bl end

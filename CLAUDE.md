@@ -21,7 +21,7 @@ a new idiom.
 - **Decursive-style dispelling.** A small box on each frame lights up in the colour of the
   mouse button that cures it. Clicking the box casts the cure, and a sound plays when there is
   something to dispel.
-- **Streamlined.** No Cell module zoo, layouts/profiles tree, Spotlight/NPC/Pet frames,
+- **Streamlined.** No Cell module zoo, layouts/profiles tree, Spotlight/NPC frames,
   import/export or raid-debuff database. Mouse-wheel bindings are out.
 - **Keyboard hover-casting is in.** Keys pressed while hovering a frame are the owner's main
   healing binds (keys 1–8, Shift-R to resurrect, pinned spell ranks, from their Cell data).
@@ -112,7 +112,7 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   (`GlassRaidFramesCharDB.profiles[role].bindings`), covering mouse clicks on our frames and
   keyboard keys while hovering. Rows are `{key = "SHIFT-R"}` or `{mouse = "shift-1"}` plus
   `{spell = ID, pinned = true|nil}`: spells by ID, names resolved at apply time.
-  - **Mouse rows** are attributes on the 40 header children (`<alt-ctrl-shift->type<N>` =
+  - **Mouse rows** are attributes on every header child, group and pet (`Header.AllChildren`), (`<alt-ctrl-shift->type<N>` =
     `spell`). A pinned rank is **its own spell ID** (a numeric `spell` keeps the rank,
     measured); unpinned uses the bare localized name (the highest rank). Blizzard's Click Cast
     Bindings act first on the same click (Forever's `SecureUnitButton_OnClick`).
@@ -176,16 +176,21 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   (`Frames.ShortName`), as Cell does: Forever's surnames only got a centred name cut short. A
   secret name (grouped) can't be split in Lua, so it goes to `SetText` whole. Dead/Offline is
   small in the top-right corner.
-- **Pets** (#13): a `SecureGroupPetHeaderTemplate` (`Header.petHeader`) under the grid.
-  - Rows of `PETS_PER_ROW` 8, tiles at `PET_HEIGHT` 60% of the tile height.
-  - 20 children precreated and dressed like the rest (`Header.petChildren`).
-  - The header picks `pet`/`partypetN`/`raidpetN` itself (Forever's `GetPetUnit`).
-  - Shown per role (`profiles[role].showPets`, off by default; `/grf pets`, an options
-    checkbox), toggled out of combat.
-  - Point LEFT: child1 centres on the header's height, so `ApplySize` sizes the header too.
-  - Mouse bindings reach pet tiles (`Header.AllChildren`). Hover keys don't target pets,
-    because `[party]`/`[raid]` exclude them; they fall back safely.
-  - EllesmereUI ships this template on Forever; we haven't measured it in game.
+- **Pets** (#13): a `SecureGroupPetHeaderTemplate` (`Header.petHeader`, **measured working in
+  game**) in its own container (`Header.petContainer`).
+  - **By default, the column after the last group in use** (`Header.LastColumn`; owner: "dynamic,
+    but always a column of its own"). It's anchored to the grid, so it follows it, and is
+    re-placed out of combat on `GROUP_ROSTER_UPDATE`.
+  - Once moved (unlock mode's second mover), its own saved spot per role
+    (`profiles[role].petPos`); reset forgets it.
+  - Columns of 5, exactly `PET_COUNT` 20 precreated and dressed (`Header.petChildren`). Tiles
+    are `PET_HEIGHT` 60% tall, never under `MIN_H`.
+  - Shown per role (`showPets`, off by default); follows "show solo".
+  - When hidden, its children release their units, and they re-sync when shown.
+  - Pets get a fixed colour (`Frames.PET`).
+  - The announced rectangle covers the pets when they're shown.
+  - Mouse bindings reach pet tiles (`Header.AllChildren`). Hover keys don't target pets
+    (`[party]`/`[raid]`).
 - **Tile size per role** (`profiles[role].size`, `/grf size`, width and height sliders on the
   main page). The default is **82×58** (Cell's look, measured side by side), and
   `GlassRaidFrames.xml` must match `Header.DEFAULT_W/H` (`test_toc`).

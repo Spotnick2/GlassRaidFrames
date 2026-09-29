@@ -185,7 +185,10 @@ function Settings.SetShowPets(on)
     local prof = GRF.Profile()
     if not prof then return false end
     prof.showPets = on == true or nil
-    whenOutOfCombat("pets", GRF.Header.ApplyPets)
+    whenOutOfCombat("pets", function()
+        GRF.Header.ApplyPets()
+        if GRF.Movers.IsUnlocked() then GRF.Movers.Unlock() end   -- the pet mover follows
+    end)
     return true
 end
 

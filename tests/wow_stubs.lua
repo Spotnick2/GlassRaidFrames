@@ -666,9 +666,17 @@ local function petUnits(h)
         for _, e in ipairs(byIndex) do list[#list + 1] = e[2] end
         return list
     end
-    if (a.showPlayer or a.showSolo) and WoW.units.pet then list[#list + 1] = "pet" end
+    local grouped = false
+    for i = 1, 4 do if WoW.units["party" .. i] then grouped = true end end
+    if not grouped then
+        -- Solo: only with showSolo (SecureGroupPetHeader_Update's solo branch).
+        if a.showSolo and WoW.units.pet then list[1] = "pet" end
+        return list
+    end
+    if not a.showParty then return list end
+    if a.showPlayer and WoW.units.pet then list[#list + 1] = "pet" end
     for i = 1, 4 do
-        if a.showParty and WoW.units["partypet" .. i] then list[#list + 1] = "partypet" .. i end
+        if WoW.units["partypet" .. i] then list[#list + 1] = "partypet" .. i end
     end
     return list
 end
