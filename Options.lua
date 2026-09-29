@@ -141,8 +141,12 @@ local SOURCE_TEXT = { talents = "from your talents", class = "your class default
 local function closeSettings()
     -- Through the panel's own Close (it commits or prompts for other pages'
     -- changes), not a bare hide: the mover would sit behind the window.
+    -- Close(true) = skipTransitionBackToOpeningPanel: plain Close() goes back
+    -- to the Game Menu, whose Esc handlers call the protected SpellStopCasting,
+    -- which the client then blames on us (ADDON_ACTION_FORBIDDEN, measured in
+    -- game; Forever's Blizzard_SettingsPanel.lua ExitWithCommit).
     local sp = rawget(_G, "SettingsPanel")
-    if sp and type(sp.Close) == "function" then pcall(sp.Close, sp)
+    if sp and type(sp.Close) == "function" then pcall(sp.Close, sp, true)
     elseif sp and rawget(_G, "HideUIPanel") then pcall(HideUIPanel, sp) end
 end
 
@@ -168,6 +172,7 @@ local function build()
         if S.Unlock() then closeSettings() end
     end)
     place(unlock, 0, 4)
+    Options._test.unlock = unlock
     local reset = button("Reset position", 160, S.ResetPosition)
     reset:SetPoint("LEFT", unlock, "RIGHT", 8, 0)
     col.y = col.y - 30

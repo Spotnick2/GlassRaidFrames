@@ -164,6 +164,16 @@ local solo = O.controls.solo
 solo:SetChecked(true); solo._scripts.OnClick(solo)
 eq(GRF.db.showSolo, true, "the solo checkbox saves")
 eq(GRF.Header.headers[1]:GetAttribute("showSolo"), true, "and applies")
+-- Unlock closes the Settings window WITHOUT going back to the Game Menu:
+-- plain Close() takes that path, which calls the protected SpellStopCasting
+-- and got ADDON_ACTION_FORBIDDEN blamed on us in game.
+local closedWith = "not called"
+local sp = CreateFrame("Frame", "SettingsPanel", UIParent)
+rawset(sp, "Close", function(_, skip) closedWith = skip end)
+O.unlock._scripts.OnClick(O.unlock)
+eq(closedWith, true, "Unlock closes Settings with skipTransitionBackToOpeningPanel")
+check(GRF.Movers.IsUnlocked(), "and unlocks")
+GRF.Movers.Lock()
 eq(next(GRF.paintFailures), nil, "no failures")
 
 done("test_role")
