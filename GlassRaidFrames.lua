@@ -149,13 +149,18 @@ function Settings.SetSize(w, h)
         local cw, ch = GRF.Header.TileSize()
         prof.size = { w = w or cw, h = h or ch }
     end
+    -- Silent when deferred: a slider dragged in combat would print on every tick.
     whenOutOfCombat("size", function()
-        -- The container is anchored by its centre, so the grid keeps it.
         if GRF.Header.ApplySize() then
+            -- A saved spot keeps its centre (the container is centre-anchored),
+            -- but a role still on its default is placed FROM the grid's size
+            -- (the side default hugs the screen's left edge): re-place it.
+            local prof = GRF.Profile()
+            if not (prof and prof.pos) then GRF.Header.SetPosition(GRF.Header.PositionOf()) end
             if GRF.Movers.IsUnlocked() then GRF.Movers.Unlock() end   -- the mover follows the new size
             GRF.Announce()
         end
-    end)
+    end, false)
     return true
 end
 
@@ -203,12 +208,17 @@ local function slash(msg)
         if arg ~= "" and not Settings.SetRole(arg) then say("roles: auto, healer, caster, melee, tank") end
         say(roleLine())
     elseif cmd == "size" then
-        local w, h = (msg or ""):match("^%s*%S+%s+(%d+)%s+(%d+)")
-        if (msg or ""):lower():match("^%s*size%s+reset") then
+        local rest = (msg or ""):match("^%s*%S+%s*(.-)%s*$") or ""
+        local w, h = rest:match("^(%d+)%s+(%d+)$")
+        if not w then w = rest:match("^(%d+)$") end
+        if rest:lower() == "reset" then
             Settings.SetSize(nil, nil)
         elseif w then
-            Settings.SetSize(tonumber(w), tonumber(h))
+            Settings.SetSize(tonumber(w), tonumber(h))   -- one number: the width only
+        elseif rest ~= "" then
+            say("usage: /grf size <width> [<height>] | reset")
         end
+        if InCombatLockdown() and rest ~= "" then say("the frames resize when combat ends") end
         local tw, th = GRF.Header.TileSize()
         say("tile size for " .. tostring(GRF.role):lower() .. ": " .. tw .. " x " .. th
             .. "  (/grf size <width> <height>, /grf size reset)")

@@ -223,10 +223,24 @@ local function build()
     header("Size")
     note("Each frame's size, for the current role. The frames resize out of combat.")
     local H = GRF.Header
+    -- A drag fires a value change per step: resize once it pauses (0.1 s), not
+    -- 40 tiles plus an announcement to other addons on every tick.
+    local want, scheduled = {}, false
+    local function later(w, h)
+        if w then want.w = w end
+        if h then want.h = h end
+        if scheduled then return end
+        scheduled = true
+        C_Timer.After(0.1, function()
+            scheduled = false
+            S.SetSize(want.w, want.h)
+            want = {}
+        end)
+    end
     controls.width = slider("Width", H.MIN_W, H.MAX_W, function() return (H.TileSize()) end,
-        function(v) S.SetSize(v, select(2, H.TileSize())) end)
+        function(v) later(v, nil) end)
     controls.height = slider("Height", H.MIN_H, H.MAX_H, function() return select(2, H.TileSize()) end,
-        function(v) S.SetSize((H.TileSize()), v) end)
+        function(v) later(nil, v) end)
     place(button("Default size", 160, function()
         S.SetSize(nil, nil)
         controls.refreshAll()

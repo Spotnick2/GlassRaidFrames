@@ -94,11 +94,62 @@ GRF.Settings.SetSize = function(...) saves = saves + 1; return realSet(...) end
 O.panel._scripts.OnShow(O.panel)
 eq(saves, 0, "opening the panel doesn't save a size")
 GRF.Settings.SetSize = realSet
-ws:SetValue(110)
-eq(child(1):GetWidth(), 110, "dragging the width slider resizes")
+-- A drag is many value changes: one resize once it pauses (code review).
+local applies = 0
+local realApply = H.ApplySize
+H.ApplySize = function(...) applies = applies + 1; return realApply(...) end
+for v = 81, 110 do ws:SetValue(v) end
+eq(child(1):GetWidth(), 80, "nothing resizes mid-drag")
+WoW.flushTimers()
+eq(child(1):GetWidth(), 110, "the drag's last value applies once it pauses")
+eq(applies, 1, "one resize for the whole drag")
+H.ApplySize = realApply
 hs:SetValue(48)
+WoW.flushTimers()
 eq(child(1):GetHeight(), 48, "the height slider too")
 eq(child(1):GetWidth(), 110, "keeping the width")
+
+-- Each group header takes the new width: it centres its first child on its
+-- OWN width (SecureGroupHeaders.lua:202), so a stale one shifts the column.
+for g = 1, 8 do eq(H.headers[g]._width, 110, "header " .. g .. " takes the tile width") end
+
+-- In combat a slider drag is silent (it used to print on every tick).
+newChat()
+WoW.combat = true
+for v = 90, 100 do ws:SetValue(v) end
+WoW.flushTimers()
+local spam = 0
+for _, line in ipairs(newChat()) do if line:find("combat ends") then spam = spam + 1 end end
+eq(spam, 0, "no chat line per slider tick in combat")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+eq(child(1):GetWidth(), 100, "applied when combat ends")
+
+-- A role still on its side default is re-placed from the new grid size (the
+-- side default hugs the screen's left edge); a saved spot keeps its centre.
+GRF.Settings.SetRole("melee")
+eq(GRF.Profile().pos, nil, "melee has no saved position")
+SlashCmdList.GLASSRAIDFRAMES("size 120 50")
+local mp = gridPoint()
+eq(mp[4], select(1, H.DefaultPosition("MELEE")), "the side default is recomputed for the wider grid")
+check(mp[4] - select(1, H.Size()) / 2 >= -1365 / 2, "and the grid stays on screen")
+
+-- One tile's relayout failing doesn't stop the resize.
+child(5).relayout = function() error("boom") end
+SlashCmdList.GLASSRAIDFRAMES("size 90 50")
+eq(child(40):GetWidth(), 90, "the other tiles still resize")
+eq(H.container._width, 8 * 90 + 7 * H.GAP, "and the container")
+check(GRF.paintFailures.relayout, "the failure is recorded")
+GRF.paintFailures.relayout = nil
+child(5).relayout = GRF.Frames.Layout
+
+-- /grf size with one number sets the width; nonsense says how.
+SlashCmdList.GLASSRAIDFRAMES("size 95")
+eq(child(1):GetWidth(), 95, "one number: the width")
+eq(child(1):GetHeight(), 50, "the height is kept")
+newChat()
+SlashCmdList.GLASSRAIDFRAMES("size 80x60")
+check(newChat()[1]:find("usage"), "malformed input prints the usage")
 
 eq(next(GRF.paintFailures), nil, "no failures")
 done("test_size")

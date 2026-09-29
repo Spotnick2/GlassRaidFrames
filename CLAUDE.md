@@ -167,8 +167,17 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
     height via `Frames.NameSize`, the room Cell's name takes),
     and resets the column offsets and the container. The header chains each child to the
     previous one (Forever's `SecureGroupHeaders.lua:211`), so columns re-flow on their own.
-  - The container is centre-anchored, so the grid keeps its centre.
-  - Sizes are clamped to `Header.MIN/MAX`. It re-applies on role change.
+  - **Each header's width is set too.** A header centres its first child on its own width
+    (`SecureGroupHeaders.lua:202`) and only sets that width in its own layout pass, so a stale
+    width shifts the column.
+  - A saved spot keeps its centre (the container is centre-anchored). A role still on its
+    default is re-placed, because the side default is computed from the grid's width.
+  - Each tile's relayout runs under `pcall`, so one failure never half-resizes the grid.
+  - Sizes are clamped to `Header.MIN/MAX` (height ≥ 36, below which the debuff row covers the
+    name). It re-applies on role change.
+  - The sliders save at once but resize when the drag pauses (0.1 s), silently in combat.
+  - Known: `Glass.lua`'s font registry keeps the names' original size. `Glass.SetFont` (unused
+    here) would reset them until the next resize.
   - `Glass.lua` stays the pinned copy: the name font is re-set with the same file.
 - **`Engine.lua`**: who gets painted and when, adapted from GlassUnitFrames' engine for frames
   whose unit changes:

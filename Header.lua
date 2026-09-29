@@ -28,7 +28,7 @@ Header.PER_GROUP = 5
 -- (profiles[role].size), within Header.MIN/MAX.
 Header.DEFAULT_W, Header.DEFAULT_H = 82, 58
 Header.MIN_W, Header.MAX_W = 50, 160
-Header.MIN_H, Header.MAX_H = 24, 100
+Header.MIN_H, Header.MAX_H = 36, 100   -- under 36 the 12px debuff row covers the name
 Header.GAP = 4
 Header.TEMPLATE = "GlassRaidFramesUnitTemplate"
 
@@ -76,9 +76,18 @@ function Header.ApplySize()
     local tw, th = Header.TileSize()
     for _, child in ipairs(Header.children) do
         child:SetSize(tw, th)
-        if child.relayout then child:relayout() end
+        -- One tile's relayout failing must not stop the rest of the resize.
+        if child.relayout then
+            local ok, err = pcall(child.relayout, child)
+            if not ok then API.Fail("relayout", err) end
+        end
     end
     for group, h in pairs(Header.headers) do
+        -- The header centres its first child on its OWN width (child1's TOP on
+        -- the header's TOP, SecureGroupHeaders.lua:202) and only sets that
+        -- width in its own layout pass: set it now, or every column sits half
+        -- the width change to the side until the next roster update.
+        h:SetWidth(tw)
         h:ClearAllPoints()
         h:SetPoint("TOPLEFT", c, "TOPLEFT", (group - 1) * (tw + Header.GAP), 0)
     end
@@ -154,7 +163,7 @@ local function newHeader(group, parent)
     h:SetAttribute("sortMethod", "INDEX")
     h:SetAttribute("maxColumns", 1)
     h:SetAttribute("unitsPerColumn", Header.PER_GROUP)
-    h:SetPoint("TOPLEFT", parent, "TOPLEFT", (group - 1) * (Header.DEFAULT_W + Header.GAP), 0)
+    h:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)   -- the column offset is ApplySize's (one formula)
     -- Precreate every child (a header only makes children while shown).
     h:SetAttribute("startingIndex", 1 - Header.PER_GROUP)
     h:Show()
