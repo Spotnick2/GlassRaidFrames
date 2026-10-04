@@ -125,6 +125,34 @@ trees is unmeasured.
 - **Decision:** auto role from the spec if these answer, with the manual `/grf role` override
   either way. Otherwise manual plus a class default.
 
+### 10. Buff and debuff indicators (gates `Indicators.lua`, issue #19)
+Only Renew, Power Word: Shield and Weakened Soul are needed. `/rprobe ind` opens a panel of
+labelled test containers (numbered like the items below) on yourself. `/rprobe ind party1`
+moves it to a party member, in combat too. Do each item out of combat, then in combat.
+- [ ] `/rprobe ind ids`: does every planned spell ID resolve to the right name and rank?
+      (A wrong or missing ID shows `nil`.)
+- [ ] **1.** Cast Renew and Shield. Does row 1 (`RAID_IN_COMBAT`, no IDs) show both, growing
+      left? Row 1b shows all your own buffs, for comparison. `/rprobe ind src` (out of combat)
+      prints, for each aura, whether `PLAYER|RAID_IN_COMBAT` keeps it (`IN`) or not (`out`).
+- [ ] **2.** Row 2 (your Renew) and 2b (anyone's Renew): icon, swipe and timer text show. If
+      your other priest can join: their Renew shows in 2b but **not** in 2.
+- [ ] **3.** Shield someone: does row 3's red square show for Weakened Soul? The chat line
+      `GetSpellAuraSecrecy(6788 …)` printed when the panel opens says whether the client
+      allows it (`NeverSecret` needed). `/rprobe ind src` shows Weakened Soul's `src`.
+- [ ] **4.** Row 4 (Renew + Shield IDs): both show, the row grows left, and closes up when one
+      ends.
+- [ ] **5.** `/rprobe ind reconf` (out of combat): row 2 now tracks Shield at a larger size,
+      row 2b stops showing. Again to undo. Any `FAIL` line?
+- [ ] **6.** Row 6: with both up, Shield covers Renew (swipe and text too). When Shield
+      ends, Renew shows.
+- [ ] **7.** `/rprobe fps` (baseline), `/rprobe ind cost`, `/rprobe fps` again. Note the build
+      time, button count, heap, and the two fps lines. Then spam heals for a minute and run
+      `/rprobe fps` once more.
+- [ ] **8.** If you can get a debuff you can dispel: does row 8 (`HARMFUL|RAID`) show it?
+- **Decisions:** item 1 decides whether "My heals" needs a spell list. Item 3 decides
+  whether a Weakened Soul indicator can ship. Items 4 and 6 decide icon rows and
+  single-icon priority. Item 7 decides the default indicator count.
+
 ### 7. Scale (gates the tile budget)
 - [ ] The `built … in … ms` line after `/rprobe build`.
 - [ ] `/rprobe fps` in a raid, out of combat and in combat, with debuffs going on and off.
