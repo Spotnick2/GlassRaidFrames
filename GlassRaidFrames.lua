@@ -315,8 +315,9 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         -- Talents arrive after load (PLAYER_TALENT_UPDATE at login, measured).
         GRF.roleWatcher = Role.Watch(function() evaluateRole(false) end, API.RegisterEvents)
     elseif event == "PLAYER_ENTERING_WORLD" then
-        -- arg1 = isInitialLogin: warn at a real login, never on /reload.
-        if arg1 and API.ClientBuild() ~= GRF.MEASURED_ON_BUILD then
+        -- arg1 = isInitialLogin: warn at a real login, never on /reload. Dev
+        -- copies only: re-measuring the client is a chore a player can't do.
+        if arg1 and API.IsDevBuild() and API.ClientBuild() ~= GRF.MEASURED_ON_BUILD then
             say("client build " .. API.ClientBuild() .. " is newer than the one this addon was measured on ("
                 .. GRF.MEASURED_ON_BUILD .. "). Things may misbehave until it is re-checked.")
         end

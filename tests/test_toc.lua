@@ -29,15 +29,15 @@ end
 -- on CI) must match the dump's documented events exactly.
 if WoW.dumpAvailable then
     local listed, n = {}, 0
-    for line in io.lines("tests/events-70009.txt") do
+    for line in io.lines("tests/events-70205.txt") do
         local name = line:match("^([A-Z][A-Z0-9_]+)%s*$")
         if name then listed[name] = true; n = n + 1 end
     end
     local missing, extra = {}, {}
     for e in pairs(WoW.KNOWN_EVENTS) do if not listed[e] then missing[#missing + 1] = e end end
     for e in pairs(listed) do if not WoW.KNOWN_EVENTS[e] then extra[#extra + 1] = e end end
-    eq(#missing, 0, "every dump event is in tests/events-70009.txt (regenerate it): " .. table.concat(missing, ","))
-    eq(#extra, 0, "no event in tests/events-70009.txt is missing from the dump: " .. table.concat(extra, ","))
+    eq(#missing, 0, "every dump event is in tests/events-70205.txt (regenerate it): " .. table.concat(missing, ","))
+    eq(#extra, 0, "no event in tests/events-70205.txt is missing from the dump: " .. table.concat(extra, ","))
     check(n > 1000, "the fixture holds the full event list (" .. n .. ")")
 end
 
@@ -54,7 +54,32 @@ do
     eq(tonumber(h), GRFH.DEFAULT_H, "GlassRaidFrames.xml height = Header.DEFAULT_H")
 end
 
-eq(GlassRaidFrames.MEASURED_ON_BUILD, "1.60.1.70009", "MEASURED_ON_BUILD")
+eq(GlassRaidFrames.MEASURED_ON_BUILD, "1.60.1.70205", "MEASURED_ON_BUILD")
+
+-- The packager replaces its version keyword in every shipped file, so a
+-- literal one in Lua would turn into the release tag (AltStable's bug).
+for _, f in ipairs(tocFiles()) do
+    check(not io.open(f):read("*a"):find("@project-version@", 1, true), "no literal version keyword in " .. f)
+end
+
+-- The newer-build warning is for dev copies only; a release stays quiet.
+local function warned(version, build)
+    WoW.reset()
+    WoW.addonVersion = version
+    local real = GetBuildInfo
+    GetBuildInfo = function() return "1.60.1", build, "Sep 23 2026", 16001 end
+    loadAddon()
+    GetBuildInfo = real
+    for _, line in ipairs(WoW.chat) do
+        if line:find("is newer than", 1, true) then return true end
+    end
+    return false
+end
+check(warned("dev", "99999"), "dev copy warns on a newer build")
+check(warned("@" .. "project-version" .. "@", "99999"), "unpackaged checkout warns on a newer build")
+check(warned(nil, "99999"), "unreadable version counts as dev")
+check(not warned("v1.2.0", "99999"), "release does not warn on a newer build")
+check(not warned("dev", "70205"), "no warning on the measured build")
 
 -- Every texture the material names exists in Media/.
 for size, S in pairs(GlassRaidFrames.Glass.SIZES) do

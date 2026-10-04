@@ -1,4 +1,4 @@
-# Event names documented in the 1.60.1.70009 API dump (forever-api-1.60.1.70009.md,
+# Event names documented in the 1.60.1.70205 API dump (forever-api-1.60.1.70205.md,
 # section "Documented events"). Generated; the stub validates RegisterEvent against it
 # when the dump itself is absent (CI). test_toc fails if it drifts from the dump.
 ACCOUNT_CHARACTER_CURRENCY_DATA_RECEIVED
@@ -1212,6 +1212,7 @@ PLAYER_MAP_CHANGED
 PLAYER_MAX_LEVEL_UPDATE
 PLAYER_MONEY
 PLAYER_MOUNT_DISPLAY_CHANGED
+PLAYER_PVP_FLAG_CHANGED
 PLAYER_PVP_KILLS_CHANGED
 PLAYER_PVP_RANK_CHANGED
 PLAYER_PVP_TALENT_UPDATE

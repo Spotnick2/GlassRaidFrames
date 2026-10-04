@@ -15,7 +15,7 @@
 --   so test_methods.lua can check each against the dump's widget methods.
 
 WoW = {}
-local DUMP = os.getenv("GLASSRF_API_DUMP") or "C:/Projects/References/forever-api-1.60.1.70009.md"
+local DUMP = os.getenv("GLASSRF_API_DUMP") or "C:/Projects/References/forever-api-1.60.1.70205.md"
 
 --------------------------------------------------------------------------------
 -- Secrets
@@ -62,8 +62,8 @@ do
     if not WoW.dumpAvailable then
         -- No dump (CI): the checked-in list generated from it, so validation
         -- stays exactly as strict. test_toc fails if the two ever drift.
-        local fixture = io.open("tests/events-70009.txt", "r")
-        assert(fixture, "tests/events-70009.txt missing: event validation needs the dump or the fixture")
+        local fixture = io.open("tests/events-70205.txt", "r")
+        assert(fixture, "tests/events-70205.txt missing: event validation needs the dump or the fixture")
         for line in fixture:lines() do
             local name = line:match("^([A-Z][A-Z0-9_]+)%s*$")
             if name then WoW.KNOWN_EVENTS[name] = true end
@@ -405,7 +405,7 @@ Enum = {
     UITextureSliceMode = { Stretched = 0, Tiled = 1 },
 }
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
-function GetBuildInfo() return "1.60.1", "70009", "Sep 23 2026", 16001 end
+function GetBuildInfo() return "1.60.1", "70205", "Sep 23 2026", 16001 end
 function InCombatLockdown() return WoW.combat end
 function IsShiftKeyDown() return WoW.shift end
 function IsAltKeyDown() return WoW.alt == true end
@@ -611,6 +611,11 @@ function Methods.Stop(ag) ag._stops = (ag._stops or 0) + 1 end
 C_AddOns = {
     IsAddOnLoaded = function(name) return WoW.loadedAddOns[name] == true, WoW.loadedAddOns[name] == true end,
     LoadAddOn = function(name) WoW.loadedAddOns[name] = true; return true end,
+    -- WoW.addonVersion is the TOC's Version field (nil = unreadable).
+    GetAddOnMetadata = function(name, field)
+        if name == "GlassRaidFrames" and field == "Version" then return WoW.addonVersion end
+        return nil
+    end,
 }
 
 -- Raid roster: WoW.raid = { [unit] = { index = n, subgroup = g } } while in a raid.

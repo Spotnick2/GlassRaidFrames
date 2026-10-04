@@ -52,6 +52,6 @@ local lines = newChat()
 check(lines[1] and lines[1]:find("no failures"), "/grf failures reports none")
 SlashCmdList.GLASSRAIDFRAMES("version")
 lines = newChat()
-check(lines[1] and lines[1]:find("1.60.1.70009", 1, true), "/grf version names the measured build")
+check(lines[1] and lines[1]:find("1.60.1.70205", 1, true), "/grf version names the measured build")
 
 done("test_boot")
