@@ -848,11 +848,15 @@ function WoW.applyUnitWatch()
     end
 end
 
+-- Client string alias (in the dump's _G walk); LibStub's version check uses it.
+strmatch = string.match
+
 WoW.reset()
 
 -- Strict globals: any read of an undefined global is an error, except the
 -- addon's own globals that are legitimately nil before first assignment.
-local allowNil = { GlassRaidFrames = true, GlassRaidFramesDB = true, GlassRaidFramesCharDB = true }
+-- LibStub: the embedded library's own loader reads _G.LibStub before creating it.
+local allowNil = { GlassRaidFrames = true, GlassRaidFramesDB = true, GlassRaidFramesCharDB = true, LibStub = true }
 setmetatable(_G, { __index = function(_, k)
     if allowNil[k] then return nil end
     error("read of undefined global '" .. tostring(k) .. "' (not stubbed: is it in the API dump?)", 2)

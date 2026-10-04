@@ -180,7 +180,7 @@ end
 
 -- After a resize (Header.ApplySize): the bar follows the tile's height, the
 -- name its size. Glass.Font registered the fonts; the same file is re-set at
--- the new size (Glass.lua is the pinned GlassUnitFrames copy: not changed).
+-- the new size (the material is LibGlass's: not changed here).
 function Frames.Layout(b)
     local h = b:GetHeight()
     if type(h) ~= "number" or h <= 0 then return end
