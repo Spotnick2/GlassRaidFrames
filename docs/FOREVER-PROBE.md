@@ -129,9 +129,11 @@ trees is unmeasured.
 Only Renew, Power Word: Shield and Weakened Soul are needed. `/rprobe ind` opens a panel of
 labelled test containers (numbered like the items below) on yourself. `/rprobe ind party1`
 moves it to a party member, in combat too. Do each item out of combat, then in combat.
-**Right after casting (within Renew's 15 s), run `/rprobe ind state`:** it logs which rows
-are lit and each aura's source and filters, so nothing has to be described by eye. Everything
-lands in `RaidProbeDB.log`; `/reload` writes it to `SavedVariables\RaidProbe.lua`.
+**Right after casting (within Renew's 15 s), run `/rprobe ind state`:** it logs each aura's
+source and filters, and tries to read which rows are lit. The client keeps the buttons' shown
+state secret even out of combat (second run), so those reads come back `unknown`: **which rows
+light up still needs a look (or a screenshot)**. Everything lands in `RaidProbeDB.log`;
+`/reload` writes it to `SavedVariables\RaidProbe.lua`.
 - [ ] `/rprobe ind ids`: does every planned spell ID resolve to the right name and rank?
       (A wrong or missing ID shows `nil`.)
 - [ ] **1.** Cast Renew and Shield. Does row 1 (`RAID_IN_COMBAT`, no IDs) show both, growing

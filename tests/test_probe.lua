@@ -96,7 +96,18 @@ eq(T.P.indUnit, "party1", "ind <unit> rebinds the panel")
 check(chatHas("RAID_IN_COMBAT=out"), "src reports which filters keep each aura")
 check(chatHas("cost: 40 tiles"), "cost reports its build")
 check(chatHas("state 6: slot 1 shown="), "state reports each stacked slot")
-check(chatHas("state 1: .* buttons shown"), "state reports each row group")
+check(chatHas("state 1: .* shown, .* hidden, .* unknown"), "state reports each row group")
+
+-- Codex review of #20: a secret shown state is unknown, never "hidden".
+local hots = T.P.indByKey.RP_IND_HOTS
+local frames = { { IsShown = function() return WoW.Secret("shown") end },
+                 { IsShown = function() return WoW.Secret("shown") end },
+                 { IsShown = function() return false end } }
+hots.GetAuraGroupFrameCount = function() return #frames end
+hots.GetAuraGroupFrame = function(_, _, i) return frames[i] end
+SlashCmdList.RAIDPROBE("ind state")
+check(chatHas("state 1: 3 buttons: 0 shown, 1 hidden, 2 unknown"), "secret reads count as unknown, a plain false as hidden")
+hots.GetAuraGroupFrameCount, hots.GetAuraGroupFrame = nil, nil
 
 -- The button look the client would apply (initializeFrame).
 local button = CreateFrame("Button", nil, UIParent)

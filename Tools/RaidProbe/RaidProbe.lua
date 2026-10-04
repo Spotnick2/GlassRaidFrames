@@ -1327,13 +1327,19 @@ local function indState()
     for _, r in ipairs(P.indRows) do
         local parts = {}
         if r.group then
+            -- A secret or failed read is unknown, never "hidden" (Codex review
+            -- of #20: secret IsShown read as 0 shown made a lit row look empty).
             local okN, n = pcall(r.c.GetAuraGroupFrameCount, r.c, r.group)
-            local lit = 0
+            local lit, hidden, unknown = 0, 0, 0
             for i = 1, (okN and type(n) == "number") and n or 0 do
                 local okF, f = pcall(r.c.GetAuraGroupFrame, r.c, r.group, i)
-                if okF and shownOf(f) == "true" then lit = lit + 1 end
+                local v = okF and shownOf(f) or "ERR"
+                if v == "true" then lit = lit + 1
+                elseif v == "false" then hidden = hidden + 1
+                else unknown = unknown + 1 end
             end
-            parts[1] = string.format("%s of %s buttons shown", lit, okN and show(n) or "ERR")
+            parts[1] = string.format("%s buttons: %d shown, %d hidden, %d unknown (secret or unreadable)",
+                okN and show(n) or "ERR", lit, hidden, unknown)
         else
             for i, key in ipairs(r.slots) do
                 local okF, f = pcall(r.c.GetAuraSlotFrame, r.c, key)
