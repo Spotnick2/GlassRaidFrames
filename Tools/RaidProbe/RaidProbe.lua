@@ -1088,6 +1088,7 @@ end
 -- Indicators (#19): what one tile's aura containers can show, measured with
 -- Renew, Power Word: Shield and Weakened Soul (what the owner can cast).
 --   /rprobe ind [unit]  a panel of labelled test containers on unit
+--   /rprobe ind state   out of combat: which rows are lit, plus src
 --   /rprobe ind src [u] out of combat: each aura's id, source, and which
 --                       filter strings let it through (no container involved)
 --   /rprobe ind reconf  out of combat: change filters, enable, size live
@@ -1197,7 +1198,7 @@ local function indPanel(unit)
     bg:SetColorTexture(0, 0, 0, 0.6)
     P.indTitle = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     P.indTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", 6, -6)
-    P.indPanel, P.indContainers, P.indByKey = panel, {}, {}
+    P.indPanel, P.indContainers, P.indByKey, P.indRows = panel, {}, {}, {}
 
     -- One labelled row: the label on the left, a holder frame (ours) on the
     -- right that buttons and the container anchor to (never to a container).
@@ -1226,6 +1227,7 @@ local function indPanel(unit)
         local holder = row(label)
         local c = container(key, holder)
         if not c then return end
+        P.indRows[#P.indRows + 1] = { label = label, c = c, group = key }
         try("AddAuraGroup " .. key, c.AddAuraGroup, c, key, filter, {
             maxFrameCount = 4,
             candidateFilters = include and { includeSpellIDs = include } or {},
@@ -1242,6 +1244,9 @@ local function indPanel(unit)
         local holder = row(label)
         local c = container(key, holder)
         if not c then return end
+        local keys = {}
+        for i, s in ipairs(slots) do keys[i] = s.key end
+        P.indRows[#P.indRows + 1] = { label = label, c = c, slots = keys }
         for i, s in ipairs(slots) do
             -- Slot 1 gets the highest level band: it covers the others.
             local level = panel:GetFrameLevel() + 10 + (#slots - i + 1) * 10
@@ -1305,6 +1310,37 @@ local function indSources(unit)
             say(okF and line or (kind .. " #" .. i .. ": fields secret (" .. tostring(line) .. ")"))
         end
         say(string.format("%s on %s: %d", kind, unit, n))
+    end
+end
+
+-- Which panel rows are lit right now, read from the client's own buttons
+-- (out of combat: in combat they are locked and the read is refused).
+local function shownOf(frame)
+    if not frame then return "none" end
+    local ok, v = pcall(frame.IsShown, frame)
+    if not ok then return "ERR" end
+    return show(v)
+end
+
+local function indState()
+    if not P.indPanel then say("run /rprobe ind first") return end
+    for _, r in ipairs(P.indRows) do
+        local parts = {}
+        if r.group then
+            local okN, n = pcall(r.c.GetAuraGroupFrameCount, r.c, r.group)
+            local lit = 0
+            for i = 1, (okN and type(n) == "number") and n or 0 do
+                local okF, f = pcall(r.c.GetAuraGroupFrame, r.c, r.group, i)
+                if okF and shownOf(f) == "true" then lit = lit + 1 end
+            end
+            parts[1] = string.format("%s of %s buttons shown", lit, okN and show(n) or "ERR")
+        else
+            for i, key in ipairs(r.slots) do
+                local okF, f = pcall(r.c.GetAuraSlotFrame, r.c, key)
+                parts[i] = "slot " .. i .. " shown=" .. (okF and shownOf(f) or "ERR")
+            end
+        end
+        say("state " .. r.label:match("^(%S+)") .. ": " .. table.concat(parts, ", "))
     end
 end
 
@@ -1393,7 +1429,10 @@ end
 
 local function indicators(arg)
     local sub, rest = (arg or ""):match("^(%S*)%s*(.-)$")
-    if sub == "src" then indSources(rest)
+    if sub == "src" then indSources(rest ~= "" and rest or P.indUnit)
+    elseif sub == "state" then
+        indState()
+        indSources(P.indUnit)
     elseif sub == "reconf" then
         if InCombatLockdown() then say("out of combat only") return end
         indReconf()
@@ -1428,6 +1467,7 @@ local HELP = {
     "permkey [fallback|group] - toggle: key 9 casts on @mouseover (fallback: else action button 9; group: group members only)",
     "enums - dump the enums the dispel box relies on",
     "ind [unit] - indicator test panel (Renew, Shield, Weakened Soul) on unit; again to switch unit",
+    "ind state - which panel rows are lit now, plus src (out of combat, right after casting)",
     "ind src [unit] - out of combat: each aura's id, source, and which filters keep it",
     "ind reconf - out of combat: change a slot's spells, size and enable live (again to undo)",
     "ind cost - 40 tiles x the planned default indicators (then /rprobe fps)",

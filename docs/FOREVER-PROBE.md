@@ -129,6 +129,9 @@ trees is unmeasured.
 Only Renew, Power Word: Shield and Weakened Soul are needed. `/rprobe ind` opens a panel of
 labelled test containers (numbered like the items below) on yourself. `/rprobe ind party1`
 moves it to a party member, in combat too. Do each item out of combat, then in combat.
+**Right after casting (within Renew's 15 s), run `/rprobe ind state`:** it logs which rows
+are lit and each aura's source and filters, so nothing has to be described by eye. Everything
+lands in `RaidProbeDB.log`; `/reload` writes it to `SavedVariables\RaidProbe.lua`.
 - [ ] `/rprobe ind ids`: does every planned spell ID resolve to the right name and rank?
       (A wrong or missing ID shows `nil`.)
 - [ ] **1.** Cast Renew and Shield. Does row 1 (`RAID_IN_COMBAT`, no IDs) show both, growing
@@ -405,3 +408,18 @@ moves it to a party member, in combat too. Do each item out of combat, then in c
 - Party→raid conversion in combat is still untested for both approaches.
 - The first run's party/raid double set (both shown in a raid) was before the probe hid the
   unused set. That mode switch hasn't been exercised yet.
+
+### 10. Indicators, first run (1.60.1.70205, 2026-10-04, priest, party of 2)
+
+- **`GetSpellAuraSecrecy` is `ContextuallySecret` for all six** planned spells (Renew, PW:S,
+  Weakened Soul, Power Infusion, Fear Ward, Thorns). A harmful aura on a friendly is matched by
+  ID only when `NeverSecret` (`CanApplyIdentityCandidateFilters`), so **Weakened Soul can't be
+  matched by ID**.
+- **Cost of the planned defaults is too high:** 40 tiles × 4 containers (3 groups + 1 slot) =
+  **1240 buttons, 398 ms to build, Lua heap +49.8 MB; 92.7 → 60.2 fps average, worst frame
+  21 → 49 ms**, idle. Groups pre-create 10 buttons each; defaults must lean on slots (1 button
+  each), with icon rows rare.
+- `ind reconf` (filters, slot size, enable) ran both ways with no failure.
+- `PLAYER|RAID_IN_COMBAT` excluded Power Word: Fortitude (right for a "my HoTs" filter).
+  Renew and Shield had expired before `src` ran: item 1 still open. Which rows lit wasn't
+  captured; `ind state` was added for the next run.

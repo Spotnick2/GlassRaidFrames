@@ -86,7 +86,7 @@ local function failures()
     return n
 end
 local before = failures()
-for _, cmd in ipairs({ "ind", "ind party1", "ind reconf", "ind reconf", "ind src", "ind src party1", "ind cost", "ind ids" }) do
+for _, cmd in ipairs({ "ind", "ind party1", "ind reconf", "ind reconf", "ind src", "ind src party1", "ind state", "ind cost", "ind ids" }) do
     local ok, err = pcall(SlashCmdList.RAIDPROBE, cmd)
     check(ok, "/rprobe " .. cmd .. " runs: " .. tostring(err))
 end
@@ -95,6 +95,8 @@ eq(#T.P.indContainers, 8, "the panel has its 8 test containers")
 eq(T.P.indUnit, "party1", "ind <unit> rebinds the panel")
 check(chatHas("RAID_IN_COMBAT=out"), "src reports which filters keep each aura")
 check(chatHas("cost: 40 tiles"), "cost reports its build")
+check(chatHas("state 6: slot 1 shown="), "state reports each stacked slot")
+check(chatHas("state 1: .* buttons shown"), "state reports each row group")
 
 -- The button look the client would apply (initializeFrame).
 local button = CreateFrame("Button", nil, UIParent)
