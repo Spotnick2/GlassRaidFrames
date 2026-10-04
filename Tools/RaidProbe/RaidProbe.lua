@@ -12,6 +12,7 @@
 --   5. secrecy of group-unit values, range                    /rprobe secrets
 --   6. hiding Blizzard's compact frames                       /rprobe hide
 --   7. the cost of 45 tiles x 2 containers                    /rprobe fps
+--   later, #19: buff/debuff indicators                        /rprobe ind ...
 --
 -- Every client call that may be missing or throw goes through try(), so one
 -- refusal cannot stop the rest of the probe.
@@ -1084,6 +1085,369 @@ for _, e in ipairs({ "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SP
 end
 
 --------------------------------------------------------------------------------
+-- Indicators (#19): what one tile's aura containers can show, measured with
+-- Renew, Power Word: Shield and Weakened Soul (what the owner can cast).
+--   /rprobe ind [unit]  a panel of labelled test containers on unit
+--   /rprobe ind state   out of combat: which rows are lit, plus src
+--   /rprobe ind src [u] out of combat: each aura's id, source, and which
+--                       filter strings let it through (no container involved)
+--   /rprobe ind reconf  out of combat: change filters, enable, size live
+--   /rprobe ind cost    40 tiles x the planned default indicators
+--   /rprobe ind ids     names and ranks of the planned default spell IDs
+--------------------------------------------------------------------------------
+
+-- Every Vanilla rank, lowest first (to be checked in game with "ind ids").
+local FAMILIES = {
+    { "Renew", 139, 6074, 6075, 6076, 6077, 6078, 10927, 10928, 10929, 25315 },
+    { "Power Word: Shield", 17, 592, 600, 3747, 6065, 6066, 10898, 10899, 10900, 10901 },
+    { "Weakened Soul", 6788 },
+    { "Rejuvenation", 774, 1058, 1430, 2090, 2091, 3627, 8910, 9839, 9840, 9841, 25299 },
+    { "Regrowth", 8936, 8938, 8939, 8940, 8941, 9750, 9856, 9857, 9858 },
+    { "Power Infusion", 10060 },
+    { "Fear Ward", 6346 },
+    { "Thorns", 467, 782, 1075, 8914, 9756, 9910 },
+    { "Blessing of Protection", 1022, 5599, 10278 },
+    { "Blessing of Sacrifice", 6940, 20729 },
+    { "Innervate", 29166 },
+}
+local RENEW, SHIELD, WEAKENED = FAMILIES[1], FAMILIES[2], FAMILIES[3]
+
+-- {[id] = true} for every rank of the given families.
+local function idSet(...)
+    local set = {}
+    for _, fam in ipairs({ ... }) do
+        for i = 2, #fam do set[fam[i]] = true end
+    end
+    return set
+end
+
+local function secrecyName(v)
+    if issecretvalue and issecretvalue(v) then return "<secret>" end
+    for k, n in pairs(Enum.SecrecyLevel or {}) do if n == v then return k end end
+    return show(v)
+end
+
+-- The look of every probe button, set once here (the client locks the button
+-- after initializeFrame): backing, icon or colour square, swipe, timer text,
+-- stack count. `level` stacks slots; nil keeps the client's.
+local function indButton(size, level, square, anchorTo)
+    return function(ab)
+        ab:EnableMouse(false)
+        ab:SetSize(size, size)
+        if anchorTo then
+            ab:ClearAllPoints()
+            ab:SetPoint("LEFT", anchorTo, "LEFT", 0, 0)
+        end
+        if level then ab:SetFrameLevel(level) end
+        local back = ab:CreateTexture(nil, "BACKGROUND")
+        back:SetAllPoints(ab)
+        back:SetColorTexture(0, 0, 0, 1)
+        local art = ab:CreateTexture(nil, "ARTWORK")
+        art:SetPoint("TOPLEFT", ab, "TOPLEFT", 1, -1)
+        art:SetPoint("BOTTOMRIGHT", ab, "BOTTOMRIGHT", -1, 1)
+        if square then
+            art:SetColorTexture(square[1], square[2], square[3], 1)
+        else
+            art:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+            try("SetIcon", ab.SetIcon, ab, art)
+        end
+        local okCd, cd = pcall(CreateFrame, "Cooldown", nil, ab, "CooldownFrameTemplate")
+        if okCd and cd then
+            cd:SetAllPoints(ab)
+            pcall(cd.SetReverse, cd, true)
+            pcall(cd.SetHideCountdownNumbers, cd, true)
+            try("SetDurationCooldown", ab.SetDurationCooldown, ab, cd)
+        end
+        local top = CreateFrame("Frame", nil, ab)
+        top:SetAllPoints(ab)
+        top:SetFrameLevel(ab:GetFrameLevel() + 5)
+        local timer = top:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        timer:SetPoint("CENTER", ab, "CENTER", 0, 0)
+        try("SetDurationText", ab.SetDurationText, ab, timer, {})
+        local count = top:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        count:SetPoint("BOTTOMRIGHT", ab, "BOTTOMRIGHT", 1, -1)
+        try("SetApplicationCount", ab.SetApplicationCount, ab, count, {})
+        P.indInits = (P.indInits or 0) + 1
+    end
+end
+
+local IND_ROW, IND_ICON = 24, 16
+
+-- Point the panel's containers at `unit` and redraw (works in combat).
+local function indBind(unit)
+    P.indUnit = unit
+    for _, c in ipairs(P.indContainers or {}) do
+        try("ind SetUnit", c.SetUnit, c, unit)
+        try("ind UpdateAllAuras", c.UpdateAllAuras, c)
+    end
+    if P.indTitle then P.indTitle:SetText("RaidProbe indicators on " .. unit) end
+    say("indicators now on " .. unit)
+end
+
+local function indPanel(unit)
+    if P.indPanel then
+        indBind(unit)
+        return
+    end
+    if InCombatLockdown() then say("out of combat only (the first time)") return end
+    local panel = CreateFrame("Frame", "RaidProbeInd", UIParent)
+    panel:SetSize(470, 8 * IND_ROW + 30)
+    panel:SetPoint("CENTER", UIParent, "CENTER", 0, -40)
+    local bg = panel:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(panel)
+    bg:SetColorTexture(0, 0, 0, 0.6)
+    P.indTitle = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    P.indTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", 6, -6)
+    P.indPanel, P.indContainers, P.indByKey, P.indRows = panel, {}, {}, {}
+
+    -- One labelled row: the label on the left, a holder frame (ours) on the
+    -- right that buttons and the container anchor to (never to a container).
+    local rows = 0
+    local function row(label)
+        rows = rows + 1
+        local y = -24 - (rows - 1) * IND_ROW
+        local text = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        text:SetPoint("TOPLEFT", panel, "TOPLEFT", 6, y - 4)
+        text:SetText(label)
+        local holder = CreateFrame("Frame", nil, panel)
+        holder:SetSize(4 * (IND_ICON + 2), IND_ICON)
+        holder:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -6, y)
+        return holder
+    end
+    local function container(key, holder)
+        local c = newContainer(panel)
+        if not c then return nil end
+        c:SetAllPoints(holder)
+        c:SetFrameLevel(panel:GetFrameLevel() + 5)
+        P.indContainers[#P.indContainers + 1] = c
+        P.indByKey[key] = c
+        return c
+    end
+    local function rowGroup(key, label, filter, include, growLeft)
+        local holder = row(label)
+        local c = container(key, holder)
+        if not c then return end
+        P.indRows[#P.indRows + 1] = { label = label, c = c, group = key }
+        try("AddAuraGroup " .. key, c.AddAuraGroup, c, key, filter, {
+            maxFrameCount = 4,
+            candidateFilters = include and { includeSpellIDs = include } or {},
+            initializeFrame = indButton(IND_ICON),
+            layout = { elementWidth = IND_ICON, elementHeight = IND_ICON, elementSpacing = 2, lineSpacing = 2 },
+        })
+        if growLeft then
+            local D = AnchorUtil and AnchorUtil.FlowDirection
+            try("SetFlowLayoutAnchorPoint", c.SetFlowLayoutAnchorPoint, c, "TOPRIGHT")
+            if D then try("SetFlowLayoutGrowthDirection", c.SetFlowLayoutGrowthDirection, c, D.Left, D.Down) end
+        end
+    end
+    local function rowSlots(key, label, slots)
+        local holder = row(label)
+        local c = container(key, holder)
+        if not c then return end
+        local keys = {}
+        for i, s in ipairs(slots) do keys[i] = s.key end
+        P.indRows[#P.indRows + 1] = { label = label, c = c, slots = keys }
+        for i, s in ipairs(slots) do
+            -- Slot 1 gets the highest level band: it covers the others.
+            local level = panel:GetFrameLevel() + 10 + (#slots - i + 1) * 10
+            try("AddAuraSlot " .. s.key, c.AddAuraSlot, c, s.key, s.filter, {
+                candidateFilters = { includeSpellIDs = s.include },
+                initializeFrame = indButton(IND_ICON, level, s.square, holder),
+            })
+        end
+    end
+
+    rowGroup("RP_IND_HOTS", "1 my HoTs: HELPFUL|PLAYER|RAID_IN_COMBAT, no IDs (grows left)",
+        "HELPFUL|PLAYER|RAID_IN_COMBAT", nil, true)
+    rowGroup("RP_IND_MINE", "1b all mine: HELPFUL|PLAYER, no IDs", "HELPFUL|PLAYER", nil, false)
+    rowSlots("RP_IND_RENEW_MINE", "2 Renew, only mine (slot)",
+        { { key = "RP_IND_RENEW_MINE", filter = "HELPFUL|PLAYER", include = idSet(RENEW) } })
+    rowSlots("RP_IND_RENEW_ANY", "2b Renew, anyone's (slot)",
+        { { key = "RP_IND_RENEW_ANY", filter = "HELPFUL", include = idSet(RENEW) } })
+    rowSlots("RP_IND_WS", "3 Weakened Soul by ID (red square)",
+        { { key = "RP_IND_WS", filter = "HARMFUL", include = idSet(WEAKENED), square = { 1, 0.15, 0.15 } } })
+    rowGroup("RP_IND_ROW", "4 Renew + Shield IDs, mine (row, grows left)", "HELPFUL|PLAYER",
+        idSet(RENEW, SHIELD), true)
+    rowSlots("RP_IND_STACK", "6 stacked: Shield over Renew (mine)", {
+        { key = "RP_IND_STACK_1", filter = "HELPFUL|PLAYER", include = idSet(SHIELD) },
+        { key = "RP_IND_STACK_2", filter = "HELPFUL|PLAYER", include = idSet(RENEW) },
+    })
+    rowGroup("RP_IND_DISPEL", "8 dispellable by me: HARMFUL|RAID", "HARMFUL|RAID", nil, false)
+
+    for _, id in ipairs({ 139, 17, 6788, 10060, 6346, 467 }) do
+        local ok, v = pcall(C_Secrets.GetSpellAuraSecrecy, id)
+        say(string.format("GetSpellAuraSecrecy(%d %s) = %s", id, show(spellName(id)), ok and secrecyName(v) or ("ERR " .. tostring(v))))
+    end
+    say(string.format("indicator panel: %d containers, %d buttons initialised", #P.indContainers, P.indInits or 0))
+    indBind(unit)
+end
+
+-- Out of combat: each aura on `unit`, its source, and which filter strings
+-- keep it. Answers items 1, 3 and 8 without any container.
+local IND_FILTERS = {
+    HELPFUL = { "HELPFUL|PLAYER", "HELPFUL|PLAYER|RAID_IN_COMBAT", "HELPFUL|RAID_IN_COMBAT" },
+    HARMFUL = { "HARMFUL|PLAYER", "HARMFUL|RAID", "HARMFUL|RAID_PLAYER_DISPELLABLE" },
+}
+
+local function indSources(unit)
+    unit = (unit and unit ~= "") and unit or "player"
+    for _, kind in ipairs({ "HELPFUL", "HARMFUL" }) do
+        local n = 0
+        for i = 1, 40 do
+            local ok, a = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, kind)
+            if not ok then say(kind .. " #" .. i .. " threw: " .. tostring(a)) break end
+            if not a then break end
+            n = n + 1
+            local okF, line = pcall(function()
+                local keeps = {}
+                for _, f in ipairs(IND_FILTERS[kind]) do
+                    local okI, out = pcall(C_UnitAuras.IsAuraFilteredOutByInstanceID, unit, a.auraInstanceID, f)
+                    keeps[#keeps + 1] = f:gsub("^%u+|", "") .. "=" .. (not okI and "ERR" or (out and "out" or "IN"))
+                end
+                return string.format("%s #%d %s id=%s src=%s dur=%s %s", kind, i, show(a.name), show(a.spellId),
+                    show(a.sourceUnit), show(a.duration), table.concat(keeps, " "))
+            end)
+            say(okF and line or (kind .. " #" .. i .. ": fields secret (" .. tostring(line) .. ")"))
+        end
+        say(string.format("%s on %s: %d", kind, unit, n))
+    end
+end
+
+-- Which panel rows are lit right now, read from the client's own buttons
+-- (out of combat: in combat they are locked and the read is refused).
+local function shownOf(frame)
+    if not frame then return "none" end
+    local ok, v = pcall(frame.IsShown, frame)
+    if not ok then return "ERR" end
+    return show(v)
+end
+
+local function indState()
+    if not P.indPanel then say("run /rprobe ind first") return end
+    for _, r in ipairs(P.indRows) do
+        local parts = {}
+        if r.group then
+            -- A secret or failed read is unknown, never "hidden" (Codex review
+            -- of #20: secret IsShown read as 0 shown made a lit row look empty).
+            local okN, n = pcall(r.c.GetAuraGroupFrameCount, r.c, r.group)
+            local lit, hidden, unknown = 0, 0, 0
+            for i = 1, (okN and type(n) == "number") and n or 0 do
+                local okF, f = pcall(r.c.GetAuraGroupFrame, r.c, r.group, i)
+                local v = okF and shownOf(f) or "ERR"
+                if v == "true" then lit = lit + 1
+                elseif v == "false" then hidden = hidden + 1
+                else unknown = unknown + 1 end
+            end
+            parts[1] = string.format("%s buttons: %d shown, %d hidden, %d unknown (secret or unreadable)",
+                okN and show(n) or "ERR", lit, hidden, unknown)
+        else
+            for i, key in ipairs(r.slots) do
+                local okF, f = pcall(r.c.GetAuraSlotFrame, r.c, key)
+                parts[i] = "slot " .. i .. " shown=" .. (okF and shownOf(f) or "ERR")
+            end
+        end
+        say("state " .. r.label:match("^(%S+)") .. ": " .. table.concat(parts, ", "))
+    end
+end
+
+-- Out of combat, a toggle: Renew-mine slot -> Shield IDs at 22 px, the
+-- anyone slot disabled; again to undo. Logs what each call did.
+local function indReconf()
+    if not P.indPanel then say("run /rprobe ind first") return end
+    P.indReconf = not P.indReconf
+    local on = P.indReconf
+    local B, C = P.indByKey.RP_IND_RENEW_MINE, P.indByKey.RP_IND_RENEW_ANY
+    try("SetAuraSlotCandidateFilters", B.SetAuraSlotCandidateFilters, B, "RP_IND_RENEW_MINE",
+        { includeSpellIDs = on and idSet(SHIELD) or idSet(RENEW) })
+    local okF, frame = try("GetAuraSlotFrame", B.GetAuraSlotFrame, B, "RP_IND_RENEW_MINE")
+    if okF and frame then try("slot SetSize", frame.SetSize, frame, on and 22 or IND_ICON, on and 22 or IND_ICON) end
+    try("SetAuraSlotEnabled", C.SetAuraSlotEnabled, C, "RP_IND_RENEW_ANY", not on)
+    for _, c in ipairs({ B, C }) do try("UpdateAllAuras", c.UpdateAllAuras, c) end
+    say(on and "reconf: row 2 now tracks Shield at 22 px, row 2b disabled (run again to undo)"
+           or "reconf undone: row 2 tracks Renew at 16 px, row 2b enabled")
+end
+
+-- 40 tiles with the planned defaults: my HoTs row, received row, Weakened
+-- Soul slot, debuff row. Run /rprobe fps before and after.
+local function indCost()
+    if P.indCost then say("already built (/reload to drop)") return end
+    if InCombatLockdown() then say("out of combat only") return end
+    local units = groupUnits()
+    local root = CreateFrame("Frame", "RaidProbeIndCost", UIParent)
+    root:SetSize(8 * 62, 5 * 32)
+    root:SetPoint("TOP", UIParent, "TOP", 0, -40)
+    collectgarbage("collect")
+    local kb0, t0, inits0 = collectgarbage("count"), debugprofilestop(), P.indInits or 0
+    local received = idSet(FAMILIES[6], FAMILIES[7], FAMILIES[8], FAMILIES[9], FAMILIES[10], FAMILIES[11])
+    for i = 1, 40 do
+        local tile = CreateFrame("Frame", nil, root)
+        tile:SetSize(60, 30)
+        tile:SetPoint("TOPLEFT", root, "TOPLEFT", ((i - 1) % 8) * 62, -math.floor((i - 1) / 8) * 32)
+        local unit = units[(i - 1) % #units + 1]
+        local specs = {
+            { "group", "HELPFUL|PLAYER|RAID_IN_COMBAT", nil, "TOPRIGHT" },
+            { "group", "HELPFUL", received, "LEFT" },
+            { "slot", "HARMFUL", idSet(WEAKENED), "TOPLEFT" },
+            { "group", "HARMFUL", nil, "BOTTOMLEFT" },
+        }
+        for k, s in ipairs(specs) do
+            local c = newContainer(tile)
+            if c then
+                c:SetSize(40, 10)
+                c:SetPoint(s[4], tile, s[4], 0, 0)
+                local key = "RP_COST_" .. k
+                if s[1] == "group" then
+                    try("cost group", c.AddAuraGroup, c, key, s[2], {
+                        maxFrameCount = 3, candidateFilters = s[3] and { includeSpellIDs = s[3] } or {},
+                        initializeFrame = indButton(10),
+                        layout = { elementWidth = 10, elementHeight = 10, elementSpacing = 1, lineSpacing = 1 },
+                    })
+                else
+                    try("cost slot", c.AddAuraSlot, c, key, s[2], {
+                        candidateFilters = { includeSpellIDs = s[3] },
+                        initializeFrame = indButton(10, nil, { 1, 0.15, 0.15 }, tile),
+                    })
+                end
+                try("cost SetUnit", c.SetUnit, c, unit)
+                try("cost UpdateAllAuras", c.UpdateAllAuras, c)
+            end
+        end
+    end
+    local ms = debugprofilestop() - t0
+    collectgarbage("collect")
+    P.indCost = root
+    say(string.format("cost: 40 tiles x 4 containers in %.1f ms, %d buttons, Lua heap +%.0f KB (now /rprobe fps)",
+        ms, (P.indInits or 0) - inits0, collectgarbage("count") - kb0))
+end
+
+local function indIds()
+    for _, fam in ipairs(FAMILIES) do
+        local parts = {}
+        for i = 2, #fam do
+            local id = fam[i]
+            local okS, sub = pcall(C_Spell.GetSpellSubtext, id)
+            parts[#parts + 1] = string.format("%d=%s%s", id, show(spellName(id)),
+                (okS and type(sub) == "string" and sub ~= "") and (" (" .. sub .. ")") or "")
+        end
+        say(fam[1] .. ": " .. table.concat(parts, ", "))
+    end
+end
+
+local function indicators(arg)
+    local sub, rest = (arg or ""):match("^(%S*)%s*(.-)$")
+    if sub == "src" then indSources(rest ~= "" and rest or P.indUnit)
+    elseif sub == "state" then
+        indState()
+        indSources(P.indUnit)
+    elseif sub == "reconf" then
+        if InCombatLockdown() then say("out of combat only") return end
+        indReconf()
+    elseif sub == "cost" then indCost()
+    elseif sub == "ids" then indIds()
+    else indPanel(sub ~= "" and sub or "player") end
+end
+
+--------------------------------------------------------------------------------
 -- /rprobe
 --------------------------------------------------------------------------------
 
@@ -1108,6 +1472,12 @@ local HELP = {
     "hoverkeys - toggle: hovering a tile binds key 8 to cast the test spell on it",
     "permkey [fallback|group] - toggle: key 9 casts on @mouseover (fallback: else action button 9; group: group members only)",
     "enums - dump the enums the dispel box relies on",
+    "ind [unit] - indicator test panel (Renew, Shield, Weakened Soul) on unit; again to switch unit",
+    "ind state - which panel rows are lit now, plus src (out of combat, right after casting)",
+    "ind src [unit] - out of combat: each aura's id, source, and which filters keep it",
+    "ind reconf - out of combat: change a slot's spells, size and enable live (again to undo)",
+    "ind cost - 40 tiles x the planned default indicators (then /rprobe fps)",
+    "ind ids - names and ranks of the planned default spell IDs",
     "log clear - empty RaidProbeDB.log",
 }
 
@@ -1143,6 +1513,7 @@ SlashCmdList.RAIDPROBE = function(msg)
     elseif cmd == "mocast" then mouseoverCast(arg)
     elseif cmd == "hoverkeys" then hoverKeys()
     elseif cmd == "permkey" then permKey(arg)
+    elseif cmd == "ind" then indicators(arg)
     elseif cmd == "enums" then
         enumKeys("Enum.CustomAuraButtonDispelTypeTextureStyle", Enum.CustomAuraButtonDispelTypeTextureStyle)
         enumKeys("Enum.UnitAuraSoundTrigger", Enum.UnitAuraSoundTrigger)
@@ -1156,4 +1527,4 @@ SlashCmdList.RAIDPROBE = function(msg)
 end
 
 -- Seam for tests/test_probe.lua: file-local state and the hover-key toggle.
-RaidProbe_test = { P = P, order = order, hoverKeys = hoverKeys, HOVER_KEY = HOVER_KEY }
+RaidProbe_test = { P = P, order = order, hoverKeys = hoverKeys, HOVER_KEY = HOVER_KEY, indButton = indButton }

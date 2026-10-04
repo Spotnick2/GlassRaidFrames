@@ -63,4 +63,56 @@ check(T.P.hover, "the toggle is refused in combat")
 eq(bound[key], tile, "and the key stays where it was")
 WoW.combat = false
 
+WoW.combat = false
+leave()
+T.hoverKeys()
+
+-- The indicator probe (#19): every subcommand runs offline without touching an
+-- unstubbed global or failing a call (the client parts are stubbed here).
+rawset(_G, "C_Secrets", { GetSpellAuraSecrecy = function() return 0 end })
+rawset(_G, "C_UnitAuras", {
+    GetAuraDataByIndex = function(unit, i, filter)
+        if i > 1 then return nil end
+        return { name = "Renew", spellId = 139, sourceUnit = "player", duration = 15, auraInstanceID = 7 }
+    end,
+    IsAuraFilteredOutByInstanceID = function(unit, id, filter) return filter:find("RAID", 1, true) ~= nil end,
+})
+C_Spell.GetSpellSubtext = function() return "Rank 1" end
+rawset(_G, "AnchorUtil", { FlowDirection = { Left = -1, Right = 1, Up = 1, Down = -1 } })
+rawset(_G, "debugprofilestop", function() return 0 end)
+local function failures()
+    local n = 0
+    for _, line in ipairs(WoW.chat) do if line:find("FAIL", 1, true) then n = n + 1 end end
+    return n
+end
+local before = failures()
+for _, cmd in ipairs({ "ind", "ind party1", "ind reconf", "ind reconf", "ind src", "ind src party1", "ind state", "ind cost", "ind ids" }) do
+    local ok, err = pcall(SlashCmdList.RAIDPROBE, cmd)
+    check(ok, "/rprobe " .. cmd .. " runs: " .. tostring(err))
+end
+eq(failures() - before, 0, "no probe call failed")
+eq(#T.P.indContainers, 8, "the panel has its 8 test containers")
+eq(T.P.indUnit, "party1", "ind <unit> rebinds the panel")
+check(chatHas("RAID_IN_COMBAT=out"), "src reports which filters keep each aura")
+check(chatHas("cost: 40 tiles"), "cost reports its build")
+check(chatHas("state 6: slot 1 shown="), "state reports each stacked slot")
+check(chatHas("state 1: .* shown, .* hidden, .* unknown"), "state reports each row group")
+
+-- Codex review of #20: a secret shown state is unknown, never "hidden".
+local hots = T.P.indByKey.RP_IND_HOTS
+local frames = { { IsShown = function() return WoW.Secret("shown") end },
+                 { IsShown = function() return WoW.Secret("shown") end },
+                 { IsShown = function() return false end } }
+hots.GetAuraGroupFrameCount = function() return #frames end
+hots.GetAuraGroupFrame = function(_, _, i) return frames[i] end
+SlashCmdList.RAIDPROBE("ind state")
+check(chatHas("state 1: 3 buttons: 0 shown, 1 hidden, 2 unknown"), "secret reads count as unknown, a plain false as hidden")
+hots.GetAuraGroupFrameCount, hots.GetAuraGroupFrame = nil, nil
+
+-- The button look the client would apply (initializeFrame).
+local button = CreateFrame("Button", nil, UIParent)
+T.indButton(16, 30, { 1, 0, 0 }, UIParent)(button)
+T.indButton(16)(button)
+eq(failures() - before, 0, "the probe button initialiser runs cleanly")
+
 done("test_probe")

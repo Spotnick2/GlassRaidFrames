@@ -125,6 +125,39 @@ trees is unmeasured.
 - **Decision:** auto role from the spec if these answer, with the manual `/grf role` override
   either way. Otherwise manual plus a class default.
 
+### 10. Buff and debuff indicators (gates `Indicators.lua`, issue #19)
+Only Renew, Power Word: Shield and Weakened Soul are needed. `/rprobe ind` opens a panel of
+labelled test containers (numbered like the items below) on yourself. `/rprobe ind party1`
+moves it to a party member, in combat too. Do each item out of combat, then in combat.
+**Right after casting (within Renew's 15 s), run `/rprobe ind state`:** it logs each aura's
+source and filters, and tries to read which rows are lit. The client keeps the buttons' shown
+state secret even out of combat (second run), so those reads come back `unknown`: **which rows
+light up still needs a look (or a screenshot)**. Everything lands in `RaidProbeDB.log`;
+`/reload` writes it to `SavedVariables\RaidProbe.lua`.
+- [ ] `/rprobe ind ids`: does every planned spell ID resolve to the right name and rank?
+      (A wrong or missing ID shows `nil`.)
+- [ ] **1.** Cast Renew and Shield. Does row 1 (`RAID_IN_COMBAT`, no IDs) show both, growing
+      left? Row 1b shows all your own buffs, for comparison. `/rprobe ind src` (out of combat)
+      prints, for each aura, whether `PLAYER|RAID_IN_COMBAT` keeps it (`IN`) or not (`out`).
+- [ ] **2.** Row 2 (your Renew) and 2b (anyone's Renew): icon, swipe and timer text show. If
+      your other priest can join: their Renew shows in 2b but **not** in 2.
+- [ ] **3.** Shield someone: does row 3's red square show for Weakened Soul? The chat line
+      `GetSpellAuraSecrecy(6788 …)` printed when the panel opens says whether the client
+      allows it (`NeverSecret` needed). `/rprobe ind src` shows Weakened Soul's `src`.
+- [ ] **4.** Row 4 (Renew + Shield IDs): both show, the row grows left, and closes up when one
+      ends.
+- [ ] **5.** `/rprobe ind reconf` (out of combat): row 2 now tracks Shield at a larger size,
+      row 2b stops showing. Again to undo. Any `FAIL` line?
+- [ ] **6.** Row 6: with both up, Shield covers Renew (swipe and text too). When Shield
+      ends, Renew shows.
+- [ ] **7.** `/rprobe fps` (baseline), `/rprobe ind cost`, `/rprobe fps` again. Note the build
+      time, button count, heap, and the two fps lines. Then spam heals for a minute and run
+      `/rprobe fps` once more.
+- [ ] **8.** If you can get a debuff you can dispel: does row 8 (`HARMFUL|RAID`) show it?
+- **Decisions:** item 1 decides whether "My heals" needs a spell list. Item 3 decides
+  whether a Weakened Soul indicator can ship. Items 4 and 6 decide icon rows and
+  single-icon priority. Item 7 decides the default indicator count.
+
 ### 7. Scale (gates the tile budget)
 - [ ] The `built … in … ms` line after `/rprobe build`.
 - [ ] `/rprobe fps` in a raid, out of combat and in combat, with debuffs going on and off.
@@ -377,3 +410,39 @@ trees is unmeasured.
 - Party→raid conversion in combat is still untested for both approaches.
 - The first run's party/raid double set (both shown in a raid) was before the probe hid the
   unused set. That mode switch hasn't been exercised yet.
+
+### 10. Indicators, first run (1.60.1.70205, 2026-10-04, priest, party of 2)
+
+- **`GetSpellAuraSecrecy` is `ContextuallySecret` for all six** planned spells (Renew, PW:S,
+  Weakened Soul, Power Infusion, Fear Ward, Thorns). A harmful aura on a friendly is matched by
+  ID only when `NeverSecret` (`CanApplyIdentityCandidateFilters`), so **Weakened Soul can't be
+  matched by ID**.
+- **Cost of the planned defaults is too high:** 40 tiles × 4 containers (3 groups + 1 slot) =
+  **1240 buttons, 398 ms to build, Lua heap +49.8 MB; 92.7 → 60.2 fps average, worst frame
+  21 → 49 ms**, idle. Groups pre-create 10 buttons each; defaults must lean on slots (1 button
+  each), with icon rows rare.
+- `ind reconf` (filters, slot size, enable) ran both ways with no failure.
+- `PLAYER|RAID_IN_COMBAT` excluded Power Word: Fortitude (right for a "my HoTs" filter).
+  Renew and Shield had expired before `src` ran: item 1 still open. Which rows lit wasn't
+  captured; `ind state` was added for the next run.
+
+### 10. Indicators, second run (1.60.1.70205, 2026-10-04, priest, solo and in combat)
+
+Seen on the panel (screenshots by the owner), the same out of and in combat:
+- **Row 1 `HELPFUL|PLAYER|RAID_IN_COMBAT`: empty.** `src` agrees: Renew and Shield are `out`.
+  Vanilla spells don't carry the raid-frame flag here, so **"my heals" needs spell IDs**.
+- Row 1b `HELPFUL|PLAYER`: Fortitude, Renew, Shield. Rows 2/2b (Renew slots, mine/anyone):
+  Renew with its timer text. **Slots, `PLAYER` and duration text work in combat.**
+- **Row 3 (Weakened Soul by ID): empty**, as `ContextuallySecret` predicted. Weakened Soul's
+  `src` is the casting priest (`player`, 15 s) and `HARMFUL|PLAYER` keeps it (`src`). It
+  already shows in the plain `HARMFUL` debuff row of the real tiles.
+- Row 4 (Renew + Shield IDs, row growing left): both show, right-aligned; the order changes
+  (client sort). Row 6: **Shield covers Renew** (stacked slots, higher frame level wins).
+- Row 8 `HARMFUL|RAID`: no dispellable debuff was available; untested.
+- **`IsShown()` on container buttons is secret even out of combat** (`ind state` read
+  `<secret>`): an addon can't tell which indicators are lit, only the eye can.
+- `ind ids`: all 50 planned IDs resolve to the right names (11 spells, every rank). Subtext
+  ("Rank 1") only comes back for ranks the player knows.
+- Cosmetic: the default duration text ("28 s") overflows a 16 px icon. `|R` inside a label is
+  read as a colour code.
+- Not tested: another priest's Renew in the "only mine" slot (no second priest available).
