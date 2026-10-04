@@ -126,7 +126,13 @@ local classless      -- the shared defaults, unsaved, while the class is unknown
 function Ind.Setup()
     local db, class = GRF.db, playerClass()
     if not (db and class) then
-        classless = classless or D.For(nil)
+        if not classless then
+            classless = {}
+            local seen = {}
+            for _, ind in ipairs(D.For(nil)) do
+                if valid(ind, seen) then classless[#classless + 1] = ind end
+            end
+        end
         return classless
     end
     if type(db.indicators) ~= "table" then db.indicators = {} end
@@ -155,6 +161,7 @@ function Ind.Reset()
     if not (GRF.db and class) then return false end
     if type(GRF.db.indicators) ~= "table" then GRF.db.indicators = {} end
     GRF.db.indicators[class] = { version = 1, list = D.For(class) }
+    checked[class] = nil   -- validated like any saved setup (fills the fields defaults leave out)
     Ind.Request()
     return true
 end
@@ -166,13 +173,15 @@ end
 -- Every rank to match for a stored spell: the built-in family, else the ranks
 -- this character has learned (spellbook, by the client's own name), plus the
 -- stored ID itself.
+local families = {}   -- id -> ranks, until the spellbook changes (one lookup per Apply, not per tile)
 function Ind.Family(id)
-    local fam = D.FAMILIES[id]
+    local fam = D.FAMILIES[id] or families[id]
     if fam then return fam end
     local out, seen = { id }, { [id] = true }
     for _, r in ipairs(API.Ranks(id)) do
         if not seen[r] then out[#out + 1], seen[r] = r, true end
     end
+    families[id] = out
     return out
 end
 
@@ -245,6 +254,7 @@ local function makeRegions(ab, square)
     local top = CreateFrame("Frame", nil, ab)
     top:SetAllPoints(ab)
     top:SetFrameLevel(ab:GetFrameLevel() + 5)
+    r.top = top
     r.timer = top:CreateFontString(nil, "OVERLAY")
     r.timer:SetPoint("CENTER", ab, "CENTER", 0, 0)
     r.timer:SetFont(fontFile(), 8, "OUTLINE")
@@ -270,11 +280,13 @@ local function styleSlot(b, e, i, ab)
     ab:ClearAllPoints()
     ab:SetPoint(ind.anchor, b.body, ind.anchor, ind.x + dx, ind.y + dy)
     local base = b.body:GetFrameLevel() + Ind.LEVEL
-    if ind.kind == "icons" then
-        ab:SetFrameLevel(base + 1)
-    else
-        ab:SetFrameLevel(base + (#ind.spells - i + 1) * Ind.BAND)   -- the first spell on top
-    end
+    local level = ind.kind == "icons" and base + 1
+        or base + (#ind.spells - i + 1) * Ind.BAND   -- the first spell on top
+    ab:SetFrameLevel(level)
+    -- Its swipe and texts keep their order above it (a raised parent only
+    -- lifts its children to its own level + 1).
+    if r.cd then r.cd:SetFrameLevel(level + 1) end
+    r.top:SetFrameLevel(level + 5)
     if r.cd then pcall(r.cd.SetDrawSwipe, r.cd, ind.swipe) end
     r.timer:SetShown(ind.timer)
     local fs = math.max(6, math.floor(s * 0.6 + 0.5))
@@ -299,7 +311,8 @@ local function bind(e, unit)
     try("aura refresh", e.c, "UpdateAllAuras")
 end
 
-local function newContainer(b, kind)
+local function newContainer(b, ind)
+    local kind = ind.kind
     ensureLoaded()
     local ok, c = pcall(CreateFrame, "AuraContainer", nil, b.body, "CustomAuraContainerTemplate")
     if not ok or not c then
@@ -307,23 +320,26 @@ local function newContainer(b, kind)
         return nil
     end
     c:SetFrameLevel(b.body:GetFrameLevel() + Ind.LEVEL)
-    local e = { c = c, kind = kind, slots = 0, buttons = {}, sig = {} }
+    -- e.ind is set before anything is added: AddAuraGroup builds its first
+    -- batch of buttons at once, and their initializeFrame reads it.
+    local e = { c = c, kind = kind, ind = ind, slots = 0, buttons = {}, sig = {} }
     if kind == "debuffs" then
-        local added = try("aura group", c, "AddAuraGroup", "grf_debuffs", "HARMFUL", {
-            maxFrameCount = 3,
+        local s = ind.size
+        local added = try("aura group", c, "AddAuraGroup", "grf_debuffs", Ind.Filter(ind), {
+            maxFrameCount = ind.max,
             initializeFrame = function(ab)
                 makeRegions(ab, false)
-                styleDebuffButton(ab, e.ind and e.ind.size or 12)
-                ab.grf.timer:Hide()   -- the row has no timer setting (the first buttons come before e.ind)
+                styleDebuffButton(ab, e.ind.size)
+                ab.grf.timer:Hide()   -- the row has no timer setting
             end,
             candidateFilters = {},
-            layout = { elementWidth = 12, elementHeight = 12, elementSpacing = Ind.GAP, lineSpacing = Ind.GAP },
+            layout = { elementWidth = s, elementHeight = s, elementSpacing = Ind.GAP, lineSpacing = Ind.GAP },
         })
         if not added then
             c:Hide()
             return nil
         end
-        e.filter, e.max, e.size = "HARMFUL", 3, 12
+        e.filter, e.max, e.size = Ind.Filter(ind), ind.max, s
     else
         c:SetAllPoints(b.body)   -- the slots are placed by hand; the container just holds them
     end
@@ -331,25 +347,44 @@ local function newContainer(b, kind)
 end
 
 -- Make entry e's container show indicator ind (e.ind is already ind).
+-- What the buttons look like; only a change restyles them.
+local function lookOf(ind)
+    local c = ind.color or {}
+    return table.concat({ ind.anchor, ind.x, ind.y, ind.size, ind.grow or "", tostring(ind.swipe),
+        tostring(ind.timer), tostring(c[1]), tostring(c[2]), tostring(c[3]), #ind.spells }, ",")
+end
+
 local function updateSlots(b, e)
     local ind = e.ind
     local filter = Ind.Filter(ind)
+    local look = lookOf(ind)
+    local restyle = e.look ~= look
     for i, id in ipairs(ind.spells) do
         local key = "s" .. i
         local sig = filter .. ":" .. table.concat(Ind.Family(id), ",")   -- a newly learned rank counts
+        local new = false
         if i > e.slots then
-            local slotIndex = i
-            local added = try("aura slot", e.c, "AddAuraSlot", key, filter, {
-                candidateFilters = { includeSpellIDs = idSet(id) },
-                initializeFrame = function(ab)
-                    makeRegions(ab, e.kind == "square")
-                    e.buttons[slotIndex] = ab
-                    styleSlot(b, e, slotIndex, ab)
-                end,
-            })
-            if not added then return end
-            e.slots, e.sig[i] = i, sig
-        else
+            -- An add that threw after registering the slot left it there:
+            -- adopt it rather than re-adding the key (the client asserts).
+            local okF, existing = pcall(e.c.GetAuraSlotFrame, e.c, key)
+            if okF and existing then
+                e.slots, e.buttons[i], e.sig[i] = i, existing, nil
+                restyle = true
+            else
+                local slotIndex = i
+                local added = try("aura slot", e.c, "AddAuraSlot", key, filter, {
+                    candidateFilters = { includeSpellIDs = idSet(id) },
+                    initializeFrame = function(ab)
+                        makeRegions(ab, e.kind == "square")
+                        e.buttons[slotIndex] = ab
+                        styleSlot(b, e, slotIndex, ab)
+                    end,
+                })
+                if not added then return end
+                e.slots, e.sig[i], new = i, sig, true
+            end
+        end
+        if not new then
             if e.sig[i] ~= sig then
                 try("aura slot filter", e.c, "SetAuraSlotFilterString", key, filter)
                 try("aura slot spells", e.c, "SetAuraSlotCandidateFilters", key, { includeSpellIDs = idSet(id) })
@@ -359,9 +394,10 @@ local function updateSlots(b, e)
                 try("aura slot on", e.c, "SetAuraSlotEnabled", key, true)
                 e.off[i] = nil
             end
-            styleSlot(b, e, i, e.buttons[i])
+            if restyle then styleSlot(b, e, i, e.buttons[i]) end
         end
     end
+    e.look = look
     -- Slots past the list (spells removed) stay, switched off, for reuse.
     for i = #ind.spells + 1, e.slots do
         e.off = e.off or {}
@@ -431,7 +467,7 @@ local function acquire(b, st, ind)
         e.c:Show()
         if e.kind == "debuffs" then try("aura group on", e.c, "SetAuraGroupEnabled", "grf_debuffs", true) end
     else
-        e = newContainer(b, ind.kind)
+        e = newContainer(b, ind)
         if not e then return nil end
     end
     e.fresh = true   -- (re)bound once its slots exist: a pooled one missed unit changes
@@ -499,9 +535,10 @@ end
 local watcher = CreateFrame("Frame")
 watcher:SetScript("OnEvent", function()
     API.ResetRanks()
+    families = {}
     if GRF.Header and GRF.Header.container then Ind.Request() end
 end)
 -- PLAYER_ENTERING_WORLD: the class is surely known by then, if it wasn't at the build.
 API.RegisterEvents(watcher, { "SPELLS_CHANGED", "PLAYER_ENTERING_WORLD" })
 
-Ind._test = { valid = valid, sync = sync, checked = checked }
+Ind._test = { valid = valid, sync = sync, checked = checked, newContainer = newContainer }

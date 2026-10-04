@@ -107,8 +107,12 @@ function Frames.Setup(b)
 
     -- Dead/Offline: small, in the top-right corner (the bottom edge belongs to
     -- the debuff row, the middle to the name). It shares the corner with "My
-    -- heals": a dead or offline unit carries no HoTs.
-    local status = Glass.Font(g.top, 9, "RIGHT")
+    -- heals", on a frame above every indicator: a disconnected player keeps
+    -- their auras, and "Offline" must not hide under your Renew.
+    local over = CreateFrame("Frame", nil, body)
+    over:SetAllPoints(body)
+    over:SetFrameLevel(body:GetFrameLevel() + 200)   -- over Indicators' stacked bands
+    local status = Glass.Font(over, 9, "RIGHT")
     status:SetPoint("TOPRIGHT", body, "TOPRIGHT", -inset - 3, -inset - 3)
     b.statusText = status
 

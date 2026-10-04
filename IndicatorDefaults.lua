@@ -37,9 +37,9 @@ local function myHeals(spells)
 end
 
 -- Buffs others put on the unit, one spot showing the most important present
--- (list order = priority).
+-- (list order = priority). Below the leader crown, which sits on the top edge.
 local RECEIVED = { key = "received", name = "Received", kind = "icon", aura = "HELPFUL", mine = false,
-                   enabled = true, anchor = "TOPLEFT", x = 3, y = -3, size = 12,
+                   enabled = true, anchor = "TOPLEFT", x = 3, y = -7, size = 12,
                    swipe = true, timer = false, spells = { 1022, 10060, 6940, 29166, 6346, 467 } }
 
 -- Every debuff, as the tile always showed (Weakened Soul included: it can't

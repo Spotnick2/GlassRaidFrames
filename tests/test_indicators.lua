@@ -200,6 +200,80 @@ eq(find("received").enabled, false, "/grf ind 2 off")
 SlashCmdList.GLASSRAIDFRAMES("ind received on")
 eq(find("received").enabled, true, "/grf ind <key> on")
 
+-- Review of PR #22 --------------------------------------------------------
+GRF.Settings.ResetIndicators()
+WoW.fire("PLAYER_REGEN_ENABLED")
+local q1 = H.children[1]
+local qh, qr = entries(q1).myheals, entries(q1).received
+
+-- "Offline" stays readable over the heals icons (a disconnected player keeps
+-- their auras).
+local top = 0
+for _, e in pairs(entries(q1)) do
+    for _, sl in pairs(slots(e)) do top = math.max(top, sl.frame:GetFrameLevel()) end
+end
+check(q1.statusText:GetParent():GetFrameLevel() > top, "Dead/Offline draws over every indicator")
+
+-- A raised stacked slot keeps its swipe and texts above it.
+local r1 = slots(qr).s1.frame
+eq(r1.grf.cd:GetFrameLevel(), r1:GetFrameLevel() + 1, "the swipe sits just above its raised button")
+eq(r1.grf.top:GetFrameLevel(), r1:GetFrameLevel() + 5, "the texts above the swipe")
+
+-- Received sits under the leader crown, not over it.
+check(slots(qr).s1.frame._points[1][5] <= -7, "received clears the crown on the top edge")
+
+-- Reset validates like a saved setup (fills grow, colour, swipe...).
+eq(find("received").grow, "LEFT", "reset setups are validated")
+check(type(find("received").color) == "table", "(colour filled)")
+
+-- The debuff row is built from its indicator, not from constants.
+local fresh = Ind._test.newContainer(q1, { key = "d2", kind = "debuffs", builtin = true, filter = "dispellable",
+    max = 5, size = 16, anchor = "BOTTOMLEFT", x = 4, y = 4 })
+local dg = fresh.c._groups.grf_debuffs
+eq(dg.spec.maxFrameCount, 5, "the row's max comes from its indicator")
+eq(dg.spec.layout.elementWidth, 16, "its size too")
+eq(dg.filter, "HARMFUL|RAID", "and its filter")
+eq(dg.frames[1]._width, 16, "the first batch of buttons is built at that size")
+fresh.c:Hide()
+
+-- A no-op Apply restyles nothing; a change restyles.
+local placed = 0
+local hs1 = slots(qh).s1.frame
+local realSetPoint = hs1.SetPoint
+hs1.SetPoint = function(self, ...) placed = placed + 1; return realSetPoint(self, ...) end
+Ind.Apply()
+eq(placed, 0, "nothing changed: no slot is restyled")
+find("myheals").x = -4
+Ind.Apply()
+check(placed > 0, "a moved indicator is restyled")
+hs1.SetPoint = nil
+
+-- An AddAuraSlot that registers the slot and then throws: the next apply
+-- adopts the slot instead of re-adding the key (which the client asserts).
+local realAdd = qh.c.AddAuraSlot
+qh.c.AddAuraSlot = function(self, ...)
+    realAdd(self, ...)
+    error("late failure")
+end
+table.insert(find("myheals").spells, 774)
+Ind.Apply()
+qh.c.AddAuraSlot = nil
+check(GRF.paintFailures["aura slot"], "the half-added slot's failure is recorded")
+GRF.paintFailures["aura slot"] = nil
+Ind.Apply()
+eq(GRF.paintFailures["aura slot"], nil, "the next apply doesn't re-add the key")
+eq(GRF.paintFailures["indicator myheals"], nil, "(nor fail the indicator)")
+eq(qh.slots, 3, "the slot is adopted")
+check(slots(qh).s3.spec.candidateFilters.includeSpellIDs[25299], "and given its spell's ranks")
+table.remove(find("myheals").spells)
+
+-- /grf ind keeps the key's case.
+find("received").key = "Received"
+SlashCmdList.GLASSRAIDFRAMES("ind Received off")
+eq(find("Received").enabled, false, "a mixed-case key toggles")
+find("Received").key, find("Received").enabled = "received", true
+Ind.Apply()
+
 -- A spell outside the built-in families matches its learned ranks plus itself
 -- (the spellbook isn't stubbed, so none are learned).
 eq(table.concat(Ind.Family(12345), ","), "12345", "an unknown spell matches its own ID")

@@ -200,8 +200,9 @@ function Settings.FindIndicator(which)
     local list = GRF.Indicators.Setup() or {}
     local n = tonumber(which)
     if n then return list[n], n end
+    which = type(which) == "string" and which:lower() or which
     for i, ind in ipairs(list) do
-        if ind.key == which then return ind, i end
+        if ind.key:lower() == which then return ind, i end
     end
     return nil
 end
@@ -262,7 +263,8 @@ end
 
 local function indicatorsCommand(rest)
     local which, onoff = rest:match("^(%S+)%s+(%S+)$")
-    if rest == "reset" then
+    onoff = onoff and onoff:lower()
+    if rest:lower() == "reset" then
         Settings.ResetIndicators()
         say("indicators back to your class defaults")
     elseif which and (onoff == "on" or onoff == "off") then
@@ -321,7 +323,7 @@ local function slash(msg)
     elseif cmd == "options" or cmd == "config" then
         if not (GRF.Options and GRF.Options.Open()) then say("Game Menu > Options > AddOns > Glass Raid Frames") end
     elseif cmd == "ind" or cmd == "indicators" then
-        indicatorsCommand(((msg or ""):match("^%s*%S+%s*(.-)%s*$") or ""):lower())
+        indicatorsCommand((msg or ""):match("^%s*%S+%s*(.-)%s*$") or "")
     elseif cmd == "failures" then
         failures()
     elseif cmd == "version" then
