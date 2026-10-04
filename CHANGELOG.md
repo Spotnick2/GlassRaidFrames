@@ -26,3 +26,5 @@
 - Blizzard's party and raid frames are hidden (`/grf blizzard` toggles it).
 - `/grf unlock` to move the frames, `/grf reset`, `/grf solo` to show your own frame when not
   in a group.
+- The glass look comes from LibGlass, a small library shared by the Glass addons, included in
+  the download (nothing extra to install).

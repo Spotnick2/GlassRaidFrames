@@ -13,7 +13,7 @@ a new idiom.
 
 **Goal:** replace Cell, which the owner uses today, with a streamlined, glass-styled port.
 - **The look.** Group frames in the "liquid glass" material the owner uses across the `Glass*`
-  addons (`Glass.lua`, lifted from GlassUnitFrames).
+  addons (the embedded library LibGlass-1.0, see "The glass material").
 - **The basics.** List party and raid members, showing name, class colour, health, role,
   leader, raid mark, dead/offline, range and debuffs.
 - **The headline feature: click-casting.** Mouse buttons 1–5 × modifiers bound per character
@@ -34,10 +34,10 @@ then the dispel box and sound (#4). Work goes through GitHub issues and PRs at
 
 ## Layout
 
-TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` → `Frames.lua` →
-`Auras.lua` → `Header.lua` → `GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` →
-`ClickCast.lua` → `GlassRaidFrames.lua` → `Options.lua` → `ClickCastOptions.lua`. Planned:
-`Dispel.lua`.
+TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) → `Compat.lua` →
+`Glass.lua` → `Role.lua` → `Engine.lua` → `Frames.lua` → `Auras.lua` → `Header.lua` →
+`GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` → `ClickCast.lua` → `GlassRaidFrames.lua` →
+`Options.lua` → `ClickCastOptions.lua`. Planned: `Dispel.lua`.
 
 - **`Compat.lua`**: `GlassRaidFrames.API` is the only route to client APIs that moved or may be
   absent. It holds:
@@ -52,10 +52,9 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
 
   It is a subset of GlassUnitFrames' `Compat.lua`; lift more from there when needed rather than
   rewriting.
-- **`Glass.lua`**: the material. It is a **copy of GlassUnitFrames `main:Glass.lua`**; only
-  the header and namespace lines differ. `tests/test_toc.lua` fails while they differ, and the
-  same goes for `Tools/make_textures.py`. Change the material in GlassUnitFrames first, then copy
-  it back. `Media/*.tga` come from that generator.
+- **`Glass.lua`**: one line that matters, `GlassRaidFrames.Glass = LibStub("LibGlass-1.0"):New()`:
+  this addon's instance of the embedded material (see "The glass material"). Every call site
+  dot-calls it (`Glass.Apply`, `Glass.Bar`, `Glass.MEDIA`, ...).
 - **`Header.lua`**: the layout. **Eight `SecureGroupHeaderTemplate` headers**, one per raid
   group (`groupFilter` 1..8), side by side in one protected container, as in EllesmereUI's
   separated mode. Header 1 also has `showParty`/`showPlayer`, so **the client switches between
@@ -79,7 +78,7 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   talent-given role). `Role.Watch(onChange, register)` takes the caller's reporting registrar
   (`API.RegisterEvents`).
 
-  **Self-contained like `Glass.lua`** (no engine, frames or saved variables), so GlassUnitFrames
+  **Self-contained** (no engine, frames, saved variables or libraries), so GlassUnitFrames
   can lift it for its #35. Forever has one spec per class (always DAMAGER), so the spec API is
   useless here. The three Vanilla trees are **posX clusters in one trait tree** (probe item 9):
   cluster the visible, on-canvas nodes (`y < MAX_Y`) at gaps over `Role.GAP` and sum
@@ -208,9 +207,9 @@ TOC load order: `Compat.lua` → `Glass.lua` → `Role.lua` → `Engine.lua` →
   - Sizes are clamped to `Header.MIN/MAX` (height ≥ 36, below which the debuff row covers the
     name). It re-applies on role change.
   - The sliders save at once but resize when the drag pauses (0.1 s), silently in combat.
-  - Known: `Glass.lua`'s font registry keeps the names' original size. `Glass.SetFont` (unused
-    here) would reset them until the next resize.
-  - `Glass.lua` stays the pinned copy: the name font is re-set with the same file.
+  - Known: the glass instance's font registry keeps the names' original size. `Glass.SetFont`
+    (unused here) would reset them until the next resize.
+  - The material is LibGlass's, not changed here: the name font is re-set with the same file.
 - **`Engine.lua`**: who gets painted and when, adapted from GlassUnitFrames' engine for frames
   whose unit changes:
   - a unit→frames map kept by `Engine.SetUnit`;
@@ -259,6 +258,33 @@ Forever is **Vanilla content running on Blizzard's Retail (Mainline) codebase**:
 content and the Retail API. `WOW_PROJECT_ID == WOW_PROJECT_MAINLINE`. Advice that cites a TBC or
 Classic API is usually stale. Spell IDs are Vanilla's, and so are ranks.
 
+## The glass material
+
+The material is **LibGlass-1.0**, an embedded LibStub library (`..\LibGlass`,
+github.com/Spotnick2/LibGlass, public, MIT) that every glass addon embeds. Its repo owns the code,
+the textures, the generator (`Tools/make_textures.py`) and the write-up
+(`docs/GLASS-MATERIAL.md`), and its `CLAUDE.md` holds the contract (the API, region fields and
+texture names only grow; instances; upgrade rules).
+
+- **Material changes are LibGlass PRs**, never edits here. A bug or a need found here goes on a
+  LibGlass issue; never edit `..\LibGlass` from this repo's session.
+- **How it's embedded:** `.pkgmeta` externals put it in `Libs\LibGlass-1.0\` (the only supported
+  path: `MEDIA` is derived from it), and the TOC loads its XML first. `Libs/` is gitignored; a dev
+  copy comes from the LibGlass checkout through its own `Tools\deploy.ps1`, which
+  `Tools\deploy.ps1` here calls first. The tests load the same checkout.
+- **The pin:** `.pkgmeta` pins a tag (`tag: r1`), **never `tag: latest`**. Bump it only in a
+  release made anyway: players get library fixes earlier through whichever glass addon ships the
+  newest copy (LibStub runs that one). CI reads the pin from `.pkgmeta`
+  (`tests/fetch_libglass.sh`), tests against it, and asserts the zip's `Libs/LibGlass-1.0/` is
+  exactly that commit's shipped files. No comment on a `.pkgmeta` value line: the packager keeps
+  it in the value.
+- **`GlassRaidFrames.Glass` is an instance**: `STYLE`, the `TUNABLES` setters and the font
+  registry are this addon's own. `Glass.MEDIA` resolves to the winning copy's `Media\`; use it
+  only for library textures (`bar_fill`, `rim5_small`, ...). Our own media (`Media\dispel.ogg`)
+  has its own path.
+- **Colours passed to a glass bar's `SetStatusBarColor` must be plain** (the library's hook
+  compares them): never a secret.
+
 ## References: read these before touching an unfamiliar API
 
 - `C:\Projects\References\PORTING-TBC-TO-FOREVER.md` holds the canonical addon-agnostic field
@@ -277,7 +303,8 @@ Classic API is usually stale. Spell IDs are Vanilla's, and so are ranks.
   `Gethe/wow-ui-source` only for what isn't there. For example, Forever's
   `SecureUnitButton_OnClick` is where `C_ClickBindings` gets the first say on every
   `SecureUnitButtonTemplate` frame, ours included.
-- `..\GlassUnitFrames\docs\GLASS-MATERIAL.md` is the write-up of the glass material.
+- `..\LibGlass\docs\GLASS-MATERIAL.md` is the write-up of the glass material, and
+  `..\LibGlass\CLAUDE.md` its contract.
 
 ## Reference addons
 
@@ -345,10 +372,12 @@ not a newer Lua that may be first on `PATH`.
 & 'C:\Program Files (x86)\Lua\5.1\luac.exe' -p File.lua             # syntax check; silent on success
 pwsh tests\run.ps1                                                   # luac -p on TOC files + probe + every tests\test_*.lua
 & 'C:\Program Files (x86)\Lua\5.1\lua.exe' tests\test_boot.lua      # one test, run from the repo root
-python Tools\make_textures.py                                        # regenerate Media\*.tga (a copy of GlassUnitFrames')
 python Tools\make_sound.py                                           # regenerate Media\dispel.ogg (numpy + ffmpeg/libvorbis)
-pwsh Tools\deploy.ps1 -Probe                                         # copy the addon (+ RaidProbe) into AddOns
+pwsh Tools\deploy.ps1 -Probe                                         # copy the addon, its LibGlass (+ RaidProbe) into AddOns
 ```
+
+The tests and the deploy take the LibGlass checkout from `$env:LIBGLASS`, else `..\LibGlass`,
+and fail loudly without one. Both warn when it isn't at the `.pkgmeta` pin.
 
 - **Default AddOns path:** `C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns`.
   The deploy script takes `-AddOnsPath`.
@@ -532,8 +561,10 @@ break the behaviour and confirm it goes red.
 - **Every tag needs a `CHANGELOG.md` entry committed first**, written for players. The tag name
   sets the channel: `alpha` / `beta` / anything else → Release. That's a distribution channel,
   not a stability claim.
-- `.pkgmeta` ignores `.github`, `docs`, `tests`, `Tools`, `AGENTS.md`, `CLAUDE.md`, `README.md`,
-  `CHANGELOG.md` and `LICENSE`.
+- `.pkgmeta` ignores `.github`, `.claude`, `docs`, `tests`, `Tools`, `CLAUDE.md`, `README.md` and
+  `CHANGELOG.md` (`LICENSE` ships), plus LibGlass's `tests`, `docs`, `Tools` and notes under
+  `Libs/LibGlass-1.0/` (CurseForge's packager ignores an external's own list). CI asserts the
+  zip holds exactly the addon and the library's shipped files.
 
 ## Conventions
 
