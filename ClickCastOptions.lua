@@ -51,26 +51,11 @@ end
 
 --------------------------------------------------------------------------------
 -- Ranks: the spellbook holds every rank as its own item (measured), though
--- Blizzard's UI shows only the top one. Learned spells only (API.SpellBookSpells
--- skips future ones), grouped by the client's own (localized) name at runtime:
--- nothing is compared against a stored name. One spellbook pass per refresh.
+-- Blizzard's UI shows only the top one. API.Ranks groups the learned ones by
+-- the client's own name (Compat.lua); one spellbook pass per refresh.
 --------------------------------------------------------------------------------
 
-local rankMap   -- name -> { spellID, ... } (lowest rank first), rebuilt per refresh
-
-local function buildRankMap()
-    rankMap = {}
-    for _, s in ipairs(API.SpellBookSpells()) do
-        rankMap[s.name] = rankMap[s.name] or {}
-        table.insert(rankMap[s.name], s.spellID)
-    end
-end
-
-function CCO.Ranks(spellID)
-    if not rankMap then buildRankMap() end
-    local name = API.SpellName(spellID)
-    return (name and rankMap[name]) or {}
-end
+CCO.Ranks = function(spellID) return API.Ranks(spellID) end
 
 -- Next rank choice: highest (unpinned) -> rank 1 -> rank 2 ... -> highest.
 local function cycleRank(row)
@@ -239,7 +224,7 @@ end
 
 function CCO.Refresh()
     if not page.built then return end
-    rankMap = nil   -- the spellbook may have changed: one fresh pass
+    API.ResetRanks()   -- the spellbook may have changed: one fresh pass
     header:SetText("Bindings for |cffffffff" .. (ROLE_NAMES[GRF.role] or "?") .. "|r (this character)")
     status:SetText(GRF.ClickCast.pending and "|cffffd040Changes apply when combat ends.|r" or "")
     mouseoverWarn:SetShown(mouseoverCastOn())

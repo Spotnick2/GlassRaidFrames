@@ -154,6 +154,24 @@ function API.SpellBookSpells()
     return out
 end
 
+-- Every learned rank of a spell, lowest first: the spellbook's entries
+-- grouped by the client's own (localized) name at runtime, so nothing is
+-- compared against a stored name. One spellbook pass, cached until
+-- API.ResetRanks (SPELLS_CHANGED, or a page refresh).
+local rankMap   -- name -> { spellID, ... }
+function API.ResetRanks() rankMap = nil end
+function API.Ranks(spellID)
+    if not rankMap then
+        rankMap = {}
+        for _, s in ipairs(API.SpellBookSpells()) do
+            rankMap[s.name] = rankMap[s.name] or {}
+            table.insert(rankMap[s.name], s.spellID)
+        end
+    end
+    local name = API.SpellName(spellID)
+    return (name and rankMap[name]) or {}
+end
+
 -- Whether the player has learned this exact spell ID (a rank's own ID
 -- counts: measured known=true for each learned Shadow Bolt rank). A name
 -- alone proves nothing: C_Spell.GetSpellName answers for unlearned spells.

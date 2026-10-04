@@ -26,5 +26,10 @@
 - Blizzard's party and raid frames are hidden (`/grf blizzard` toggles it).
 - `/grf unlock` to move the frames, `/grf reset`, `/grf solo` to show your own frame when not
   in a group.
+- Your heals on the frames: your own Renew and Power Word: Shield (Rejuvenation and Regrowth for
+  druids) show in the top-right corner of each frame, only yours. Important buffs from others
+  (Blessing of Protection, Power Infusion, Blessing of Sacrifice, Innervate, Fear Ward, Thorns)
+  show top-left. Set up once per class and shared by all your characters of that class
+  (`/grf ind` to list, turn on or off, or reset).
 - The glass look comes from LibGlass, a small library shared by the Glass addons, included in
   the download (nothing extra to install).

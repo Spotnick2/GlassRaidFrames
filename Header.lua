@@ -289,12 +289,15 @@ local function dress(child, setup)
     childUnitChanged(child, "unit", child:GetAttribute("unit"))
 end
 
--- Collect a header's precreated children into `list`, dressing each.
-local function collect(h, list, setup)
+-- Collect a header's precreated children into `list`, dressing each. Pet
+-- tiles are flagged before dressing (they get only the debuff row): a
+-- precreated child has no unit yet to tell.
+local function collect(h, list, setup, isPet)
     local i = 1
     while h do
         local child = h:GetAttribute("child" .. i)
         if not child then break end
+        child.isPet = isPet or nil
         table.insert(list, child)
         dress(child, setup)
         i = i + 1
@@ -321,7 +324,7 @@ local function newPetHeader(parent, setup)
     h:SetAttribute("startingIndex", 1 - Header.PET_COUNT)
     h:Show()
     h:SetAttribute("startingIndex", 1)
-    collect(h, Header.petChildren, setup)
+    collect(h, Header.petChildren, setup, true)
     return h
 end
 

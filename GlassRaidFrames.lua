@@ -195,6 +195,28 @@ function Settings.SetShowPets(on)
     return true
 end
 
+-- Indicators (#19): account-wide, per class. `which` is a list number or a key.
+function Settings.FindIndicator(which)
+    local list = GRF.Indicators.Setup() or {}
+    local n = tonumber(which)
+    if n then return list[n], n end
+    which = type(which) == "string" and which:lower() or which
+    for i, ind in ipairs(list) do
+        if ind.key:lower() == which then return ind, i end
+    end
+    return nil
+end
+
+function Settings.SetIndicatorEnabled(which, on)
+    local ind = Settings.FindIndicator(which)
+    if not ind then return false end
+    ind.enabled = on == true
+    GRF.Indicators.Request()
+    return true
+end
+
+function Settings.ResetIndicators() return GRF.Indicators.Reset() end
+
 function Settings.Unlock() return GRF.Movers.Unlock() end
 -- The reset belongs to the role it was asked for: queued in combat, it must
 -- not land on whatever role is current when combat ends (Codex review).
@@ -219,6 +241,41 @@ local function failures()
         say("event " .. line)
     end
     if not any then say("no failures recorded") end
+end
+
+local KIND_NAMES = { icons = "icons", icon = "one icon", square = "square", debuffs = "debuff row" }
+
+local function indicatorLine(i, ind)
+    local Ind = GRF.Indicators
+    local what
+    if ind.kind == "debuffs" then
+        what = (ind.filter == "dispellable" and "debuffs you can dispel" or "every debuff") .. ", up to " .. ind.max
+    else
+        local names = {}
+        for _, id in ipairs(ind.spells) do names[#names + 1] = API.SpellName(id) or ("#" .. id) end
+        what = (ind.mine and "mine: " or "anyone's: ") .. (#names > 0 and table.concat(names, ", ") or "no spells")
+    end
+    local ok, why = Ind.Supported(ind)
+    local state = not ind.enabled and "|cff808080off|r" or (ok and "|cff60ff60on|r" or ("|cffff6060" .. why .. "|r"))
+    return string.format("%d. %s (%s, %s): %s [%s]", i, ind.name, KIND_NAMES[ind.kind] or ind.kind,
+        ind.anchor:lower(), what, state)
+end
+
+local function indicatorsCommand(rest)
+    local which, onoff = rest:match("^(%S+)%s+(%S+)$")
+    onoff = onoff and onoff:lower()
+    if rest:lower() == "reset" then
+        Settings.ResetIndicators()
+        say("indicators back to your class defaults")
+    elseif which and (onoff == "on" or onoff == "off") then
+        if not Settings.SetIndicatorEnabled(which, onoff == "on") then say("no indicator " .. which) end
+    elseif rest ~= "" then
+        say("usage: /grf ind | /grf ind <number> on|off | /grf ind reset")
+        return
+    end
+    say("indicators (all your characters of this class):")
+    for i, ind in ipairs(GRF.Indicators.Setup() or {}) do say(indicatorLine(i, ind)) end
+    if InCombatLockdown() then say("changes show when combat ends") end
 end
 
 local function roleLine()
@@ -265,6 +322,8 @@ local function slash(msg)
             or "Blizzard's party/raid frames: shown after /reload")
     elseif cmd == "options" or cmd == "config" then
         if not (GRF.Options and GRF.Options.Open()) then say("Game Menu > Options > AddOns > Glass Raid Frames") end
+    elseif cmd == "ind" or cmd == "indicators" then
+        indicatorsCommand((msg or ""):match("^%s*%S+%s*(.-)%s*$") or "")
     elseif cmd == "failures" then
         failures()
     elseif cmd == "version" then
@@ -277,6 +336,7 @@ local function slash(msg)
         say("/grf size <width> <height> | reset - this role's tile size")
         say("/grf solo - show your own frame when not in a group")
         say("/grf pets - show or hide pets (this role)")
+        say("/grf ind - buff and debuff indicators (per class); /grf ind <n> on|off, /grf ind reset")
         say("/grf blizzard - toggle hiding Blizzard's party/raid frames")
         say("/grf failures - what failed to build or register")
         say("/grf version - client build vs the measured one")

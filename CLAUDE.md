@@ -35,9 +35,10 @@ then the dispel box and sound (#4). Work goes through GitHub issues and PRs at
 ## Layout
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) → `Compat.lua` →
-`Glass.lua` → `Role.lua` → `Engine.lua` → `Frames.lua` → `Auras.lua` → `Header.lua` →
-`GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` → `ClickCast.lua` → `GlassRaidFrames.lua` →
-`Options.lua` → `ClickCastOptions.lua`. Planned: `Dispel.lua`.
+`Glass.lua` → `Role.lua` → `Engine.lua` → `Frames.lua` → `IndicatorDefaults.lua` →
+`Indicators.lua` → `Header.lua` → `GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` →
+`ClickCast.lua` → `GlassRaidFrames.lua` → `Options.lua` → `ClickCastOptions.lua`. Planned:
+`Dispel.lua`, `IndicatorOptions.lua`.
 
 - **`Compat.lua`**: `GlassRaidFrames.API` is the only route to client APIs that moved or may be
   absent. It holds:
@@ -229,9 +230,33 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     "unchecked" and never fades;
   - the mark index may be secret: `SetSpriteSheetCell`;
   - role icons show for TANK/HEALER only, because everyone is DAMAGER by default on Forever.
-- **`Auras.lua`**: a 3-icon debuff row per tile on an `AuraContainer` (`AddAuraGroup` before
-  `SetUnit`, then `UpdateAllAuras`). It follows the child's unit, in combat too (measured).
-  Buttons are styled only in `initializeFrame`, with `EnableMouse(false)`.
+- **`Indicators.lua`** (#19): buffs and debuffs on each tile, drawn by `AuraContainer`s
+  (the client picks the auras; their data never reaches Lua). Probe: `FOREVER-PROBE.md` item 10.
+  - **Account-wide, per class** (`GlassRaidFramesDB.indicators[classToken].list`, owner: Alliance
+    and Horde priests share one setup), seeded from **`IndicatorDefaults.lua`** (data only: rank
+    families by first-rank ID, verified with `/rprobe ind ids`; class defaults). Validated once
+    per session (junk dropped, values clamped, the debuff row restored).
+  - Kinds: `icons` (one **fixed spot per spell**, one aura *slot* = 1 button; owner's pick over
+    collapsing rows, which are *groups* = 10 buttons per tile, #21: 1,240 buttons cost 50 MB and
+    93 → 60 fps); `icon` / `square` (slots stacked at one spot, **list order = frame level =
+    priority**); `debuffs` (the built-in group row, `HARMFUL` or `HARMFUL|RAID`).
+  - **Only mine = the `PLAYER` filter token**, per indicator. Spells match by
+    `includeSpellIDs` with **every rank** (`Ind.Family`: the built-in family, else learned ranks
+    via `API.Ranks` plus the ID). `RAID_IN_COMBAT` doesn't flag Vanilla HoTs (measured).
+  - **A debuff on a group member can't be matched by ID unless `NeverSecret`**
+    (`C_Secrets.GetSpellAuraSecrecy`; Weakened Soul is `ContextuallySecret`): such an indicator
+    is reported unsupported (`Ind.Supported`) and not built. The plain debuff row shows it.
+  - One container per indicator per tile, anchored to `b.body` at `Ind.LEVEL` (+12, over the
+    rim). Edits go through `Ind.Request()` (the combat queue) and `sync` changes slots in place
+    (`SetAuraSlotFilterString` / `CandidateFilters` / `Enabled`, restyle our own regions); a
+    removed spell's slot is switched off, a disabled indicator's container is parked and reused
+    by the next of its kind, so edits never pile up containers or keys.
+  - Every button region is made in `initializeFrame` (backing, icon or square, client swipe,
+    timer and stack texts) and only sized, placed, coloured or toggled later; `EnableMouse(false)`.
+    The client hides the buttons' shown state (secret even out of combat).
+  - Pet tiles (`child.isPet`, set by `Header`) get only the debuff row. Units follow
+    `onUnitChanged` (`SetUnit` + `UpdateAllAuras`, in combat too). Per-tile and per-indicator
+    `pcall`. `/grf ind` lists, `/grf ind <n|key> on|off`, `/grf ind reset` (`GRF.Settings`).
 - **`Blizzard.lua`**: hides `PartyFrame`, `CompactPartyFrame` and `CompactRaidFrameContainer`
   using GlassUnitFrames' recipe. **`CompactRaidFrameManager` stays**: that side panel holds the
   raid leader's tools (ready check, world markers). The recipe: unregister events, hide, reparent,

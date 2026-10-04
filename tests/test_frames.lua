@@ -172,7 +172,7 @@ check(p1.indicators.mark._shown and WoW.IsSecret(p1.indicators.mark._raidIndex),
 WoW.secretFields = {}
 
 -- Debuff row: one container per child, group declared before the unit.
-local dc = p1.debuffs
+local dc = p1.grfInd and p1.grfInd.byKey.debuffs and p1.grfInd.byKey.debuffs.c
 check(dc and dc._groups and dc._groups.grf_debuffs, "each tile has a debuff row")
 eq(dc._groups.grf_debuffs.filter, "HARMFUL", "the row shows debuffs")
 local seq = table.concat(dc._seq, ",")
@@ -195,7 +195,7 @@ eq(#WoW.blocked, 0, "a combat conversion touches nothing protected (" .. table.c
 local r7 = childFor("raid7")
 check(r7 and r7:GetParent() == H.headers[2], "raid7 (group 2) sits in header 2")
 eq(r7.nameText._text, "Raider", "its name is painted in combat")
-eq(r7.debuffs._modelUnit, "raid7", "its debuff row moved to the new unit in combat")
+eq(r7.grfInd.byKey.debuffs.c._modelUnit, "raid7", "its debuff row moved to the new unit in combat")
 eq(childFor("party1"), nil, "party tokens are gone in the raid")
 eq(GRF.Engine._test.framesByUnit.party1[p1], nil, "the engine forgot the old unit")
 
