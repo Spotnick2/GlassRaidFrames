@@ -54,6 +54,21 @@ GlassRaidFrames.ClickCast.Rows()[1].spell = 139
 GlassRaidFrames.ClickCastOptions.Refresh()
 WoW.tick()
 
+-- The Indicators page: shown, every kind of control used once.
+local IT = GlassRaidFrames.IndicatorOptions._test
+IT.page:Show()
+local iu = IT.ui
+iu.anchors[1]._scripts.OnClick(iu.anchors[1])
+iu.size:SetValue(14)
+iu.kind[3]._scripts.OnClick(iu.kind[3])
+iu.color._scripts.OnClick(iu.color)
+iu.idBox:SetText("139"); iu.idBox._scripts.OnTextChanged(iu.idBox)
+iu.idAdd._scripts.OnClick(iu.idAdd)
+iu.rows[#GlassRaidFrames.Indicators.Setup()]._scripts.OnClick(iu.rows[#GlassRaidFrames.Indicators.Setup()])
+iu.add._scripts.OnClick(iu.add)
+iu.delete._scripts.OnClick(iu.delete); iu.delete._scripts.OnClick(iu.delete)
+WoW.tick()
+
 -- Unlock mode and a drag, so the mover's methods are checked too.
 GlassRaidFrames.Movers.Unlock()
 local mv = GlassRaidFrames.Movers._test.mover()

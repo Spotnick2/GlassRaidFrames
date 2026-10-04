@@ -41,7 +41,8 @@ Ind.GROW = { LEFT = { -1, 0 }, RIGHT = { 1, 0 }, UP = { 0, 1 }, DOWN = { 0, -1 }
 Ind.GAP = 2
 Ind.LEVEL = 12          -- over the glass rim (+10), as the debuff row always was
 Ind.BAND = 10           -- frame levels per stacked slot: covers its cooldown and texts
-Ind.MAX_SPELLS = 12
+Ind.MAX_SPELLS = 8        -- the page shows 8 rows
+Ind.MAX_INDICATORS = 10   -- the page lists 10
 Ind.MIN_SIZE, Ind.MAX_SIZE = 6, 32
 Ind.MAX_DEBUFFS = 10
 Ind.OFFSET = 200        -- |x|, |y| bound
@@ -523,11 +524,15 @@ function Ind.Apply()
         local ok, err = pcall(sync, b)
         if not ok then API.Fail("indicators", err) end
     end
+    Ind.pending = false
+    if Ind.onApplied then pcall(Ind.onApplied) end   -- the open page repaints
     return true
 end
 
 -- Apply now, or when combat ends (the queued call reads the setup then).
+-- Ind.pending says an edit is waiting for combat to end.
 function Ind.Request()
+    if InCombatLockdown() then Ind.pending = true end
     GRF.WhenOutOfCombat("indicators", Ind.Apply, false)
 end
 

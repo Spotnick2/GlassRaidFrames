@@ -42,10 +42,12 @@ rawset(_G, "GetBindingAction", function() return nil end)
 rawset(_G, "SetOverrideBindingClick", function() end)
 rawset(_G, "ClearOverrideBindings", function() end)
 rawset(_G, "GetModifiedClick", function() return "ALT" end)
-local sub
+local sub, subs = nil, {}
 Settings.RegisterCanvasLayoutSubcategory = function(parent, frame, name)
-    sub = { parent = parent, frame = frame, name = name }
-    return sub
+    local entry = { parent = parent, frame = frame, name = name }
+    subs[#subs + 1] = entry
+    if name == "Click-casting" then sub = entry end
+    return entry
 end
 
 party(1)
@@ -57,6 +59,7 @@ local T = GRF.ClickCastOptions._test
 check(sub and sub.parent == GRF.Options.category, "the Click-casting page sits under Glass Raid Frames")
 check(GRF.Options.category ~= nil, "registered after the main category exists")
 eq(sub.name, "Click-casting", "named Click-casting")
+eq(subs[1] and subs[1].name, "Click-casting", "registered first, before Indicators")
 check(not T.page._shown, "created hidden (OnShow always fires)")
 T.page:Show()
 local capture = T.capture()

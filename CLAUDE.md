@@ -37,8 +37,8 @@ then the dispel box and sound (#4). Work goes through GitHub issues and PRs at
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) → `Compat.lua` →
 `Glass.lua` → `Role.lua` → `Engine.lua` → `Frames.lua` → `IndicatorDefaults.lua` →
 `Indicators.lua` → `Header.lua` → `GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` →
-`ClickCast.lua` → `GlassRaidFrames.lua` → `Options.lua` → `ClickCastOptions.lua`. Planned:
-`Dispel.lua`, `IndicatorOptions.lua`.
+`ClickCast.lua` → `GlassRaidFrames.lua` → `Options.lua` → `ClickCastOptions.lua` →
+`IndicatorOptions.lua`. Planned: `Dispel.lua`.
 
 - **`Compat.lua`**: `GlassRaidFrames.API` is the only route to client APIs that moved or may be
   absent. It holds:
@@ -257,6 +257,18 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - Pet tiles (`child.isPet`, set by `Header`) get only the debuff row. Units follow
     `onUnitChanged` (`SetUnit` + `UpdateAllAuras`, in combat too). Per-tile and per-indicator
     `pcall`. `/grf ind` lists, `/grf ind <n|key> on|off`, `/grf ind reset` (`GRF.Settings`).
+- **`IndicatorOptions.lua`**: the "Indicators" sub-page (owner's pick over a window of our own:
+  gpt-6-astra mockups, 2026-10-04), registered after Click-casting. Three areas: the class's
+  indicator list (add, delete with a second click, up/down; the built-in debuff row can't be
+  deleted or renamed), the selected one's settings (name box, enabled, only mine, buffs/debuffs,
+  kind, a 3×3 anchor grid, X/Y/size sliders, grow buttons, swipe, timer, a palette-cycling
+  colour for squares; the debuff row gets every/dispellable and how many instead) and spells
+  (rows with up/down/remove; add by spellbook drag or by ID with a live name and an "unknown
+  spell" refusal), plus a static preview tile. No dropdowns or popups: toggle-button groups.
+  Every edit goes through `GRF.Settings` (`EditIndicator`, `AddIndicator`, `RemoveIndicator`,
+  `MoveIndicator`, `AddIndicatorSpell`, ...), saves at once and applies through
+  `Ind.Request`; `Ind.pending` shows "Changes apply when combat ends" and `Ind.onApplied`
+  repaints. Changing an indicator's kind rebuilds it (sync retires the old kind's container).
 - **`Blizzard.lua`**: hides `PartyFrame`, `CompactPartyFrame` and `CompactRaidFrameContainer`
   using GlassUnitFrames' recipe. **`CompactRaidFrameManager` stays**: that side panel holds the
   raid leader's tools (ready check, world markers). The recipe: unregister events, hide, reparent,

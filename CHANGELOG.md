@@ -31,5 +31,8 @@
   (Blessing of Protection, Power Infusion, Blessing of Sacrifice, Innervate, Fear Ward, Thorns)
   show top-left. Set up once per class and shared by all your characters of that class
   (`/grf ind` to list, turn on or off, or reset).
+- An Indicators page under Options > AddOns > Glass Raid Frames: add your own indicators, pick
+  their spells (drag them from your spellbook or type an ID), show only yours or anyone's, and
+  place them anywhere on the frame with a live preview.
 - The glass look comes from LibGlass, a small library shared by the Glass addons, included in
   the download (nothing extra to install).

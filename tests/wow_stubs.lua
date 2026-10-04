@@ -321,6 +321,11 @@ function Methods.SetTextureSliceMargins(t, l, tp, r, b) t._slice = { l, tp, r, b
 -- string.format (which would throw on the proxy).
 function Methods.SetText(fs, text) fs._text = text end
 function Methods.SetChecked(cb, v) cb._checked = v and true or false end
+-- Buttons and edit boxes: enabled state (all in the dump's widget walk).
+function Methods.SetEnabled(w, on) w._enabled = on and true or false end
+function Methods.Enable(w) w._enabled = true end
+function Methods.Disable(w) w._enabled = false end
+function Methods.IsEnabled(w) return w._enabled ~= false end
 function Methods.GetChecked(cb) return cb._checked == true end
 function Methods.LockHighlight(b) b._highlightLocked = true end
 function Methods.SetScrollChild(sf, child) sf._scrollChild = child end
