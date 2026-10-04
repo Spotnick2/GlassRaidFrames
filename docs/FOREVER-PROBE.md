@@ -423,3 +423,24 @@ lands in `RaidProbeDB.log`; `/reload` writes it to `SavedVariables\RaidProbe.lua
 - `PLAYER|RAID_IN_COMBAT` excluded Power Word: Fortitude (right for a "my HoTs" filter).
   Renew and Shield had expired before `src` ran: item 1 still open. Which rows lit wasn't
   captured; `ind state` was added for the next run.
+
+### 10. Indicators, second run (1.60.1.70205, 2026-10-04, priest, solo and in combat)
+
+Seen on the panel (screenshots by the owner), the same out of and in combat:
+- **Row 1 `HELPFUL|PLAYER|RAID_IN_COMBAT`: empty.** `src` agrees: Renew and Shield are `out`.
+  Vanilla spells don't carry the raid-frame flag here, so **"my heals" needs spell IDs**.
+- Row 1b `HELPFUL|PLAYER`: Fortitude, Renew, Shield. Rows 2/2b (Renew slots, mine/anyone):
+  Renew with its timer text. **Slots, `PLAYER` and duration text work in combat.**
+- **Row 3 (Weakened Soul by ID): empty**, as `ContextuallySecret` predicted. Weakened Soul's
+  `src` is the casting priest (`player`, 15 s) and `HARMFUL|PLAYER` keeps it (`src`). It
+  already shows in the plain `HARMFUL` debuff row of the real tiles.
+- Row 4 (Renew + Shield IDs, row growing left): both show, right-aligned; the order changes
+  (client sort). Row 6: **Shield covers Renew** (stacked slots, higher frame level wins).
+- Row 8 `HARMFUL|RAID`: no dispellable debuff was available; untested.
+- **`IsShown()` on container buttons is secret even out of combat** (`ind state` read
+  `<secret>`): an addon can't tell which indicators are lit, only the eye can.
+- `ind ids`: all 50 planned IDs resolve to the right names (11 spells, every rank). Subtext
+  ("Rank 1") only comes back for ranks the player knows.
+- Cosmetic: the default duration text ("28 s") overflows a 16 px icon. `|R` inside a label is
+  read as a colour code.
+- Not tested: another priest's Renew in the "only mine" slot (no second priest available).
