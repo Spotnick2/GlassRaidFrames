@@ -106,7 +106,8 @@ function Frames.Setup(b)
     b.power = pw
 
     -- Dead/Offline: small, in the top-right corner (the bottom edge belongs to
-    -- the debuff row, the middle to the name).
+    -- the debuff row, the middle to the name). It shares the corner with "My
+    -- heals": a dead or offline unit carries no HoTs.
     local status = Glass.Font(g.top, 9, "RIGHT")
     status:SetPoint("TOPRIGHT", body, "TOPRIGHT", -inset - 3, -inset - 3)
     b.statusText = status
@@ -148,7 +149,7 @@ function Frames.Setup(b)
     b:HookScript("OnEnter", function(self) self.hoverRim:SetAlpha(1) end)
     b:HookScript("OnLeave", function(self) self.hoverRim:SetAlpha(0) end)
 
-    if GRF.Auras then GRF.Auras.Attach(b) end
+    if GRF.Indicators then GRF.Indicators.Attach(b) end
     b.relayout = Frames.Layout
     Frames.Layout(b)
 end

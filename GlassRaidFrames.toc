@@ -12,7 +12,8 @@ Glass.lua
 Role.lua
 Engine.lua
 Frames.lua
-Auras.lua
+IndicatorDefaults.lua
+Indicators.lua
 Header.lua
 GlassRaidFrames.xml
 Blizzard.lua

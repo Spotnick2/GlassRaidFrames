@@ -78,6 +78,7 @@ end
 
 function WoW.reset()
     WoW.frames = {}
+    WoW.auraSecrecy = {}
     WoW.blocked = {}
     WoW.chat = {}
     WoW.timers = {}
@@ -379,6 +380,36 @@ function Methods.AddAuraGroup(c, name, filter, spec)
     seq(c, "AddAuraGroup")
 end
 function Methods.UpdateAllAuras(c) c._refreshes = (c._refreshes or 0) + 1; seq(c, "UpdateAllAuras") end
+-- Slots: the client builds the slot's one button at once and runs
+-- initializeFrame on it (Blizzard_CustomAuraContainer.lua AddAuraSlot). Keys
+-- can't be reused. Building in combat is recorded as blocked: the buttons
+-- are locked while auras are secret.
+function Methods.AddAuraSlot(c, key, filter, spec)
+    c._slots = c._slots or {}
+    assert(not c._slots[key], "aura slot '" .. tostring(key) .. "' already exists")
+    if WoW.combat then table.insert(WoW.blocked, "AddAuraSlot") end
+    local frame = newWidget("Button", c)
+    c._slots[key] = { filter = filter, spec = spec, enabled = true, frame = frame }
+    seq(c, "AddAuraSlot")
+    if spec and spec.initializeFrame then spec.initializeFrame(frame) end
+    return frame
+end
+local function slot(c, key) return assert(c._slots and c._slots[key], "no aura slot '" .. tostring(key) .. "'") end
+function Methods.GetAuraSlotFrame(c, key) return c._slots and c._slots[key] and c._slots[key].frame end
+function Methods.SetAuraSlotEnabled(c, key, on)
+    assert(type(on) == "boolean", "enabled must be a boolean.")
+    slot(c, key).enabled = on
+end
+function Methods.SetAuraSlotFilterString(c, key, filter) slot(c, key).filter = filter end
+function Methods.SetAuraSlotCandidateFilters(c, key, cf) slot(c, key).spec.candidateFilters = cf end
+local function group(c, key) return assert(c._groups and c._groups[key], "no aura group '" .. tostring(key) .. "'") end
+function Methods.SetAuraGroupFilterString(c, key, filter) group(c, key).filter = filter end
+function Methods.SetAuraGroupMaxFrameCount(c, key, n) group(c, key).spec.maxFrameCount = n end
+function Methods.SetAuraGroupLayout(c, key, layout) group(c, key).spec.layout = layout end
+function Methods.SetAuraGroupEnabled(c, key, on) group(c, key).enabled = on end
+function Methods.GetAuraGroupFrameCount(c, key) return 0 end
+function Methods.SetFlowLayoutAnchorPoint(c, point) c._flowAnchor = point end
+function Methods.SetFlowLayoutGrowthDirection(c, h, v) c._flowGrowth = { h, v } end
 function Methods.SetIcon(b, t) b._icon = t end
 function Methods.SetDurationCooldown(b, cd) b._cooldown = cd end
 function Methods.SetDurationText(b, fs) b._durationText = fs end
@@ -403,7 +434,15 @@ Enum = {
     LuaCurveType = { Linear = 0 },
     StatusBarTimerDirection = { ElapsedTime = 0, RemainingTime = 1 },
     UITextureSliceMode = { Stretched = 0, Tiled = 1 },
+    -- Not in the dump's enum list; the probe printed its names in game (70205).
+    SecrecyLevel = { NeverSecret = 0, AlwaysSecret = 1, ContextuallySecret = 2 },
 }
+-- Aura secrecy per spell ID (in the dump; WoW.auraSecrecy overrides).
+-- Measured: every spell the defaults use is ContextuallySecret (item 10).
+C_Secrets = {
+    GetSpellAuraSecrecy = function(id) return WoW.auraSecrecy[id] or Enum.SecrecyLevel.ContextuallySecret end,
+}
+AnchorUtil = { FlowDirection = { Left = -1, Right = 1, Up = 1, Down = -1 } }   -- FrameXML (dump _G walk)
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 function GetBuildInfo() return "1.60.1", "70205", "Sep 23 2026", 16001 end
 function InCombatLockdown() return WoW.combat end

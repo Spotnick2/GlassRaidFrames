@@ -71,6 +71,19 @@ local AURA_CONTAINER_API = {
     ["AuraContainer:AddAuraGroup"] = true, ["AuraContainer:UpdateAllAuras"] = true,
     ["AuraContainer:SetUnit"] = true,
     ["Button:SetIcon"] = true,   -- on the buttons the container creates
+    -- The indicators (#19). In Forever's own Blizzard_CustomAuraContainer.lua /
+    -- Blizzard_CustomAuraButton.lua / Blizzard_AuraContainerFlowLayout.lua
+    -- (wow-ui-source, forever branch); slots, slot filters/enable/size, the
+    -- duration texts and the flow growth were used by RaidProbe in game
+    -- (FOREVER-PROBE item 10). The group setters are source-only so far.
+    ["AuraContainer:AddAuraSlot"] = true, ["AuraContainer:GetAuraSlotFrame"] = true,
+    ["AuraContainer:SetAuraSlotEnabled"] = true, ["AuraContainer:SetAuraSlotFilterString"] = true,
+    ["AuraContainer:SetAuraSlotCandidateFilters"] = true,
+    ["AuraContainer:SetAuraGroupFilterString"] = true, ["AuraContainer:SetAuraGroupMaxFrameCount"] = true,
+    ["AuraContainer:SetAuraGroupLayout"] = true, ["AuraContainer:SetAuraGroupEnabled"] = true,
+    ["AuraContainer:GetAuraGroupFrameCount"] = true, ["AuraContainer:GetAuraGroupFrame"] = true,
+    ["AuraContainer:SetFlowLayoutAnchorPoint"] = true, ["AuraContainer:SetFlowLayoutGrowthDirection"] = true,
+    ["Button:SetDurationCooldown"] = true, ["Button:SetDurationText"] = true, ["Button:SetApplicationCount"] = true,
 }
 
 local n = 0
