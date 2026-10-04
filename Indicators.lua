@@ -314,7 +314,7 @@ local function newContainer(b, kind)
             initializeFrame = function(ab)
                 makeRegions(ab, false)
                 styleDebuffButton(ab, e.ind and e.ind.size or 12)
-                if e.ind and not e.ind.timer then ab.grf.timer:Hide() end
+                ab.grf.timer:Hide()   -- the row has no timer setting (the first buttons come before e.ind)
             end,
             candidateFilters = {},
             layout = { elementWidth = 12, elementHeight = 12, elementSpacing = Ind.GAP, lineSpacing = Ind.GAP },

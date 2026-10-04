@@ -372,12 +372,19 @@ local function seq(w, what) w._seq = w._seq or {}; table.insert(w._seq, what) en
 function Methods.SetUnit(m, unit) m._modelUnit = unit; seq(m, "SetUnit"); return true end
 
 -- Blizzard's managed aura container (Blizzard_AuraContainer; not in the API
--- dump, shipped by DinoUF on Forever). It records its groups; the client
--- would create buttons and call initializeFrame on each.
+-- dump, shipped by DinoUF on Forever). It records its groups and, as the
+-- client does, builds a first batch of 10 buttons at once, running
+-- initializeFrame on each (FrameCreationBatchSize, CreateFrameBatch).
 function Methods.AddAuraGroup(c, name, filter, spec)
     c._groups = c._groups or {}
-    c._groups[name] = { filter = filter, spec = spec }
+    local g = { filter = filter, spec = spec, frames = {} }
+    c._groups[name] = g
     seq(c, "AddAuraGroup")
+    for i = 1, 10 do
+        local frame = newWidget("Button", c)
+        g.frames[i] = frame
+        if spec and spec.initializeFrame then spec.initializeFrame(frame) end
+    end
 end
 function Methods.UpdateAllAuras(c) c._refreshes = (c._refreshes or 0) + 1; seq(c, "UpdateAllAuras") end
 -- Slots: the client builds the slot's one button at once and runs
@@ -407,7 +414,8 @@ function Methods.SetAuraGroupFilterString(c, key, filter) group(c, key).filter =
 function Methods.SetAuraGroupMaxFrameCount(c, key, n) group(c, key).spec.maxFrameCount = n end
 function Methods.SetAuraGroupLayout(c, key, layout) group(c, key).spec.layout = layout end
 function Methods.SetAuraGroupEnabled(c, key, on) group(c, key).enabled = on end
-function Methods.GetAuraGroupFrameCount(c, key) return 0 end
+function Methods.GetAuraGroupFrameCount(c, key) return #group(c, key).frames end
+function Methods.GetAuraGroupFrame(c, key, i) return group(c, key).frames[i] end
 function Methods.SetFlowLayoutAnchorPoint(c, point) c._flowAnchor = point end
 function Methods.SetFlowLayoutGrowthDirection(c, h, v) c._flowGrowth = { h, v } end
 function Methods.SetIcon(b, t) b._icon = t end

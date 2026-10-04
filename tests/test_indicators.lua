@@ -73,6 +73,9 @@ local seq = table.concat(deb.c._seq, ",")
 check(seq:find("AddAuraGroup") < seq:find("SetUnit"), "AddAuraGroup before SetUnit (" .. seq .. ")")
 eq(deb.c._modelUnit, "party1", "the row follows its tile")
 eq(heals.c._modelUnit, "party1", "my heals follow the tile")
+local first = deb.c._groups.grf_debuffs.frames[1]   -- built by AddAuraGroup, before e.ind exists
+check(first.grf and not first.grf.timer._shown, "debuff buttons show no timer text, the first batch included")
+eq(first._mouse, nil, "debuff buttons take no scripts")
 
 -- Pets: only the debuff row.
 local pet = H.petChildren[1]
