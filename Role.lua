@@ -1,6 +1,6 @@
 -- Role.lua: which role the player is playing, for settings per role (#7).
 --
--- Self-contained on purpose, like Glass.lua, so GlassUnitFrames can lift it
+-- Self-contained on purpose, so GlassUnitFrames can lift it
 -- for its own role layouts (its #35): it needs no engine, frames or saved
 -- variables, only the client's talent API. The caller passes the manual
 -- pick and listens for changes.

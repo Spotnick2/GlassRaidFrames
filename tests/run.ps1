@@ -46,6 +46,8 @@ try {
         } else {
             Write-Host "LibGlass: $libGlass at the pin ($pin)" -ForegroundColor DarkGray
         }
+    } elseif (-not $pin) {
+        Write-Host "WARNING: no LibGlass commit/tag pin readable in .pkgmeta (an inline comment on the value line?); CI's fetch will fail" -ForegroundColor Yellow
     }
 
     $failed = 0

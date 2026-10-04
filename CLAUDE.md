@@ -78,7 +78,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   talent-given role). `Role.Watch(onChange, register)` takes the caller's reporting registrar
   (`API.RegisterEvents`).
 
-  **Self-contained like `Glass.lua`** (no engine, frames or saved variables), so GlassUnitFrames
+  **Self-contained** (no engine, frames, saved variables or libraries), so GlassUnitFrames
   can lift it for its #35. Forever has one spec per class (always DAMAGER), so the spec API is
   useless here. The three Vanilla trees are **posX clusters in one trait tree** (probe item 9):
   cluster the visible, on-canvas nodes (`y < MAX_Y`) at gaps over `Role.GAP` and sum
