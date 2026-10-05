@@ -217,6 +217,86 @@ end
 
 function Settings.ResetIndicators() return GRF.Indicators.Reset() end
 
+-- The Indicators page's edits: each saves at once and applies out of combat.
+-- noApply: save only (a slider mid-drag; the caller applies once it pauses).
+function Settings.EditIndicator(ind, field, value, noApply)
+    ind[field] = value
+    if not noApply then GRF.Indicators.Request() end
+end
+
+-- A new indicator (icons, my buffs, no spells yet); nil at the cap.
+function Settings.AddIndicator()
+    local Ind = GRF.Indicators
+    local list = Ind.Setup()
+    if not list or #list >= Ind.MAX_INDICATORS then return nil end
+    local n = 1
+    while Settings.FindIndicator("custom" .. n) do n = n + 1 end
+    local ind = { key = "custom" .. n, name = "New indicator", kind = "icons", aura = "HELPFUL", mine = true,
+                  enabled = true, anchor = "TOP", x = 0, y = -3, size = 12, grow = "RIGHT", swipe = true,
+                  timer = false, color = { 1, 0.2, 0.2 }, spells = {} }
+    list[#list + 1] = ind
+    Ind.Request()
+    return ind
+end
+
+-- The built-in debuff row can't be removed.
+function Settings.RemoveIndicator(ind)
+    local list = GRF.Indicators.Setup() or {}
+    if ind.builtin then return false end
+    for i, other in ipairs(list) do
+        if other == ind then
+            table.remove(list, i)
+            GRF.Indicators.Request()
+            return true
+        end
+    end
+    return false
+end
+
+local function move(t, i, delta)
+    local j = i + delta
+    if not (t[i] and t[j]) then return false end
+    t[i], t[j] = t[j], t[i]
+    return true
+end
+
+function Settings.MoveIndicator(ind, delta)
+    local _, i = Settings.FindIndicator(ind.key)
+    return i ~= nil and move(GRF.Indicators.Setup(), i, delta)   -- list order only: nothing to apply
+end
+
+-- A spell by ID: refused when unknown to the client, already listed, or at the cap.
+function Settings.AddIndicatorSpell(ind, id)
+    if type(id) ~= "number" or id <= 0 or id ~= math.floor(id) or not API.SpellName(id) then return false, "unknown spell" end
+    -- Any rank of a listed spell is that spell (both would match the same aura).
+    local Ind = GRF.Indicators
+    for _, other in ipairs(ind.spells) do
+        if other == id then return false, "already listed" end
+        for _, r in ipairs(Ind.Family(other)) do
+            if r == id then return false, "already listed (another rank)" end
+        end
+        for _, r in ipairs(Ind.Family(id)) do
+            if r == other then return false, "already listed (another rank)" end
+        end
+    end
+    if #ind.spells >= GRF.Indicators.MAX_SPELLS then return false, "list full" end
+    ind.spells[#ind.spells + 1] = Ind.Family(id)[1]   -- stored by its family's first rank when known
+    GRF.Indicators.Request()
+    return true
+end
+
+function Settings.RemoveIndicatorSpell(ind, i)
+    if not table.remove(ind.spells, i) then return false end
+    GRF.Indicators.Request()
+    return true
+end
+
+function Settings.MoveIndicatorSpell(ind, i, delta)
+    if not move(ind.spells, i, delta) then return false end
+    GRF.Indicators.Request()
+    return true
+end
+
 function Settings.Unlock() return GRF.Movers.Unlock() end
 -- The reset belongs to the role it was asked for: queued in combat, it must
 -- not land on whatever role is current when combat ends (Codex review).

@@ -286,6 +286,7 @@ local function register()
     -- The Click-casting page, under this one: registered here, in order,
     -- rather than by its own PLAYER_LOGIN handler (no ordering between frames).
     if GRF.ClickCastOptions then GRF.ClickCastOptions.Register(category) end
+    if GRF.IndicatorOptions then GRF.IndicatorOptions.Register(category) end
 end
 
 -- Open the panel; false when the Settings framework can't.

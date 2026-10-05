@@ -41,7 +41,8 @@ Ind.GROW = { LEFT = { -1, 0 }, RIGHT = { 1, 0 }, UP = { 0, 1 }, DOWN = { 0, -1 }
 Ind.GAP = 2
 Ind.LEVEL = 12          -- over the glass rim (+10), as the debuff row always was
 Ind.BAND = 10           -- frame levels per stacked slot: covers its cooldown and texts
-Ind.MAX_SPELLS = 12
+Ind.MAX_SPELLS = 8        -- the page shows 8 rows
+Ind.MAX_INDICATORS = 10   -- the page lists 10
 Ind.MIN_SIZE, Ind.MAX_SIZE = 6, 32
 Ind.MAX_DEBUFFS = 10
 Ind.OFFSET = 200        -- |x|, |y| bound
@@ -173,9 +174,16 @@ end
 -- Every rank to match for a stored spell: the built-in family, else the ranks
 -- this character has learned (spellbook, by the client's own name), plus the
 -- stored ID itself.
+-- Any rank of a built-in family -> that family (Thorns rank 6 must still
+-- match another druid's rank 1: Codex review of #23).
+local knownRank = {}
+for _, fam in pairs(D.FAMILIES) do
+    for _, r in ipairs(fam) do knownRank[r] = fam end
+end
+
 local families = {}   -- id -> ranks, until the spellbook changes (one lookup per Apply, not per tile)
 function Ind.Family(id)
-    local fam = D.FAMILIES[id] or families[id]
+    local fam = knownRank[id] or families[id]
     if fam then return fam end
     local out, seen = { id }, { [id] = true }
     for _, r in ipairs(API.Ranks(id)) do
@@ -523,11 +531,20 @@ function Ind.Apply()
         local ok, err = pcall(sync, b)
         if not ok then API.Fail("indicators", err) end
     end
+    Ind.pending = false
+    if Ind.onChanged then pcall(Ind.onChanged) end   -- the open page repaints
     return true
 end
 
 -- Apply now, or when combat ends (the queued call reads the setup then).
+-- Ind.pending says an edit is waiting for combat to end.
+-- The open page hears of every change once: from Apply, or here when the
+-- apply waits for combat (a /grf ind edit in combat must show at once).
 function Ind.Request()
+    if InCombatLockdown() then
+        Ind.pending = true
+        if Ind.onChanged then pcall(Ind.onChanged) end
+    end
     GRF.WhenOutOfCombat("indicators", Ind.Apply, false)
 end
 

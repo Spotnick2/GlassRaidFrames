@@ -22,3 +22,4 @@ ClickCast.lua
 GlassRaidFrames.lua
 Options.lua
 ClickCastOptions.lua
+IndicatorOptions.lua
