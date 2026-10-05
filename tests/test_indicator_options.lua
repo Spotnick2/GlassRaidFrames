@@ -239,7 +239,7 @@ eq(find("custom1").name, "New indicator", "the new one keeps its name")
 eq(ui.name._text, "New indicator", "and the box shows it")
 click(ui.delete); click(ui.delete)
 ui.name:SetFocus()
-ui.name.owner = "debuffs"   -- a draft owned by the built-in row (rename refused)
+ui.name.owner = find("debuffs")   -- a draft owned by the built-in row (rename refused)
 ui.name:SetText("Hacked")
 ui.name:ClearFocus()
 eq(find("debuffs").name, "Debuffs", "the built-in row is never renamed")
@@ -277,6 +277,26 @@ check(ui.rows[2].text._text and ui.status._text:find("combat ends"), "the open p
 WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
 SlashCmdList.GLASSRAIDFRAMES("ind received on")
+
+-- Reset while renaming drops the draft, on the first row and on another
+-- (Codex review: a key-owned draft renamed the new default).
+for _, row in ipairs({ 1, 2 }) do
+    click(ui.rows[row])
+    local key = GRF.Indicators.Setup()[row].key
+    ui.name:SetFocus()
+    ui.name:SetText("Pending rename")
+    click(ui.reset)
+    check(find(key).name ~= "Pending rename", "reset with a draft on row " .. row .. " keeps the default name")
+    ui.name:SetFocus(); ui.name:ClearFocus()   -- a later focus loss renames nothing either
+    check(find(key).name ~= "Pending rename", "(and later too, row " .. row .. ")")
+end
+-- /grf ind reset from chat while a draft is open: the old table is gone, the draft is dropped.
+click(ui.rows[2])
+ui.name:SetFocus()
+ui.name:SetText("Chat reset draft")
+SlashCmdList.GLASSRAIDFRAMES("ind reset")
+ui.name:ClearFocus()
+eq(find("received").name, "Received", "a draft for a replaced indicator is dropped")
 
 -- Reset.
 click(ui.reset)

@@ -387,7 +387,7 @@ paint = function()
         -- Keep a rename being typed on its own indicator; when the selection
         -- moved on (a row click, Add, a reset), commit the draft to its owner
         -- first (ClearFocus fires OnEditFocusLost), then show the new name.
-        if ui.name:HasFocus() and ui.name.owner ~= ind.key then ui.name:ClearFocus() end
+        if ui.name:HasFocus() and ui.name.owner ~= ind then ui.name:ClearFocus() end
         if not ui.name:HasFocus() then ui.name:SetText(ind.name) end
         ui.name:SetEnabled(not ind.builtin)
         ui.delete:SetEnabled(not ind.builtin)
@@ -465,6 +465,9 @@ local function build()
     ui.down = button(content, "Down", 68, function() S.MoveIndicator(selected(), 1); IO.Refresh() end)
     ui.down:SetPoint("LEFT", ui.up, "RIGHT", 4, 0)
     ui.reset = button(content, "Reset to class defaults", 140, function()
+        -- A reset starts over: a rename being typed is dropped, not saved.
+        ui.name.owner = nil
+        if ui.name:HasFocus() then ui.name:ClearFocus() end
         S.ResetIndicators()
         selectedKey = nil
         IO.Refresh()
@@ -482,17 +485,25 @@ local function build()
     ui.name = editBox(set, 140, false)
     ui.name:SetPoint("TOPLEFT", set, "TOPLEFT", 4, 0)
     -- Saved on Enter or when the box loses focus (clicking elsewhere).
-    -- The draft belongs to the indicator it was started on, whatever is
-    -- selected when it saves (Codex review of #23).
+    -- The draft belongs to the indicator TABLE it was started on, whatever is
+    -- selected when it saves, and only while that indicator is still in the
+    -- setup: a reset reuses the keys on new tables, so a key would rename the
+    -- new default (Codex reviews of #23).
+    local function stillListed(ind)
+        for _, other in ipairs(list()) do
+            if other == ind then return true end
+        end
+        return false
+    end
     local function saveName(self)
         local text = self:GetText():gsub("^%s+", ""):gsub("%s+$", "")
-        local ind = self.owner and GRF.Settings.FindIndicator(self.owner)
+        local ind = self.owner
         self.owner = nil
-        if ind and not ind.builtin and text ~= "" and text ~= ind.name then
+        if ind and stillListed(ind) and not ind.builtin and text ~= "" and text ~= ind.name then
             GRF.Settings.EditIndicator(ind, "name", text)
         end
     end
-    ui.name:SetScript("OnEditFocusGained", function(self) self.owner = selectedKey end)
+    ui.name:SetScript("OnEditFocusGained", function(self) self.owner = selected() end)
     ui.name:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
     ui.name:SetScript("OnEditFocusLost", function(self) saveName(self); IO.Refresh() end)
     ui.enabled = checkbox(set, "Enabled", function(on) edit("enabled", on) end)
