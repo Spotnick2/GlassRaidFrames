@@ -24,8 +24,6 @@ content:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", 0, 0)
 local label = function(...) return GRF.Options.Label(...) end
 local button = function(...) return GRF.Options.Button(...) end
 
-local CLASS_NAMES = { PRIEST = "Priest", DRUID = "Druid", PALADIN = "Paladin", SHAMAN = "Shaman", MAGE = "Mage",
-                      WARLOCK = "Warlock", HUNTER = "Hunter", ROGUE = "Rogue", WARRIOR = "Warrior" }
 local KINDS = { { "icons", "Icons" }, { "icon", "One icon" }, { "square", "Square" } }
 local KIND_HELP = {
     icons = "One fixed spot per spell, in list order.",
@@ -39,7 +37,7 @@ local PALETTE = { { 1, 0.2, 0.2 }, { 1, 0.6, 0.15 }, { 1, 0.9, 0.2 }, { 0.3, 0.9
                   { 0.3, 0.45, 1 }, { 0.75, 0.4, 1 }, { 1, 1, 1 } }
 local ACCENT = { 0.5, 0.83, 1 }   -- #7fd4ff, the Glass addons' cyan
 local LIST_X, MID_X, PREVIEW_X, TOP_Y = 16, 172, 470, -64
-IO.ROWS, IO.SPELL_ROWS = 10, 8
+IO.ROWS, IO.SPELL_ROWS = GRF.Indicators.MAX_INDICATORS, GRF.Indicators.MAX_SPELLS
 
 local selectedKey
 local ui = {}            -- built widgets
@@ -54,12 +52,27 @@ local function selected()
     return ind
 end
 
--- Every edit: save, apply (out of combat), repaint.
+-- Every edit: save, apply (out of combat); the page repaints when told
+-- (Indicators.onChanged), once.
 local function edit(field, value)
     local ind = selected()
     if not ind or refreshing then return end
     GRF.Settings.EditIndicator(ind, field, value)
-    IO.Refresh()
+end
+
+-- A slider step saves at once but applies when the drag pauses (0.1 s), not
+-- 60 tiles per step (the tile-size sliders do the same).
+local scheduled = false
+local function editLater(field, value)
+    local ind = selected()
+    if not ind or refreshing then return end
+    GRF.Settings.EditIndicator(ind, field, value, true)
+    if scheduled then return end
+    scheduled = true
+    C_Timer.After(0.1, function()
+        scheduled = false
+        GRF.Indicators.Request()
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -207,23 +220,33 @@ local function paintPreview()
     local n = 0
     for _, ind in ipairs(list()) do
         if ind.enabled and GRF.Indicators.Supported(ind) then
+            -- Placed as the tiles place them (Indicators.lua styleSlot and
+            -- updateDebuffs), in tile units, then scaled.
+            local gap = GRF.Indicators.GAP
             local s = ind.size * PREVIEW_SCALE
-            local count, dx, dy = 1, 0, 0
+            local count, step = 1, ind.size + gap
+            local point, dx, dy, ox, oy = ind.anchor, 0, 0, ind.x, ind.y
             if ind.kind == "icons" then
                 count = #ind.spells
                 local g = GRF.Indicators.GROW[ind.grow]
-                dx, dy = g[1] * (s + 2), g[2] * (s + 2)
+                dx, dy = g[1] * step, g[2] * step
             elseif ind.kind == "debuffs" then
+                -- The row's container is max icons wide, at the anchor; the
+                -- icons flow from its left, or its right on a right anchor.
                 count = ind.max
-                dx = (ind.anchor:find("RIGHT") and -1 or 1) * (s + 2)
+                local width = ind.max * ind.size + (ind.max - 1) * gap
+                local fromRight = ind.anchor:find("RIGHT") ~= nil
+                local v = ind.anchor:find("TOP") and "TOP" or (ind.anchor:find("BOTTOM") and "BOTTOM" or "")
+                point = v .. (fromRight and "RIGHT" or "LEFT")
+                if not fromRight and not ind.anchor:find("LEFT") then ox = ox - width / 2 + ind.size / 2 end   -- centred row
+                dx = (fromRight and -1 or 1) * step
             end
             for j = 1, count do
                 n = n + 1
                 local t = previewBox(n)
                 t:SetSize(s, s)
                 t:ClearAllPoints()
-                t:SetPoint(ind.anchor, p, ind.anchor, (ind.x + (j - 1) * dx / PREVIEW_SCALE) * PREVIEW_SCALE,
-                    (ind.y + (j - 1) * dy / PREVIEW_SCALE) * PREVIEW_SCALE)
+                t:SetPoint(point, p, point, (ox + (j - 1) * dx) * PREVIEW_SCALE, (oy + (j - 1) * dy) * PREVIEW_SCALE)
                 if ind.kind == "square" then
                     t:SetColorTexture(ind.color[1], ind.color[2], ind.color[3], 1)
                 elseif ind.kind == "debuffs" then
@@ -328,7 +351,9 @@ local function paintSpells(ind)
     local full = #ind.spells >= GRF.Indicators.MAX_SPELLS
     ui.drop:SetEnabled(not full)
     ui.idBox:SetEnabled(not full)
-    if full then ui.addNote:SetText("Up to " .. GRF.Indicators.MAX_SPELLS .. " spells.") end
+    local capNote = "Up to " .. GRF.Indicators.MAX_SPELLS .. " spells."
+    if full then ui.addNote:SetText(capNote)
+    elseif ui.addNote:GetText() == capNote then ui.addNote:SetText("") end
     previewTyped()
 end
 
@@ -336,21 +361,33 @@ end
 -- The page
 --------------------------------------------------------------------------------
 
+local paint   -- the repaint body, below
+
 function IO.Refresh()
     if not page.built then return end
     refreshing = true
+    local ok, err = pcall(paint)
+    refreshing = false   -- always: a stuck flag would make every control ignore clicks
+    if not ok then API.Fail("indicators page", err) end
+end
+
+paint = function()
     local ind = selected()
-    local class = select(2, UnitClass("player"))
-    ui.shared:SetText("Shared by all your characters of this class (" .. (CLASS_NAMES[class] or tostring(class)) .. ").")
+    local okC, className = pcall(UnitClass, "player")   -- the client's own, localized
+    className = (okC and type(className) == "string" and not API.IsSecret(className)) and className or "?"
+    ui.shared:SetText("Shared by all your characters of this class (" .. className .. ").")
     ui.status:SetText(GRF.Indicators.pending and "|cffffd040Changes apply when combat ends.|r" or "")
     paintList()
     ui.add:SetEnabled(#list() < GRF.Indicators.MAX_INDICATORS)
     ui.settings:SetShown(ind ~= nil)
     if ind then
-        ui.name:SetText(ind.name)
+        if not ui.name:HasFocus() then ui.name:SetText(ind.name) end   -- keep a rename being typed
         ui.name:SetEnabled(not ind.builtin)
         ui.delete:SetEnabled(not ind.builtin)
-        if ui.delete.armed ~= ind.key then ui.delete:SetText("Delete") end
+        if ui.delete.armed ~= ind.key then
+            ui.delete.armed = nil   -- armed for another indicator: start over
+            ui.delete:SetText("Delete")
+        end
         ui.enabled:SetChecked(ind.enabled)
         local slotted = ind.kind ~= "debuffs"
         for _, w in ipairs(ui.slotOnly) do w:SetShown(slotted) end
@@ -380,7 +417,6 @@ function IO.Refresh()
         paintSpells(ind)
     end
     paintPreview()
-    refreshing = false
 end
 
 local function build()
@@ -438,11 +474,14 @@ local function build()
 
     ui.name = editBox(set, 140, false)
     ui.name:SetPoint("TOPLEFT", set, "TOPLEFT", 4, 0)
-    ui.name:SetScript("OnEnterPressed", function(self)
+    -- Saved on Enter or when the box loses focus (clicking elsewhere).
+    local function saveName(self)
         local text = self:GetText():gsub("^%s+", ""):gsub("%s+$", "")
-        self:ClearFocus()
-        if text ~= "" then edit("name", text) else IO.Refresh() end
-    end)
+        local ind = selected()
+        if ind and text ~= "" and text ~= ind.name then edit("name", text) end
+    end
+    ui.name:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    ui.name:SetScript("OnEditFocusLost", function(self) saveName(self); IO.Refresh() end)
     ui.enabled = checkbox(set, "Enabled", function(on) edit("enabled", on) end)
     ui.enabled:SetPoint("LEFT", ui.name, "RIGHT", 10, 0)
 
@@ -480,11 +519,11 @@ local function build()
             ui.anchors[#ui.anchors + 1] = cell
         end
     end
-    ui.x = slider(set, "X", -40, 40, function(v) edit("x", v) end)
+    ui.x = slider(set, "X", -40, 40, function(v) editLater("x", v) end)
     ui.x:SetPoint("TOPLEFT", set, "TOPLEFT", 90, -122)
-    ui.y = slider(set, "Y", -40, 40, function(v) edit("y", v) end)
+    ui.y = slider(set, "Y", -40, 40, function(v) editLater("y", v) end)
     ui.y:SetPoint("TOPLEFT", ui.x, "BOTTOMLEFT", 0, -10)
-    ui.size = slider(set, "Size", GRF.Indicators.MIN_SIZE, GRF.Indicators.MAX_SIZE, function(v) edit("size", v) end)
+    ui.size = slider(set, "Size", GRF.Indicators.MIN_SIZE, GRF.Indicators.MAX_SIZE, function(v) editLater("size", v) end)
     ui.size:SetPoint("TOPLEFT", ui.y, "BOTTOMLEFT", 0, -10)
 
     ui.growLabel = slotOnly(label(set, "Grow", "GameFontHighlightSmall"))
@@ -524,7 +563,7 @@ local function build()
     ui.filter = choices(ui.debuffs, { { "all", "Every debuff" }, { "dispellable", "Only ones I can dispel" } }, 140,
         function(v) edit("filter", v) end)
     ui.filter[1]:SetPoint("TOPLEFT", dl, "BOTTOMLEFT", 0, -4)
-    ui.max = slider(ui.debuffs, "How many", 1, GRF.Indicators.MAX_DEBUFFS, function(v) edit("max", v) end)
+    ui.max = slider(ui.debuffs, "How many", 1, GRF.Indicators.MAX_DEBUFFS, function(v) editLater("max", v) end)
     ui.max:SetPoint("TOPLEFT", ui.filter[1], "BOTTOMLEFT", 60, -10)
 
     -- Spells.
@@ -603,7 +642,7 @@ function IO.Register(parent)
     if not ok then API.Fail("indicators page", err) end
 end
 
--- Repaint when a queued apply lands (combat ended).
-GRF.Indicators.onApplied = function() if page:IsShown() then IO.Refresh() end end
+-- Repaint on every change: applied, or deferred in combat.
+GRF.Indicators.onChanged = function() if page:IsShown() then IO.Refresh() end end
 
 IO._test = { page = page, ui = ui, select = function(key) selectedKey = key end }

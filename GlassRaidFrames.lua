@@ -218,9 +218,10 @@ end
 function Settings.ResetIndicators() return GRF.Indicators.Reset() end
 
 -- The Indicators page's edits: each saves at once and applies out of combat.
-function Settings.EditIndicator(ind, field, value)
+-- noApply: save only (a slider mid-drag; the caller applies once it pauses).
+function Settings.EditIndicator(ind, field, value, noApply)
     ind[field] = value
-    GRF.Indicators.Request()
+    if not noApply then GRF.Indicators.Request() end
 end
 
 -- A new indicator (icons, my buffs, no spells yet); nil at the cap.
@@ -267,8 +268,16 @@ end
 -- A spell by ID: refused when unknown to the client, already listed, or at the cap.
 function Settings.AddIndicatorSpell(ind, id)
     if type(id) ~= "number" or id <= 0 or id ~= math.floor(id) or not API.SpellName(id) then return false, "unknown spell" end
+    -- Any rank of a listed spell is that spell (both would match the same aura).
+    local Ind = GRF.Indicators
     for _, other in ipairs(ind.spells) do
         if other == id then return false, "already listed" end
+        for _, r in ipairs(Ind.Family(other)) do
+            if r == id then return false, "already listed (another rank)" end
+        end
+        for _, r in ipairs(Ind.Family(id)) do
+            if r == other then return false, "already listed (another rank)" end
+        end
     end
     if #ind.spells >= GRF.Indicators.MAX_SPELLS then return false, "list full" end
     ind.spells[#ind.spells + 1] = id

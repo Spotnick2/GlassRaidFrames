@@ -525,14 +525,19 @@ function Ind.Apply()
         if not ok then API.Fail("indicators", err) end
     end
     Ind.pending = false
-    if Ind.onApplied then pcall(Ind.onApplied) end   -- the open page repaints
+    if Ind.onChanged then pcall(Ind.onChanged) end   -- the open page repaints
     return true
 end
 
 -- Apply now, or when combat ends (the queued call reads the setup then).
 -- Ind.pending says an edit is waiting for combat to end.
+-- The open page hears of every change once: from Apply, or here when the
+-- apply waits for combat (a /grf ind edit in combat must show at once).
 function Ind.Request()
-    if InCombatLockdown() then Ind.pending = true end
+    if InCombatLockdown() then
+        Ind.pending = true
+        if Ind.onChanged then pcall(Ind.onChanged) end
+    end
     GRF.WhenOutOfCombat("indicators", Ind.Apply, false)
 end
 

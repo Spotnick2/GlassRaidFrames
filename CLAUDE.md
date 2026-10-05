@@ -267,8 +267,11 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   spell" refusal), plus a static preview tile. No dropdowns or popups: toggle-button groups.
   Every edit goes through `GRF.Settings` (`EditIndicator`, `AddIndicator`, `RemoveIndicator`,
   `MoveIndicator`, `AddIndicatorSpell`, ...), saves at once and applies through
-  `Ind.Request`; `Ind.pending` shows "Changes apply when combat ends" and `Ind.onApplied`
-  repaints. Changing an indicator's kind rebuilds it (sync retires the old kind's container).
+  `Ind.Request`; `Ind.pending` shows "Changes apply when combat ends", and `Ind.onChanged`
+  repaints the page once per change (from Apply, or from Request when deferred in combat).
+  Sliders save at once and apply when the drag pauses (0.1 s). Another rank of a listed spell
+  is refused (same family). Changing an indicator's kind rebuilds it (sync retires the old
+  kind's container).
 - **`Blizzard.lua`**: hides `PartyFrame`, `CompactPartyFrame` and `CompactRaidFrameContainer`
   using GlassUnitFrames' recipe. **`CompactRaidFrameManager` stays**: that side panel holds the
   raid leader's tools (ready check, world markers). The recipe: unregister events, hide, reparent,

@@ -38,7 +38,7 @@ eq(ui.rows[1].text._text, "My heals", "my heals listed first")
 check(ui.rows[3].text._text:find("Debuffs") and ui.rows[3].text._text:find("built%-in"), "the debuff row marked built-in")
 check(not ui.rows[4]._shown, "no more rows than indicators")
 eq(ui.name._text, "My heals", "the selection's name in the box")
-check(ui.shared._text:find("Priest"), "says the setup is shared by the class")
+check(ui.shared._text:find(UnitClass("player"), 1, true), "says the setup is shared by the class (its localized name)")
 
 -- Settings reach the data and the tiles.
 click(ui.mine); ui.mine._checked = false; click(ui.mine)
@@ -49,19 +49,29 @@ eq(slots(p1, "myheals").s1.filter, "HELPFUL|PLAYER", "back on")
 click(ui.anchors[7])   -- bottom-left
 eq(find("myheals").anchor, "BOTTOMLEFT", "the anchor grid moves it")
 check(ui.anchors[7].lit._shown and not ui.anchors[3].lit._shown, "the grid lights the new corner")
+ui.size:SetValue(15)
 ui.size:SetValue(16)
-eq(find("myheals").size, 16, "the size slider")
-eq(slots(p1, "myheals").s1.frame._width, 16, "(on the tiles)")
+eq(find("myheals").size, 16, "the size slider saves at once")
+eq(slots(p1, "myheals").s1.frame._width, 12, "but the tiles wait for the drag to pause")
+eq(#WoW.timers, 1, "one apply scheduled for the whole drag")
+WoW.flushTimers()
+eq(slots(p1, "myheals").s1.frame._width, 16, "then the tiles follow")
 ui.x:SetValue(5); ui.y:SetValue(-6)
+WoW.flushTimers()
 eq(find("myheals").x .. "," .. find("myheals").y, "5,-6", "the offset sliders")
 click(ui.grow[3])
 eq(find("myheals").grow, "UP", "grow direction")
 ui.timer._checked = true; click(ui.timer)
 eq(find("myheals").timer, true, "timer text")
+ui.timer._checked = true
 ui.swipe._checked = false; click(ui.swipe)
 eq(find("myheals").swipe, false, "swipe")
+ui.name:SetFocus()
 ui.name:SetText("  Heals  ")
+click(ui.timer)   -- a repaint while typing keeps the text being typed
+eq(ui.name._text, "  Heals  ", "a rename being typed survives a repaint")
 ui.name._scripts.OnEnterPressed(ui.name)
+ui.name._scripts.OnEditFocusLost(ui.name)   -- the client fires it on ClearFocus
 eq(find("myheals").name, "Heals", "renamed (trimmed)")
 eq(ui.rows[1].text._text, "Heals", "the list follows")
 ui.enabled._checked = false; click(ui.enabled)
@@ -125,6 +135,7 @@ click(ui.filter[2])
 eq(find("debuffs").filter, "dispellable", "only dispellable")
 eq(p1.grfInd.byKey.debuffs.c._groups.grf_debuffs.filter, "HARMFUL|RAID", "(on the tiles)")
 ui.max:SetValue(5)
+WoW.flushTimers()
 eq(find("debuffs").max, 5, "how many")
 
 -- Add, reorder, delete (two clicks).
@@ -149,6 +160,7 @@ click(ui.rows[2])
 WoW.combat = true
 WoW.blocked = {}
 ui.size:SetValue(20)
+WoW.flushTimers()
 eq(find("received").size, 20, "saved at once in combat")
 check(ui.status._text:find("combat ends"), "the page says it waits for combat")
 eq(#WoW.blocked, 0, "nothing touched in combat")
@@ -159,6 +171,65 @@ eq(slots(p1, "received").s1.frame._width, 20, "and the tiles follow")
 
 -- The preview draws every enabled indicator.
 check(#ui.preview.boxes >= 3, "the preview draws the indicators")
+
+-- Review of PR #23 ----------------------------------------------------------
+-- Delete armed for one indicator doesn't carry over to it after visiting another.
+click(ui.add)
+click(ui.delete)
+eq(ui.delete._text, "Sure?", "armed")
+click(ui.rows[1])
+click(ui.rows[#GRF.Indicators.Setup()])
+eq(ui.delete._text, "Delete", "coming back shows Delete")
+click(ui.delete)
+check(find("custom1"), "and one click doesn't delete: it arms again")
+click(ui.delete)
+eq(find("custom1"), nil, "the confirming click deletes")
+
+-- Another rank of a listed spell is refused (it would match the same aura).
+click(ui.rows[1])
+ui.idBox:SetText("25315"); NAMES[25315] = "Renew"
+click(ui.idAdd)
+check(ui.addNote._text:find("another rank"), "another rank of Renew is refused")
+
+-- The cap note goes once a spell is removed.
+local heals = find("myheals")
+for _, id in ipairs({ 10060, 6346, 1022, 6940, 29166, 467 }) do GRF.Settings.AddIndicatorSpell(heals, id) end
+GRF.Indicators.Request()
+check(ui.addNote._text:find("Up to"), "a full list says so")
+click(ui.spellRows[8].remove)
+eq(ui.addNote._text, "", "and stops saying so below the cap")
+
+-- A failing repaint doesn't leave the controls dead.
+local realPreview = ui.preview.SetSize
+ui.preview.SetSize = function() error("boom") end
+GRF.IndicatorOptions.Refresh()
+ui.preview.SetSize = realPreview
+check(GRF.paintFailures["indicators page"], "the failed repaint is recorded")
+GRF.paintFailures["indicators page"] = nil
+click(ui.anchors[1])
+eq(find("myheals").anchor, "TOPLEFT", "and the controls still save")
+
+-- The preview places icons as the tiles do: tile spacing, scaled; a centred
+-- debuff row is centred.
+GRF.Settings.EditIndicator(heals, "grow", "LEFT")
+local b1, b2 = ui.preview.boxes[1], ui.preview.boxes[2]
+eq(b2._points[1][4] - b1._points[1][4], (heals.size + GRF.Indicators.GAP) * -1.6, "icons spaced like the tiles (scaled)")
+GRF.Settings.EditIndicator(find("debuffs"), "anchor", "BOTTOM")
+local first
+for _, t in ipairs(ui.preview.boxes) do
+    if t._shown and t._file == "Interface\\Icons\\Spell_Shadow_ShadowWordPain" then first = first or t end
+end
+eq(first._points[1][1], "BOTTOMLEFT", "a bottom-centre row is laid from its left edge")
+check(first._points[1][4] < 0, "starting left of centre (the row is centred)")
+GRF.Settings.EditIndicator(find("debuffs"), "anchor", "BOTTOMLEFT")
+
+-- A /grf ind change in combat shows on the open page at once.
+WoW.combat = true
+SlashCmdList.GLASSRAIDFRAMES("ind received off")
+check(ui.rows[2].text._text and ui.status._text:find("combat ends"), "the open page shows it pending")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+SlashCmdList.GLASSRAIDFRAMES("ind received on")
 
 -- Reset.
 click(ui.reset)
