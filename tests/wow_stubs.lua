@@ -329,8 +329,17 @@ function Methods.IsEnabled(w) return w._enabled ~= false end
 function Methods.GetChecked(cb) return cb._checked == true end
 function Methods.LockHighlight(b) b._highlightLocked = true end
 function Methods.SetScrollChild(sf, child) sf._scrollChild = child end
-function Methods.SetFocus(e) e._focus = true end
-function Methods.ClearFocus(e) e._focus = false end
+-- Focus changes fire the edit box's focus scripts, as the client does.
+function Methods.SetFocus(e)
+    if e._focus then return end
+    e._focus = true
+    if e._scripts and e._scripts.OnEditFocusGained then e._scripts.OnEditFocusGained(e) end
+end
+function Methods.ClearFocus(e)
+    if not e._focus then return end
+    e._focus = false
+    if e._scripts and e._scripts.OnEditFocusLost then e._scripts.OnEditFocusLost(e) end
+end
 function Methods.HasFocus(e) return e._focus == true end
 function Methods.GetScrollChild(sf) return sf._scrollChild end
 -- Button state textures: Set<State>Texture creates the texture, Get<State>Texture returns it.

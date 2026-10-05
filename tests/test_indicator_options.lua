@@ -71,7 +71,6 @@ ui.name:SetText("  Heals  ")
 click(ui.timer)   -- a repaint while typing keeps the text being typed
 eq(ui.name._text, "  Heals  ", "a rename being typed survives a repaint")
 ui.name._scripts.OnEnterPressed(ui.name)
-ui.name._scripts.OnEditFocusLost(ui.name)   -- the client fires it on ClearFocus
 eq(find("myheals").name, "Heals", "renamed (trimmed)")
 eq(ui.rows[1].text._text, "Heals", "the list follows")
 ui.enabled._checked = false; click(ui.enabled)
@@ -222,6 +221,54 @@ end
 eq(first._points[1][1], "BOTTOMLEFT", "a bottom-centre row is laid from its left edge")
 check(first._points[1][4] < 0, "starting left of centre (the row is centred)")
 GRF.Settings.EditIndicator(find("debuffs"), "anchor", "BOTTOMLEFT")
+
+-- A rename draft belongs to the indicator it was started on (Codex review).
+click(ui.rows[1])
+ui.name:SetFocus()
+ui.name:SetText("Draft for my heals")
+click(ui.rows[2])   -- selecting another indicator commits the draft to its owner
+eq(find("myheals").name, "Draft for my heals", "the draft lands on the indicator it was typed for")
+eq(find("received").name, "Received", "not on the newly selected one")
+eq(ui.name._text, "Received", "the box now shows the new selection")
+click(ui.rows[1])
+ui.name:SetFocus()
+ui.name:SetText("Typed before Add")
+click(ui.add)   -- Add changes the selection without touching the box
+eq(find("myheals").name, "Typed before Add", "the draft still lands on its own indicator")
+eq(find("custom1").name, "New indicator", "the new one keeps its name")
+eq(ui.name._text, "New indicator", "and the box shows it")
+click(ui.delete); click(ui.delete)
+ui.name:SetFocus()
+ui.name.owner = "debuffs"   -- a draft owned by the built-in row (rename refused)
+ui.name:SetText("Hacked")
+ui.name:ClearFocus()
+eq(find("debuffs").name, "Debuffs", "the built-in row is never renamed")
+GRF.Settings.EditIndicator(find("myheals"), "name", "Heals")
+
+-- Any rank of a known family is that family: an unlearned higher Thorns rank
+-- still matches every Thorns (Codex review).
+NAMES[9910] = "Thorns"
+click(ui.add)
+local thorns = find("custom1")
+ui.idBox:SetText("9910"); click(ui.idAdd)
+eq(thorns.spells[1], 467, "stored by its family's first rank")
+eq(#GRF.Indicators.Family(9910), 6, "a known rank resolves to its whole family")
+check(slots(p1, "custom1").s1.spec.candidateFilters.includeSpellIDs[467], "the slot matches rank 1 too")
+click(ui.delete); click(ui.delete)
+
+-- A centred debuff row is centred on the tile (Codex review): its left edge
+-- half the row's width left of the tile's anchor point.
+GRF.Settings.EditIndicator(find("debuffs"), "anchor", "BOTTOM")
+local deb = find("debuffs")
+local row = {}
+for _, t in ipairs(ui.preview.boxes) do
+    if t._shown and t._file == "Interface\\Icons\\Spell_Shadow_ShadowWordPain" then row[#row + 1] = t end
+end
+local pt = row[1]._points[1]
+eq(pt[1] .. ">" .. pt[3], "BOTTOMLEFT>BOTTOM", "laid from its left edge, relative to the tile's bottom centre")
+local width = deb.max * deb.size + (deb.max - 1) * GRF.Indicators.GAP
+eq(pt[4], (deb.x - width / 2) * 1.6, "half the row's width left of centre")
+GRF.Settings.EditIndicator(deb, "anchor", "BOTTOMLEFT")
 
 -- A /grf ind change in combat shows on the open page at once.
 WoW.combat = true

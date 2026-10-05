@@ -169,6 +169,7 @@ local function listRow(i)
     b.text:SetWidth(128)
     b:SetScript("OnClick", function(self)
         if self.key then
+            if ui.name:HasFocus() then ui.name:ClearFocus() end   -- commits the draft to its own indicator
             selectedKey = self.key
             IO.Refresh()
         end
@@ -225,7 +226,7 @@ local function paintPreview()
             local gap = GRF.Indicators.GAP
             local s = ind.size * PREVIEW_SCALE
             local count, step = 1, ind.size + gap
-            local point, dx, dy, ox, oy = ind.anchor, 0, 0, ind.x, ind.y
+            local point, rel, dx, dy, ox, oy = ind.anchor, ind.anchor, 0, 0, ind.x, ind.y
             if ind.kind == "icons" then
                 count = #ind.spells
                 local g = GRF.Indicators.GROW[ind.grow]
@@ -237,8 +238,10 @@ local function paintPreview()
                 local width = ind.max * ind.size + (ind.max - 1) * gap
                 local fromRight = ind.anchor:find("RIGHT") ~= nil
                 local v = ind.anchor:find("TOP") and "TOP" or (ind.anchor:find("BOTTOM") and "BOTTOM" or "")
+                -- The row's edge sits on the tile's anchor point: a centred
+                -- row's left edge half its width left of that point.
                 point = v .. (fromRight and "RIGHT" or "LEFT")
-                if not fromRight and not ind.anchor:find("LEFT") then ox = ox - width / 2 + ind.size / 2 end   -- centred row
+                if not fromRight and not ind.anchor:find("LEFT") then ox = ox - width / 2 end
                 dx = (fromRight and -1 or 1) * step
             end
             for j = 1, count do
@@ -246,7 +249,7 @@ local function paintPreview()
                 local t = previewBox(n)
                 t:SetSize(s, s)
                 t:ClearAllPoints()
-                t:SetPoint(point, p, point, (ox + (j - 1) * dx) * PREVIEW_SCALE, (oy + (j - 1) * dy) * PREVIEW_SCALE)
+                t:SetPoint(point, p, rel, (ox + (j - 1) * dx) * PREVIEW_SCALE, (oy + (j - 1) * dy) * PREVIEW_SCALE)
                 if ind.kind == "square" then
                     t:SetColorTexture(ind.color[1], ind.color[2], ind.color[3], 1)
                 elseif ind.kind == "debuffs" then
@@ -381,7 +384,11 @@ paint = function()
     ui.add:SetEnabled(#list() < GRF.Indicators.MAX_INDICATORS)
     ui.settings:SetShown(ind ~= nil)
     if ind then
-        if not ui.name:HasFocus() then ui.name:SetText(ind.name) end   -- keep a rename being typed
+        -- Keep a rename being typed on its own indicator; when the selection
+        -- moved on (a row click, Add, a reset), commit the draft to its owner
+        -- first (ClearFocus fires OnEditFocusLost), then show the new name.
+        if ui.name:HasFocus() and ui.name.owner ~= ind.key then ui.name:ClearFocus() end
+        if not ui.name:HasFocus() then ui.name:SetText(ind.name) end
         ui.name:SetEnabled(not ind.builtin)
         ui.delete:SetEnabled(not ind.builtin)
         if ui.delete.armed ~= ind.key then
@@ -475,11 +482,17 @@ local function build()
     ui.name = editBox(set, 140, false)
     ui.name:SetPoint("TOPLEFT", set, "TOPLEFT", 4, 0)
     -- Saved on Enter or when the box loses focus (clicking elsewhere).
+    -- The draft belongs to the indicator it was started on, whatever is
+    -- selected when it saves (Codex review of #23).
     local function saveName(self)
         local text = self:GetText():gsub("^%s+", ""):gsub("%s+$", "")
-        local ind = selected()
-        if ind and text ~= "" and text ~= ind.name then edit("name", text) end
+        local ind = self.owner and GRF.Settings.FindIndicator(self.owner)
+        self.owner = nil
+        if ind and not ind.builtin and text ~= "" and text ~= ind.name then
+            GRF.Settings.EditIndicator(ind, "name", text)
+        end
     end
+    ui.name:SetScript("OnEditFocusGained", function(self) self.owner = selectedKey end)
     ui.name:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
     ui.name:SetScript("OnEditFocusLost", function(self) saveName(self); IO.Refresh() end)
     ui.enabled = checkbox(set, "Enabled", function(on) edit("enabled", on) end)

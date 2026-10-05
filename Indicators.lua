@@ -174,9 +174,16 @@ end
 -- Every rank to match for a stored spell: the built-in family, else the ranks
 -- this character has learned (spellbook, by the client's own name), plus the
 -- stored ID itself.
+-- Any rank of a built-in family -> that family (Thorns rank 6 must still
+-- match another druid's rank 1: Codex review of #23).
+local knownRank = {}
+for _, fam in pairs(D.FAMILIES) do
+    for _, r in ipairs(fam) do knownRank[r] = fam end
+end
+
 local families = {}   -- id -> ranks, until the spellbook changes (one lookup per Apply, not per tile)
 function Ind.Family(id)
-    local fam = D.FAMILIES[id] or families[id]
+    local fam = knownRank[id] or families[id]
     if fam then return fam end
     local out, seen = { id }, { [id] = true }
     for _, r in ipairs(API.Ranks(id)) do

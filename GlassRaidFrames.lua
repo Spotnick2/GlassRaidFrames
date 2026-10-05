@@ -280,7 +280,7 @@ function Settings.AddIndicatorSpell(ind, id)
         end
     end
     if #ind.spells >= GRF.Indicators.MAX_SPELLS then return false, "list full" end
-    ind.spells[#ind.spells + 1] = id
+    ind.spells[#ind.spells + 1] = Ind.Family(id)[1]   -- stored by its family's first rank when known
     GRF.Indicators.Request()
     return true
 end
