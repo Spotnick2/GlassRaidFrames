@@ -46,7 +46,7 @@ jobs:
           find . -name '*.lua' -not -path './.git/*' -print0 | xargs -0 luac5.1 -p
 
       # Without the API dump (local only), the stub validates events against
-      # tests/events-70205.txt and test_methods skips the method check.
+      # tests/events-70338.txt and test_methods skips the method check.
       - name: Unit tests
         run: |
           for f in tests/test_*.lua; do
