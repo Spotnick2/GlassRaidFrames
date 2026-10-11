@@ -466,7 +466,7 @@ C_Secrets = {
 }
 AnchorUtil = { FlowDirection = { Left = -1, Right = 1, Up = 1, Down = -1 } }   -- FrameXML (dump _G walk)
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
-function GetBuildInfo() return "1.60.1", "70205", "Sep 23 2026", 16001 end
+function GetBuildInfo() return "1.60.1", "70338", "Sep 23 2026", 16001 end
 function InCombatLockdown() return WoW.combat end
 function IsShiftKeyDown() return WoW.shift end
 function IsAltKeyDown() return WoW.alt == true end

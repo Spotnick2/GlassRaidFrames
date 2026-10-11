@@ -58,7 +58,7 @@ do
     eq(tonumber(h), GRFH.DEFAULT_H, "GlassRaidFrames.xml height = Header.DEFAULT_H")
 end
 
-eq(GlassRaidFrames.MEASURED_ON_BUILD, "1.60.1.70205", "MEASURED_ON_BUILD")
+eq(GlassRaidFrames.MEASURED_ON_BUILD, "1.60.1.70338", "MEASURED_ON_BUILD")
 
 -- The packager replaces its version keyword in every shipped file, so a
 -- literal one in Lua would turn into the release tag (AltStable's bug).
@@ -83,7 +83,7 @@ check(warned("dev", "99999"), "dev copy warns on a newer build")
 check(warned("@" .. "project-version" .. "@", "99999"), "unpackaged checkout warns on a newer build")
 check(warned(nil, "99999"), "unreadable version counts as dev")
 check(not warned("v1.2.0", "99999"), "release does not warn on a newer build")
-check(not warned("dev", "70205"), "no warning on the measured build")
+check(not warned("dev", "70338"), "no warning on the measured build")
 
 -- Every texture the material names ships with the library (Libs\LibGlass-1.0\Media
 -- in the package; the checkout's Media/ here). Our Media/ holds only our own sound.
