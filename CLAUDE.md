@@ -397,8 +397,8 @@ our own code**.
 
 None is licensed for our reuse in the way a copy would need, so write our own code.
 
-Keep a `MEASURED_ON_BUILD` constant in the source, matching the last build measured in game
-(`1.60.1.70205`; the dump is 70338), and warn at login when `GetBuildInfo()` differs, **dev copies only** (`API.IsDevBuild`: version
+Keep a `MEASURED_ON_BUILD` constant in the source, matching the dump's build (`1.60.1.70338`),
+and warn at login when `GetBuildInfo()` differs, **dev copies only** (`API.IsDevBuild`: version
 `dev`, the unreplaced packager keyword, or unreadable), as GlassUnitFrames does. Bump it only
 after re-measuring in game.
 
