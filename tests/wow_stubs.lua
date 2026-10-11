@@ -15,7 +15,7 @@
 --   so test_methods.lua can check each against the dump's widget methods.
 
 WoW = {}
-local DUMP = os.getenv("GLASSRF_API_DUMP") or "C:/Projects/References/forever-api-1.60.1.70205.md"
+local DUMP = os.getenv("GLASSRF_API_DUMP") or "C:/Projects/WoW/References/forever-api-1.60.1.70338.md"
 
 --------------------------------------------------------------------------------
 -- Secrets
@@ -62,8 +62,8 @@ do
     if not WoW.dumpAvailable then
         -- No dump (CI): the checked-in list generated from it, so validation
         -- stays exactly as strict. test_toc fails if the two ever drift.
-        local fixture = io.open("tests/events-70205.txt", "r")
-        assert(fixture, "tests/events-70205.txt missing: event validation needs the dump or the fixture")
+        local fixture = io.open("tests/events-70338.txt", "r")
+        assert(fixture, "tests/events-70338.txt missing: event validation needs the dump or the fixture")
         for line in fixture:lines() do
             local name = line:match("^([A-Z][A-Z0-9_]+)%s*$")
             if name then WoW.KNOWN_EVENTS[name] = true end

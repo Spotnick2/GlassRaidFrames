@@ -312,7 +312,7 @@ texture names only grow; instances; upgrade rules).
   path: `MEDIA` is derived from it), and the TOC loads its XML first. `Libs/` is gitignored; a dev
   copy comes from the LibGlass checkout through its own `Tools\deploy.ps1`, which
   `Tools\deploy.ps1` here calls first. The tests load the same checkout.
-- **The pin:** `.pkgmeta` pins a tag (`tag: r1`), **never `tag: latest`**. Bump it only in a
+- **The pin:** `.pkgmeta` pins a tag (`tag: r5`), **never `tag: latest`**. Bump it only in a
   release made anyway: players get library fixes earlier through whichever glass addon ships the
   newest copy (LibStub runs that one). CI reads the pin from `.pkgmeta`
   (`tests/fetch_libglass.sh`), tests against it, and asserts the zip's `Libs/LibGlass-1.0/` is
@@ -327,17 +327,17 @@ texture names only grow; instances; upgrade rules).
 
 ## References: read these before touching an unfamiliar API
 
-- `C:\Projects\References\PORTING-TBC-TO-FOREVER.md` holds the canonical addon-agnostic field
+- `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md` holds the canonical addon-agnostic field
   notes, measured on the live client. Treat them as fact; don't re-derive them. Other sessions
   edit this file, so write new addon-agnostic findings there, not into a copy in this repo.
-- `C:\Projects\References\forever-api-1.60.1.70205.md` is the full API dump for the current
+- `C:\Projects\WoW\References\forever-api-1.60.1.70338.md` is the full API dump for the current
   build. It lists documented functions and events, enums, **widget methods** (the only list of
   those) and the `_G` walk. It proves a name exists, not that it works. **Presence is not a
   contract.**
 - For a live check in game: `/api search <name>`, `/api system list`, `/api <system> list`
   (system names omit `C_`).
-- **`C:\Projects\wow-ui-source` is Forever's own FrameXML** (branch `forever`, `version.txt` =
-  1.60.1.70009, the dump's build). Read Blizzard code there first (`SecureTemplates.lua`,
+- **`C:\Projects\WoW\wow-ui-source` is Forever's own FrameXML** (branch `forever`, `version.txt` =
+  1.60.1.70338, the dump's build). Read Blizzard code there first (`SecureTemplates.lua`,
   `SecureGroupHeaders.lua`, `Blizzard_AuraContainer`, …): line numbers in in-game error traces
   match it, and they don't match Retail's. Fall back to the Retail branch of
   `Gethe/wow-ui-source` only for what isn't there. For example, Forever's
@@ -348,7 +348,7 @@ texture names only grow; instances; upgrade rules).
 
 ## Reference addons
 
-These live in `C:\Projects\References`. They show what works on this client *in practice*,
+These live in `C:\Projects\WoW\References`. They show what works on this client *in practice*,
 which the dump can't tell you. Reason about what they do rather than copying it, and **write
 our own code**.
 
@@ -397,8 +397,8 @@ our own code**.
 
 None is licensed for our reuse in the way a copy would need, so write our own code.
 
-Keep a `MEASURED_ON_BUILD` constant in the source, matching the dump's build (`1.60.1.70205`),
-and warn at login when `GetBuildInfo()` differs, **dev copies only** (`API.IsDevBuild`: version
+Keep a `MEASURED_ON_BUILD` constant in the source, matching the last build measured in game
+(`1.60.1.70205`; the dump is 70338), and warn at login when `GetBuildInfo()` differs, **dev copies only** (`API.IsDevBuild`: version
 `dev`, the unreplaced packager keyword, or unreadable), as GlassUnitFrames does. Bump it only
 after re-measuring in game.
 
@@ -575,7 +575,7 @@ break the behaviour and confirm it goes red.
   the owner). Never commit to `main`.
   Commit or push only when asked. Before committing, `luac -p` must be clean and the tests green.
   **After pushing, check the PR's `package-check` run** (`gh run list`, then `gh run view`).
-  CI has no API dump: the stub validates events against `tests/events-70205.txt` instead, so
+  CI has no API dump: the stub validates events against `tests/events-70338.txt` instead, so
   run a new test once with `GLASSRF_API_DUMP` pointing at a missing file. Milestone 1 sat red
   on CI for several pushes before a review caught it.
 - Review policy: use the shared `$wow-addon-review` skill for PR reviews.

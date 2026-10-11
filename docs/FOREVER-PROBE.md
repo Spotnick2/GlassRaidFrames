@@ -3,7 +3,7 @@
 Milestone 0 of the plan. Nothing here has been measured yet. The design of milestones 1–3
 waits on these answers, and each item names the decision it gates.
 
-Addon-agnostic results also go into `C:\Projects\References\PORTING-TBC-TO-FOREVER.md`.
+Addon-agnostic results also go into `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`.
 
 ## How to run it
 

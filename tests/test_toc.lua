@@ -33,15 +33,15 @@ end
 -- on CI) must match the dump's documented events exactly.
 if WoW.dumpAvailable then
     local listed, n = {}, 0
-    for line in io.lines("tests/events-70205.txt") do
+    for line in io.lines("tests/events-70338.txt") do
         local name = line:match("^([A-Z][A-Z0-9_]+)%s*$")
         if name then listed[name] = true; n = n + 1 end
     end
     local missing, extra = {}, {}
     for e in pairs(WoW.KNOWN_EVENTS) do if not listed[e] then missing[#missing + 1] = e end end
     for e in pairs(listed) do if not WoW.KNOWN_EVENTS[e] then extra[#extra + 1] = e end end
-    eq(#missing, 0, "every dump event is in tests/events-70205.txt (regenerate it): " .. table.concat(missing, ","))
-    eq(#extra, 0, "no event in tests/events-70205.txt is missing from the dump: " .. table.concat(extra, ","))
+    eq(#missing, 0, "every dump event is in tests/events-70338.txt (regenerate it): " .. table.concat(missing, ","))
+    eq(#extra, 0, "no event in tests/events-70338.txt is missing from the dump: " .. table.concat(extra, ","))
     check(n > 1000, "the fixture holds the full event list (" .. n .. ")")
 end
 
