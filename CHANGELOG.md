@@ -16,6 +16,7 @@
 - Incoming heals show on the health bars, as on Glass Unit Frames.
 - A thin power bar under the health bar. The frame's glass rim lights up on mouse-over, and your
   target's frame gets a coloured rim.
+- Hovering a frame shows the player's (or pet's) tooltip.
 - Resizable frames, per role (width and height sliders, or `/grf size <w> <h>`). The default is
   larger, like Cell's, with the name growing with the frame.
 - Click-casting (Options > AddOns > Glass Raid Frames > Click-casting): bind a spell to any key
