@@ -132,6 +132,28 @@ local function radios(options, get, set)
     return group
 end
 
+-- Radios across one line, after a title: "Glass  (o) Classic  (o) Clean".
+local function radioRow(title, options, get, set)
+    place(label(title), 0, 8)
+    local group = {}
+    for i, o in ipairs(options) do
+        local rb = checkButton(o[2], true)
+        rb.value = o[1]
+        rb:SetScript("OnClick", function()
+            set(o[1])
+            controls.refreshAll()
+        end)
+        rb:SetPoint("TOPLEFT", content, "TOPLEFT", col.x + 60 + (i - 1) * 100, col.y + 3)
+        group[#group + 1] = rb
+    end
+    col.y = col.y - 22
+    controls[#controls + 1] = function()
+        local current = get()
+        for _, rb in ipairs(group) do rb:SetChecked(rb.value == current) end
+    end
+    return group
+end
+
 -- Hand-built slider (GlassUnitFrames' idiom): label and value on one line,
 -- the track under it. Whole numbers.
 local SLIDER_W = 240
@@ -259,6 +281,14 @@ local function build()
     controls.blizzard = checkbox("Hide Blizzard's party and raid frames",
         function() return GRF.db.hideBlizzard end, S.SetHideBlizzard)
     note("Showing Blizzard's frames again takes a /reload.")
+
+    -- The glass (#37, #38): saved now, built after /reload.
+    header("Look")
+    controls.look = radioRow("Glass", { { "clean", "Clean" }, { "classic", "Classic" } },
+        function() return GRF.db.look or GRF.DEFAULT_LOOK end, S.SetLook)
+    controls.body = radioRow("Body", { { "clear", "Clear" }, { "smoked", "Smoked" } },
+        function() return GRF.db.glassBody or "clear" end, S.SetBody)
+    note("The look takes effect after /reload.")
 end
 
 function controls.refreshAll()

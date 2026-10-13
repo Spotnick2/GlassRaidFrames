@@ -149,8 +149,9 @@ function Frames.Setup(b)
     ind.role:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -inset - 1, inset + 1)
     b.indicators = ind
 
-    -- Hover and target: a second rim, same slices as the glass's own, above it.
-    local S = Glass.SIZES.small
+    -- Hover and target: a second rim, same slices as the glass's own, above it
+    -- (its resolved size: thin_small on the clean look).
+    local S = Glass.SIZES[g.size] or Glass.SIZES.small
     local function rim(color, sub)
         local t = g.top:CreateTexture(nil, "OVERLAY", nil, sub)
         t:SetTexture(Glass.MEDIA .. S.rim)

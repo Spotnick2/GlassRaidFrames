@@ -142,6 +142,20 @@ function Settings.SetHideBlizzard(on)
     if on then whenOutOfCombat("blizzard", function() if GRF.db.hideBlizzard then GRF.Blizzard.HideAll() end end) end
 end
 
+-- The glass look (#37) and body (#38): saved now, built after /reload
+-- (LibGlass builds them into each surface). The defaults aren't saved.
+function Settings.SetLook(look)
+    if not GRF.LOOKS[look] then return false end
+    GRF.db.look = look ~= GRF.DEFAULT_LOOK and look or nil
+    return true
+end
+
+function Settings.SetBody(body)
+    if not GRF.BODIES[body] then return false end
+    GRF.db.glassBody = body == "smoked" and "smoked" or nil
+    return true
+end
+
 -- The current role's tile size; nil for either = back to the default.
 -- Save a role's tile size NOW (the role asking, never whichever is current
 -- later: Codex review); nil for both = back to the default.
@@ -400,6 +414,18 @@ local function slash(msg)
         Settings.SetHideBlizzard(not GRF.db.hideBlizzard)
         say(GRF.db.hideBlizzard and "Blizzard's party/raid frames: hidden"
             or "Blizzard's party/raid frames: shown after /reload")
+    elseif cmd == "look" then
+        if Settings.SetLook(arg) then
+            say("look " .. arg .. ": takes effect after /reload")
+        else
+            say("look classic|clean (now " .. GRF.look .. ")")
+        end
+    elseif cmd == "body" then
+        if Settings.SetBody(arg) then
+            say("glass body " .. arg .. ": takes effect after /reload")
+        else
+            say("body clear|smoked (now " .. GRF.body .. ")")
+        end
     elseif cmd == "options" or cmd == "config" then
         if not (GRF.Options and GRF.Options.Open()) then say("Game Menu > Options > AddOns > Glass Raid Frames") end
     elseif cmd == "ind" or cmd == "indicators" then
@@ -417,6 +443,8 @@ local function slash(msg)
         say("/grf solo - show your own frame when not in a group")
         say("/grf pets - show or hide pets (this role)")
         say("/grf ind - buff and debuff indicators (per class); /grf ind <n> on|off, /grf ind reset")
+        say("/grf look classic|clean - the glass (after /reload); now " .. GRF.look)
+        say("/grf body clear|smoked - the glass body (after /reload); now " .. GRF.body)
         say("/grf blizzard - toggle hiding Blizzard's party/raid frames")
         say("/grf failures - what failed to build or register")
         say("/grf version - client build vs the measured one")
@@ -431,6 +459,8 @@ boot:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
         if arg1 ~= ADDON then return end
         GRF.db, GRF.char = ensureDefaults()
+        -- The look first: every surface belongs to its instance (#37, #38).
+        GRF.UseLook(GRF.db.look, GRF.db.glassBody)
         evaluateRole(true)
         -- A position saved before roles existed: every role without one gets
         -- it (the talents aren't read yet, so which role is yours isn't known).
