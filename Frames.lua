@@ -54,6 +54,22 @@ local function icon(parent, size, sub)
 end
 
 -- Dress one header child, out of combat. `b` is the secure button.
+-- The hover tooltip: Blizzard's own unit tooltip (UnitFrame_OnEnter reads
+-- self.unit, which Engine.SetUnit keeps, anchors it the default way and keeps
+-- it updated), GlassUnitFrames' #80. Never on a forbidden tooltip; both looked
+-- up when used, and an error there never reaches the button.
+local function tooltipEnter(self)
+    local tt, fn = rawget(_G, "GameTooltip"), rawget(_G, "UnitFrame_OnEnter")
+    if not (tt and fn and self.unit) or tt:IsForbidden() then return end
+    local ok, err = pcall(fn, self)
+    if not ok then API.Fail("tooltip", err) end
+end
+local function tooltipLeave(self)
+    local tt, fn = rawget(_G, "GameTooltip"), rawget(_G, "UnitFrame_OnLeave")
+    if not (tt and fn) or tt:IsForbidden() then return end
+    pcall(fn, self)
+end
+
 function Frames.Setup(b)
     b:RegisterForClicks(API.UnitButtonClicks())
     -- Wildcards: the secure template never falls back from "shift-type1" to
@@ -150,8 +166,8 @@ function Frames.Setup(b)
     b.targetRim = rim(Frames.TARGET, 6)
     b.hoverRim = rim(Frames.HOVER, 7)
     -- Insecure hooks on the secure button: fine in combat (no protected call).
-    b:HookScript("OnEnter", function(self) self.hoverRim:SetAlpha(1) end)
-    b:HookScript("OnLeave", function(self) self.hoverRim:SetAlpha(0) end)
+    b:HookScript("OnEnter", function(self) self.hoverRim:SetAlpha(1); tooltipEnter(self) end)
+    b:HookScript("OnLeave", function(self) self.hoverRim:SetAlpha(0); tooltipLeave(self) end)
 
     if GRF.Indicators then GRF.Indicators.Attach(b) end
     b.relayout = Frames.Layout
