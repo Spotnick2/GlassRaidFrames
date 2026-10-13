@@ -59,10 +59,14 @@ local function header(text)
     place(label(text, "GameFontNormalLarge"), 26)
 end
 
+-- As tall as it wraps: a fixed one-line slot lets a two-line note run into the
+-- next line (GlassUnitFrames' #96).
 local function note(text)
     local fs = label(text, "GameFontHighlightSmall")
     fs:SetWidth(520)
-    place(fs, 18, 4)
+    local h = fs:GetStringHeight()
+    if type(h) ~= "number" or h ~= h or h <= 0 then h = 14 end
+    place(fs, math.max(18, math.ceil(h) + 4), 4)
     return fs
 end
 
