@@ -53,9 +53,20 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
 
   It is a subset of GlassUnitFrames' `Compat.lua`; lift more from there when needed rather than
   rewriting.
-- **`Glass.lua`**: one line that matters, `GlassRaidFrames.Glass = LibStub("LibGlass-1.0"):New()`:
-  this addon's instance of the embedded material (see "The glass material"). Every call site
-  dot-calls it (`Glass.Apply`, `Glass.Bar`, `Glass.MEDIA`, ...).
+- **`Glass.lua`**: this addon's instance of the embedded material (see "The glass material").
+  Every call site dot-calls it (`Glass.Apply`, `Glass.Bar`, `Glass.MEDIA`, ...).
+  - **`GRF.Glass` is a forwarding handle** (#37, #38, GlassUnitFrames' #102 / #101): LibGlass
+    r6's `preset` and `bodyAlpha` are construction settings, and the saved choice is only
+    readable at ADDON_LOADED, after every file has taken `local Glass = GRF.Glass`.
+    `GRF.UseLook(look, body)` builds the instance at ADDON_LOADED, before anything is built.
+    So never keep an instance field (`STYLE`, `TUNABLES`, ...) in a file-load local.
+  - **The look:** `clean` (LibGlass's preset) **by default**, `classic` = r5's look
+    (`db.look = "classic"`). **The body:** clear (LibGlass's tint alpha) or smoked
+    (`db.glassBody = "smoked"`, `bodyAlpha = GRF.SMOKED` 0.65). Defaults aren't saved.
+    Switching takes `/reload` (`GRF.Settings.SetLook/SetBody`, `/grf look|body`, the main
+    page's Look rows).
+  - A clean instance builds `Apply(…, "small")` as `thin_small`: anything copying the tile's
+    rim reads `Glass.SIZES[g.size]` (the hover and target rims).
 - **`Header.lua`**: the layout. **Eight `SecureGroupHeaderTemplate` headers**, one per raid
   group (`groupFilter` 1..8), side by side in one protected container, as in EllesmereUI's
   separated mode. Header 1 also has `showParty`/`showPlayer`, so **the client switches between

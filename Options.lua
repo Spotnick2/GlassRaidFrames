@@ -23,9 +23,35 @@ local controls = {}      -- refresh callbacks, run on every OnShow
 local refreshing = false -- set while syncing controls, so a slider's SetValue doesn't save
 local category
 
-local content = CreateFrame("Frame", nil, panel)
-content:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
-content:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
+-- Everything sits in a scroll child: the page outgrew the Settings canvas
+-- (about 600 tall, no scrolling of its own; Codex on #39). GlassUnitFrames'
+-- idiom: UIPanelScrollFrameTemplate exists on this client (porting guide), and
+-- without it a plain ScrollFrame still clips and scrolls by wheel.
+local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+scroll:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -4)
+scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -26, 4)
+local content = CreateFrame("Frame", nil, scroll)
+content:SetSize(620, 600)
+scroll:SetScrollChild(content)
+if not scroll.ScrollBar then
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        local range = self:GetVerticalScrollRange()
+        local v = math.max(0, math.min(range, self:GetVerticalScroll() - delta * 40))
+        self:SetVerticalScroll(v)
+    end)
+end
+-- The template shows its bar even with nothing to scroll: show it only when
+-- the content is taller than the canvas.
+if scroll.ScrollBar then
+    scroll:HookScript("OnScrollRangeChanged", function(self, _, yrange)
+        self.ScrollBar:SetShown((yrange or self:GetVerticalScrollRange()) > 0)
+    end)
+end
+-- Keep the content as wide as the visible area.
+scroll:SetScript("OnSizeChanged", function(self, w)
+    if type(w) == "number" and w > 0 then content:SetWidth(w) end
+end)
 
 --------------------------------------------------------------------------------
 -- Widgets
@@ -125,6 +151,28 @@ local function radios(options, get, set)
         place(rb, 22, 8)
         group[#group + 1] = rb
     end
+    controls[#controls + 1] = function()
+        local current = get()
+        for _, rb in ipairs(group) do rb:SetChecked(rb.value == current) end
+    end
+    return group
+end
+
+-- Radios across one line, after a title: "Glass  (o) Classic  (o) Clean".
+local function radioRow(title, options, get, set)
+    place(label(title), 0, 8)
+    local group = {}
+    for i, o in ipairs(options) do
+        local rb = checkButton(o[2], true)
+        rb.value = o[1]
+        rb:SetScript("OnClick", function()
+            set(o[1])
+            controls.refreshAll()
+        end)
+        rb:SetPoint("TOPLEFT", content, "TOPLEFT", col.x + 60 + (i - 1) * 100, col.y + 3)
+        group[#group + 1] = rb
+    end
+    col.y = col.y - 22
     controls[#controls + 1] = function()
         local current = get()
         for _, rb in ipairs(group) do rb:SetChecked(rb.value == current) end
@@ -259,6 +307,17 @@ local function build()
     controls.blizzard = checkbox("Hide Blizzard's party and raid frames",
         function() return GRF.db.hideBlizzard end, S.SetHideBlizzard)
     note("Showing Blizzard's frames again takes a /reload.")
+
+    -- The glass (#37, #38): saved now, built after /reload.
+    header("Look")
+    controls.look = radioRow("Glass", { { "clean", "Clean" }, { "classic", "Classic" } },
+        function() return GRF.db.look or GRF.DEFAULT_LOOK end, S.SetLook)
+    controls.body = radioRow("Body", { { "clear", "Clear" }, { "smoked", "Smoked" } },
+        function() return GRF.db.glassBody or "clear" end, S.SetBody)
+    note("The look takes effect after /reload.")
+    -- Tall enough for everything; the scroll bar appears once that outgrows
+    -- the canvas.
+    content:SetHeight(-col.y + 16)
 end
 
 function controls.refreshAll()
@@ -303,4 +362,4 @@ local reg = CreateFrame("Frame")
 API.RegisterEvents(reg, { "PLAYER_LOGIN" })
 reg:SetScript("OnEvent", register)
 
-Options._test = { panel = panel, controls = controls }
+Options._test = { panel = panel, controls = controls, scroll = scroll, content = content }
