@@ -312,7 +312,7 @@ texture names only grow; instances; upgrade rules).
   path: `MEDIA` is derived from it), and the TOC loads its XML first. `Libs/` is gitignored; a dev
   copy comes from the LibGlass checkout through its own `Tools\deploy.ps1`, which
   `Tools\deploy.ps1` here calls first. The tests load the same checkout.
-- **The pin:** `.pkgmeta` pins a tag (`tag: r5`), **never `tag: latest`**. Bump it only in a
+- **The pin:** `.pkgmeta` pins a tag (`tag: r6`), **never `tag: latest`**. Bump it only in a
   release made anyway: players get library fixes earlier through whichever glass addon ships the
   newest copy (LibStub runs that one). CI reads the pin from `.pkgmeta`
   (`tests/fetch_libglass.sh`), tests against it, and asserts the zip's `Libs/LibGlass-1.0/` is
