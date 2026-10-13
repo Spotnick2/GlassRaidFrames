@@ -159,7 +159,8 @@ local function radios(options, get, set)
 end
 
 -- Radios across one line, after a title: "Glass  (o) Classic  (o) Clean".
-local function radioRow(title, options, get, set)
+-- `step` is the room per choice (100 by default).
+local function radioRow(title, options, get, set, step)
     place(label(title), 0, 8)
     local group = {}
     for i, o in ipairs(options) do
@@ -169,7 +170,7 @@ local function radioRow(title, options, get, set)
             set(o[1])
             controls.refreshAll()
         end)
-        rb:SetPoint("TOPLEFT", content, "TOPLEFT", col.x + 60 + (i - 1) * 100, col.y + 3)
+        rb:SetPoint("TOPLEFT", content, "TOPLEFT", col.x + 60 + (i - 1) * (step or 100), col.y + 3)
         group[#group + 1] = rb
     end
     col.y = col.y - 22
@@ -315,9 +316,78 @@ local function build()
     controls.body = radioRow("Body", { { "clear", "Clear" }, { "smoked", "Smoked" } },
         function() return GRF.db.glassBody or "clear" end, S.SetBody)
     note("The look takes effect after /reload.")
-    -- Tall enough for everything; the scroll bar appears once that outgrows
-    -- the canvas.
-    content:SetHeight(-col.y + 16)
+
+    -- Names (#18): one style for everyone, a nickname per person (by GUID);
+    -- account-wide. Last on the page: the nickname list grows downwards.
+    header("Names")
+    controls.names = radioRow("Show", { { "first", "First name" }, { "initial", "First + initial" }, { "full", "Full name" } },
+        function() return GRF.db.nameStyle or "first" end, S.SetNameStyle, 140)
+    note("A nickname replaces one person's name on the frames, on all your characters.")
+    local box, templated = API.SafeFrame("EditBox", content, "InputBoxTemplate", "Left")
+    box:SetSize(160, 20)
+    box:SetAutoFocus(false)
+    box:SetFontObject("GameFontHighlight")
+    if not templated then
+        local bg = box:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(box)
+        bg:SetColorTexture(0, 0, 0, 0.5)
+    end
+    place(box, 0, 14)   -- the template's left cap sits outside the box
+    controls.nickBox = box
+    local status = label("", "GameFontNormalSmall")
+    controls.nickStatus = status
+    local function apply(nick)
+        local ok, why = S.SetTargetNickname(nick)
+        controls.refreshAll()
+        if ok then
+            box:SetText("")
+            box:ClearFocus()
+        end
+        status:SetText(ok and "" or ("|cffff8040" .. why .. "|r"))
+    end
+    local set = button("Nickname your target", 170, function() apply(box:GetText()) end)
+    set:SetPoint("LEFT", box, "RIGHT", 10, 0)
+    controls.nickSet = set
+    local clear = button("Clear", 70, function() apply("") end)
+    clear:SetPoint("LEFT", set, "RIGHT", 6, 0)
+    controls.nickClear = clear
+    status:SetPoint("LEFT", clear, "RIGHT", 10, 0)
+    box:SetScript("OnEnterPressed", function() apply(box:GetText()) end)
+    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    col.y = col.y - 30
+
+    -- The list: one row per nickname, built as needed. The page's height
+    -- follows it, so the scroll bar appears once it outgrows the canvas.
+    local listTop, rows = col.y, {}
+    controls.nickRows = rows
+    local empty = label("|cff888888No nicknames yet.|r", "GameFontHighlightSmall")
+    empty:SetPoint("TOPLEFT", content, "TOPLEFT", col.x + 8, listTop - 4)
+    local function row(i)
+        local r = CreateFrame("Frame", nil, content)
+        r:SetSize(480, 22)
+        r:SetPoint("TOPLEFT", content, "TOPLEFT", col.x + 8, listTop - (i - 1) * 22)
+        r.text = Options.Label(r, "", "GameFontHighlight")
+        r.text:SetPoint("LEFT", r, "LEFT", 0, 0)
+        r.remove = Options.Button(r, "Remove", 80, function()
+            S.SetNickname(r.guid, nil)
+            controls.refreshAll()
+        end)
+        r.remove:SetPoint("RIGHT", r, "RIGHT", 0, 0)
+        rows[i] = r
+        return r
+    end
+    controls[#controls + 1] = function()
+        local list = S.Nicknames()
+        for i, e in ipairs(list) do
+            local r = rows[i] or row(i)
+            r.guid = e.guid
+            r.text:SetText(e.name .. "  |cff888888->|r  |cffffffff" .. e.nick .. "|r")
+            r:Show()
+        end
+        for i = #list + 1, #rows do rows[i]:Hide() end
+        empty:SetShown(#list == 0)
+        content:SetHeight(-(listTop - math.max(1, #list) * 22) + 16)
+    end
 end
 
 function controls.refreshAll()

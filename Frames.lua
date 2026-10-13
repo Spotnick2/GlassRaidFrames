@@ -200,6 +200,35 @@ function Frames.ShortName(full)
     return full:match("^(%S+)") or full
 end
 
+-- The name display (#18): "first" (the default, above), "initial" (first
+-- name + surname initial: "Karuzo M.") or "full" (cut short by the tile).
+-- A nickname, keyed by GUID, wins over every style, a secret name included.
+-- A secret name can't be split: every style shows it whole.
+Frames.NAME_STYLES = { first = true, initial = true, full = true }
+
+-- The first character, whole when it takes several bytes (UTF-8: localized
+-- clients' surnames).
+local function firstChar(s) return s:match("^[%z\1-\127\194-\244][\128-\191]*") end
+
+function Frames.DisplayName(full, style, nick)
+    if nick then return nick end
+    if style ~= "initial" and style ~= "full" then return Frames.ShortName(full) end
+    if API.IsSecret(full) or type(full) ~= "string" or style == "full" then return full end
+    local first, rest = full:match("^(%S+)%s+(%S.*)$")
+    local c = rest and firstChar(rest)
+    if not c then return Frames.ShortName(full) end
+    return first .. " " .. c .. "."
+end
+
+-- What a tile shows for unit `u`, whose plain GUID is `guid` (nil: unknown,
+-- so no nickname).
+function Frames.NameFor(u, guid)
+    local db = GRF.db
+    local nicks = db and db.nicknames
+    local nick = type(guid) == "string" and nicks and nicks[guid]
+    return Frames.DisplayName(GetUnitName(u, false), db and db.nameStyle, nick and nick.nick)
+end
+
 -- After a resize (Header.ApplySize): the bar follows the tile's height, the
 -- name its size. Glass.Font registered the fonts; the same file is re-set at
 -- the new size (the material is LibGlass's: not changed here).
@@ -222,8 +251,8 @@ end
 Engine.SetPainter("name", function(b, u)
     if not UnitExists(u) then return end
     -- GetUnitName(u, false) (UnitName's second return is the surname on
-    -- Forever), then the first name for the tile.
-    b.nameText:SetText(Frames.ShortName(GetUnitName(u, false)))
+    -- Forever), shown in the chosen style, or the person's nickname (#18).
+    b.nameText:SetText(Frames.NameFor(u, b.guid))
 end)
 
 local function classColor(u)

@@ -183,10 +183,18 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - **Target:** a tinted rim (`Frames.TARGET`) on `PLAYER_TARGET_CHANGED` (a `target`
     channel). `UnitIsUnit(u, "target")` can be secret, so a secret answer goes through
     `SetAlphaFromBoolean`.
-- **The name is centred in the tile** (both ways) and shows the **first name**
+- **The name is centred in the tile** (both ways) and shows the **first name** by default
   (`Frames.ShortName`), as Cell does: Forever's surnames only got a centred name cut short. A
   secret name (grouped) can't be split in Lua, so it goes to `SetText` whole. Dead/Offline is
   small in the top-right corner.
+  - **Name display** (#18), account-wide: `db.nameStyle` `initial` ("Karuzo M.", a UTF-8
+    initial kept whole) or `full`; `first` is the default and isn't saved.
+  - **Nicknames** by GUID (`db.nicknames[guid] = {nick, name}`; `name` is only for the list).
+    They win over every style, a secret name included, through the tile's plain `b.guid`
+    (GUIDs are plain in combat, probe item 5). A secret GUID shows the name.
+  - `Frames.NameFor(u, guid)` is the one place that decides. Settings repaint the `name`
+    channel (plain Lua: fine in combat). `/grf names`, `/grf nick`, and the main page's Names
+    section, last on the page because the nickname list grows downwards.
 - **Pets** (#13): a `SecureGroupPetHeaderTemplate` (`Header.petHeader`, **measured working in
   game**) in its own container (`Header.petContainer`).
   - **By default, the column after the last group in use** (`Header.LastColumn`; owner: "dynamic,

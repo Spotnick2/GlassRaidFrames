@@ -17,6 +17,9 @@
 - A thin power bar under the health bar. The frame's glass rim lights up on mouse-over, and your
   target's frame gets a coloured rim.
 - Hovering a frame shows the player's (or pet's) tooltip.
+- Names: show the first name (as before), the first name and surname initial ("Karuzo M."), or
+  the full name (`/grf names`). Give anyone a nickname from Options or with `/grf nick <nickname>`
+  on your target; it follows that character on all your characters.
 - A cleaner glass by default: thin rims, no grain, softer shading. The original look is one
   click away (Options > Look > Glass: Classic, or `/grf look classic`), and the glass body can
   be clear or smoked (`/grf body smoked`). Both take effect after a `/reload`.

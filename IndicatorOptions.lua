@@ -638,9 +638,10 @@ local function build()
     p.overlay = CreateFrame("Frame", nil, p)
     p.overlay:SetAllPoints(p)
     p.overlay:SetFrameLevel(p:GetFrameLevel() + 12)
-    local okN, me = pcall(GetUnitName, "player", false)
+    local okG, guid = pcall(UnitGUID, "player")
+    local okN, me = pcall(GRF.Frames.NameFor, "player", (okG and not API.IsSecret(guid)) and guid or nil)
     p.name = label(p.overlay, "", "GameFontHighlightLarge")
-    if okN and not API.IsSecret(me) then p.name:SetText(GRF.Frames.ShortName(me)) end
+    if okN and not API.IsSecret(me) then p.name:SetText(me) end
     p.name:SetPoint("CENTER", p, "CENTER", 0, 0)
     p.boxes = {}
     ui.preview = p
