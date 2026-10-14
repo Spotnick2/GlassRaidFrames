@@ -18,6 +18,17 @@ local function ensureDefaults()
         if db[k] == nil then db[k] = v end
     end
     if type(db.profiles) ~= "table" then db.profiles = {} end
+    -- The name display (#18): a style (the default, first, isn't saved) and
+    -- nicknames by GUID, account-wide; junk dropped.
+    if db.nameStyle == "first" or not GRF.Frames.NAME_STYLES[db.nameStyle] then db.nameStyle = nil end
+    if type(db.nicknames) ~= "table" then db.nicknames = {} end
+    for guid, n in pairs(db.nicknames) do
+        if type(guid) ~= "string" or type(n) ~= "table" or type(n.nick) ~= "string" or n.nick == "" then
+            db.nicknames[guid] = nil
+        elseif type(n.name) ~= "string" then
+            n.name = nil
+        end
+    end
     for _, role in ipairs(Role.ROLES) do
         if type(db.profiles[role]) ~= "table" then db.profiles[role] = {} end
     end
@@ -154,6 +165,52 @@ function Settings.SetBody(body)
     if not GRF.BODIES[body] then return false end
     GRF.db.glassBody = body == "smoked" and "smoked" or nil
     return true
+end
+
+-- The name display (#18), account-wide. Plain Lua and a repaint: fine in combat.
+function Settings.SetNameStyle(style)
+    if not GRF.Frames.NAME_STYLES[style] then return false end
+    GRF.db.nameStyle = style ~= "first" and style or nil
+    GRF.Engine.RepaintChannel("name")
+    return true
+end
+
+Settings.NICK_MAX = 24   -- bytes; a tile shows far less
+
+-- A nickname for the person with this plain GUID; "" or nil removes it.
+-- `name` (their full name, for the options list) is kept when unknown.
+-- Returns true, or false and why.
+function Settings.SetNickname(guid, nick, name)
+    if type(guid) ~= "string" or API.IsSecret(guid) then return false, "no player to nickname" end
+    nick = type(nick) == "string" and nick:gsub("|", ""):match("^%s*(.-)%s*$") or ""
+    if #nick > Settings.NICK_MAX then return false, "a nickname is at most " .. Settings.NICK_MAX .. " letters" end
+    if nick == "" then
+        GRF.db.nicknames[guid] = nil
+    else
+        local old = GRF.db.nicknames[guid]
+        if type(name) ~= "string" or API.IsSecret(name) then name = old and old.name end
+        GRF.db.nicknames[guid] = { nick = nick, name = name }
+    end
+    GRF.Engine.RepaintChannel("name")
+    return true
+end
+
+-- The same, for your current target (a player).
+function Settings.SetTargetNickname(nick)
+    local okP, isPlayer = pcall(UnitIsPlayer, "target")
+    if not (okP and not API.IsSecret(isPlayer) and isPlayer) then return false, "target a player first" end
+    local okG, guid = pcall(UnitGUID, "target")
+    if not okG or API.IsSecret(guid) or type(guid) ~= "string" then return false, "can't tell who your target is right now" end
+    local okN, name = pcall(GetUnitName, "target", false)
+    return Settings.SetNickname(guid, nick, okN and name or nil)
+end
+
+-- Every nickname, by name: { guid, name, nick }.
+function Settings.Nicknames()
+    local list = {}
+    for guid, n in pairs(GRF.db.nicknames) do list[#list + 1] = { guid = guid, name = n.name or "?", nick = n.nick } end
+    table.sort(list, function(a, b) return a.name < b.name or (a.name == b.name and a.guid < b.guid) end)
+    return list
 end
 
 -- The current role's tile size; nil for either = back to the default.
@@ -372,6 +429,28 @@ local function indicatorsCommand(rest)
     if InCombatLockdown() then say("changes show when combat ends") end
 end
 
+-- /grf nick: list; <nickname> for your target; clear (your target's);
+-- remove <n> (from the list).
+local function nickCommand(rest)
+    local lower = rest:lower()
+    local n = lower:match("^remove%s+(%d+)$")
+    if lower == "" then
+        local list = Settings.Nicknames()
+        if #list == 0 then say("no nicknames (/grf nick <nickname> sets one for your target)") end
+        for i, e in ipairs(list) do say(i .. ". " .. e.name .. " -> " .. e.nick) end
+        return
+    elseif n then
+        local e = Settings.Nicknames()[tonumber(n)]
+        if not e then say("no nickname " .. n .. " (/grf nick lists them)") return end
+        Settings.SetNickname(e.guid, nil)
+        say("nickname removed: " .. e.name)
+        return
+    end
+    local ok, why = Settings.SetTargetNickname(lower == "clear" and "" or rest)
+    if not ok then say(why) return end
+    say(lower == "clear" and "nickname cleared for your target" or ("your target is now shown as " .. (rest:gsub("|", ""))))
+end
+
 local function roleLine()
     local pick = GRF.char.role
     return "role: " .. tostring(GRF.role):lower() .. " (" .. tostring(GRF.roleSource)
@@ -414,6 +493,11 @@ local function slash(msg)
         Settings.SetHideBlizzard(not GRF.db.hideBlizzard)
         say(GRF.db.hideBlizzard and "Blizzard's party/raid frames: hidden"
             or "Blizzard's party/raid frames: shown after /reload")
+    elseif cmd == "names" then
+        if not Settings.SetNameStyle(arg) then say("names first|initial|full") end
+        say("names: " .. (GRF.db.nameStyle or "first"))
+    elseif cmd == "nick" then
+        nickCommand((msg or ""):match("^%s*%S+%s*(.-)%s*$") or "")
     elseif cmd == "look" then
         if Settings.SetLook(arg) then
             say("look " .. arg .. ": takes effect after /reload")
@@ -443,6 +527,8 @@ local function slash(msg)
         say("/grf solo - show your own frame when not in a group")
         say("/grf pets - show or hide pets (this role)")
         say("/grf ind - buff and debuff indicators (per class); /grf ind <n> on|off, /grf ind reset")
+        say("/grf names first|initial|full - how names show (all your characters)")
+        say("/grf nick <nickname> | clear - your target's nickname; /grf nick lists, /grf nick remove <n>")
         say("/grf look classic|clean - the glass (after /reload); now " .. GRF.look)
         say("/grf body clear|smoked - the glass body (after /reload); now " .. GRF.body)
         say("/grf blizzard - toggle hiding Blizzard's party/raid frames")
