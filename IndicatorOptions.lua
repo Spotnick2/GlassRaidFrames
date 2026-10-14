@@ -217,6 +217,11 @@ local function paintPreview()
     local p = ui.preview
     local tw, th = GRF.Header.TileSize()
     p:SetSize(tw * PREVIEW_SCALE, th * PREVIEW_SCALE)
+    -- Your name as the tiles show it: the style or a nickname may have changed
+    -- on the main page since this page was built.
+    local okG, guid = pcall(UnitGUID, "player")
+    local okN, me = pcall(GRF.Frames.NameFor, "player", (okG and not API.IsSecret(guid)) and guid or nil)
+    p.name:SetText((okN and not API.IsSecret(me)) and me or "")
     for _, t in ipairs(p.boxes) do t:Hide(); t.edge:Hide() end
     local n = 0
     for _, ind in ipairs(list()) do
@@ -638,10 +643,7 @@ local function build()
     p.overlay = CreateFrame("Frame", nil, p)
     p.overlay:SetAllPoints(p)
     p.overlay:SetFrameLevel(p:GetFrameLevel() + 12)
-    local okG, guid = pcall(UnitGUID, "player")
-    local okN, me = pcall(GRF.Frames.NameFor, "player", (okG and not API.IsSecret(guid)) and guid or nil)
     p.name = label(p.overlay, "", "GameFontHighlightLarge")
-    if okN and not API.IsSecret(me) then p.name:SetText(me) end
     p.name:SetPoint("CENTER", p, "CENTER", 0, 0)
     p.boxes = {}
     ui.preview = p

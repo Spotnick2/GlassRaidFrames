@@ -130,6 +130,20 @@ WoW.SetUnit("target", nil)
 C.nickSet._scripts.OnClick(C.nickSet)
 check(C.nickStatus._text:find("target a player"), "no target: the page says why")
 
+-- The Indicators preview follows the name settings after it was built.
+rawset(_G, "C_Spell", { GetSpellName = function() return nil end, GetSpellTexture = function() return nil end })
+local IOT = GRF.IndicatorOptions._test
+IOT.page:Show()
+eq(IOT.ui.preview.name._text, "Karuzo E.", "the preview: your name in the current style")
+IOT.page:Hide()
+S.SetNameStyle("full")
+IOT.page:Show()
+eq(IOT.ui.preview.name._text, "Karuzo Elegia", "a style changed since: the preview follows")
+S.SetNickname(UnitGUID("player"), "Me", "Karuzo Elegia")
+GRF.IndicatorOptions.Refresh()
+eq(IOT.ui.preview.name._text, "Me", "and your nickname")
+eq(GRF.paintFailures["indicators page"], nil, "the page repainted cleanly")
+
 -- Saved junk is dropped at load.
 GlassRaidFrames = nil
 dofile("tests/wow_stubs.lua")
