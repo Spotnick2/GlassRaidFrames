@@ -1,4 +1,6 @@
--- RaidProbe's hover-key toggle (Codex review of PR #5): turning the mode off
+-- RaidProbe, a ForeverProbe module (#44): loaded on the host, driven through
+-- /fp raid, its lines in the console and RaidProbeDB.log, never in chat.
+-- Then its hover-key toggle (Codex review of PR #5): turning the mode off
 -- must release a key a hovered tile still holds, and leaving a tile must
 -- clean up whether or not the mode is still on.
 dofile("tests/wow_stubs.lua")
@@ -13,12 +15,38 @@ end)
 -- The rest of what the probe touches on these paths (all in the 70009 dump).
 rawset(_G, "GetTime", function() return 0 end)
 rawset(_G, "C_Spell", { GetSpellName = function(id) return id == 2050 and "Lesser Heal" or nil end })
-rawset(_G, "RaidProbeDB", { log = {} })
 rawset(_G, "UnitGroupRolesAssigned", function() return "NONE" end)   -- captured by the secrets table at load
 
 WoW.SetUnit("player", { name = "Karuzo", class = "PRIEST", player = true })
-assert(loadfile("Tools/RaidProbe/RaidProbe.lua"))("RaidProbe", {})
-local T = RaidProbe_test
+local FP = loadForeverProbe()
+local function rprobe(s) SlashCmdList.FOREVERPROBE("raid " .. s) end
+-- Its SavedVariables from an earlier session (the client sets them before ADDON_LOADED).
+rawset(_G, "RaidProbeDB", { log = { "1.0 an earlier session's line" }, sessions = 2 })
+local ns = {}
+assert(loadfile("Tools/RaidProbe/RaidProbe.lua"))("RaidProbe", ns)
+local T = ns._test
+check(rawget(_G, "RaidProbe_test") == nil, "the test seam stays off _G")
+check(rawget(SlashCmdList, "RAIDPROBE") == nil, "no /rprobe any more: /fp raid")
+eq(FP.byCmd.raid, T.Probe, "/fp raid is RaidProbe")
+WoW.fire("ADDON_LOADED", "RaidProbe")
+eq(type(RaidProbeDB.log), "table", "the probe keeps its log in saved variables")
+check(T.Probe.log == RaidProbeDB.log, "its ForeverProbe log is RaidProbeDB.log, bound at ADDON_LOADED")
+eq(RaidProbeDB.sessions, 3, "it counts its loads")
+local function consoleHas(pattern)
+    for _, l in ipairs(FP.lines) do
+        if l.m == "RaidProbe" and l.text:find(pattern) then return true end
+    end
+    return false
+end
+local function logHas(pattern)
+    for _, l in ipairs(RaidProbeDB.log) do if l:find(pattern) then return true end end
+    return false
+end
+check(consoleHas("session 3, build"), "the load line reaches the console")
+check(logHas("session 3, build"), "and the saved log")
+check(logHas("an earlier session's line"), "the earlier session's lines are kept")
+check(not consoleHas("EARLY"), "the host was ready before RaidProbe's ADDON_LOADED")
+check(not chatHas("session"), "nothing in chat")
 local key = T.HOVER_KEY
 
 local tile = CreateFrame("Button", "RaidProbe_party1", UIParent, "SecureUnitButtonTemplate")
@@ -80,23 +108,27 @@ rawset(_G, "C_UnitAuras", {
 C_Spell.GetSpellSubtext = function() return "Rank 1" end
 rawset(_G, "AnchorUtil", { FlowDirection = { Left = -1, Right = 1, Up = 1, Down = -1 } })
 rawset(_G, "debugprofilestop", function() return 0 end)
+-- A failed call is the host's Try line: "label: ERROR msg" or "label: MISSING".
 local function failures()
     local n = 0
-    for _, line in ipairs(WoW.chat) do if line:find("FAIL", 1, true) then n = n + 1 end end
+    for _, l in ipairs(FP.lines) do
+        if l.m == "RaidProbe" and (l.text:find(": ERROR", 1, true) or l.text:find(": MISSING", 1, true)) then n = n + 1 end
+    end
     return n
 end
 local before = failures()
 for _, cmd in ipairs({ "ind", "ind party1", "ind reconf", "ind reconf", "ind src", "ind src party1", "ind state", "ind cost", "ind ids" }) do
-    local ok, err = pcall(SlashCmdList.RAIDPROBE, cmd)
-    check(ok, "/rprobe " .. cmd .. " runs: " .. tostring(err))
+    local ok, err = pcall(rprobe, cmd)
+    check(ok, "/fp raid " .. cmd .. " runs: " .. tostring(err))
 end
 eq(failures() - before, 0, "no probe call failed")
 eq(#T.P.indContainers, 8, "the panel has its 8 test containers")
 eq(T.P.indUnit, "party1", "ind <unit> rebinds the panel")
-check(chatHas("RAID_IN_COMBAT=out"), "src reports which filters keep each aura")
-check(chatHas("cost: 40 tiles"), "cost reports its build")
-check(chatHas("state 6: slot 1 shown="), "state reports each stacked slot")
-check(chatHas("state 1: .* shown, .* hidden, .* unknown"), "state reports each row group")
+check(consoleHas("RAID_IN_COMBAT=out"), "src reports which filters keep each aura")
+check(consoleHas("cost: 40 tiles"), "cost reports its build")
+check(consoleHas("state 6: slot 1 shown="), "state reports each stacked slot")
+check(consoleHas("state 1: .* shown, .* hidden, .* unknown"), "state reports each row group")
+check(logHas("cost: 40 tiles"), "the lines are saved too")
 
 -- Codex review of #20: a secret shown state is unknown, never "hidden".
 local hots = T.P.indByKey.RP_IND_HOTS
@@ -105,8 +137,8 @@ local frames = { { IsShown = function() return WoW.Secret("shown") end },
                  { IsShown = function() return false end } }
 hots.GetAuraGroupFrameCount = function() return #frames end
 hots.GetAuraGroupFrame = function(_, _, i) return frames[i] end
-SlashCmdList.RAIDPROBE("ind state")
-check(chatHas("state 1: 3 buttons: 0 shown, 1 hidden, 2 unknown"), "secret reads count as unknown, a plain false as hidden")
+rprobe("ind state")
+check(consoleHas("state 1: 3 buttons: 0 shown, 1 hidden, 2 unknown"), "secret reads count as unknown, a plain false as hidden")
 hots.GetAuraGroupFrameCount, hots.GetAuraGroupFrame = nil, nil
 
 -- The button look the client would apply (initializeFrame).
@@ -114,5 +146,24 @@ local button = CreateFrame("Button", nil, UIParent)
 T.indButton(16, 30, { 1, 0, 0 }, UIParent)(button)
 T.indButton(16)(button)
 eq(failures() - before, 0, "the probe button initialiser runs cleanly")
+
+-- A throwing call is reported, not raised: the host's Try contract.
+rprobe("ind")   -- the panel exists; make one of its calls throw
+local realSetUnit = T.P.indContainers[1].SetUnit
+T.P.indContainers[1].SetUnit = function() error("boom") end
+rprobe("ind party2")
+T.P.indContainers[1].SetUnit = realSetUnit
+check(failures() > before, "a throwing client call is logged as ERROR")
+
+-- The command list, and clearing the log in place.
+newChat()
+rprobe("")
+check(consoleHas("/fp raid <command>:") and consoleHas("  ind %- "), "/fp raid alone lists the commands")
+local log = RaidProbeDB.log
+rprobe("log clear")
+check(RaidProbeDB.log == log, "log clear keeps the bound table")
+eq(#log, 1, "and empties it in place, then logs the clear")
+check(logHas("log cleared") and consoleHas("log cleared"), "the line after a clear is in both")
+check(#WoW.chat == 0, "nothing reached chat")
 
 done("test_probe")
