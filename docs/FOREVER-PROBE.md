@@ -7,14 +7,21 @@ Addon-agnostic results also go into `C:\Projects\WoW\References\PORTING-TBC-TO-F
 
 ## How to run it
 
-1. `pwsh Tools\deploy.ps1 -Probe`, then **restart the client**, because RaidProbe is a new
-   folder. Enable GlassRaidFrames too: the probe's tiles use its glass material when it is
+RaidProbe is a **ForeverProbe module** (#44; `C:\Projects\WoW\References\PROBES.md`, and
+ForeverProbe's `docs/GUIDE.md`). Its commands were `/rprobe <command>` until then; the results
+below keep the commands as they're now typed.
+
+1. `pwsh Tools\deploy.ps1 -Probe`. It deploys the ForeverProbe checkout first
+   (`..\ForeverProbe`), then RaidProbe. A `/reload` loads both, new folders included (guide,
+   section 7). Enable GlassRaidFrames too: the probe's tiles use its glass material when it is
    loaded.
-2. In game: `/console scriptErrors 1`, then `/rprobe help`.
-3. Everything the probe prints also goes to `RaidProbeDB.log`. When done, **exit the client
-   fully**, which is what flushes SavedVariables, then share
-   `WTF\Account\<account>\SavedVariables\RaidProbe.lua`. The log survives `/reload` and
-   accumulates across sessions; `/rprobe log clear` starts over.
+2. In game: `/console scriptErrors 1`, then `/fp raid` (the command list). `/fp` opens the
+   console where the probe's lines go; they no longer go to chat (`/fp mirror on` copies them
+   there for a session).
+3. Every line also goes to `RaidProbeDB.log`. A `/reload` writes it to
+   `WTF\Account\<account>\SavedVariables\RaidProbe.lua`, which a session reads itself. The log
+   accumulates across sessions; `/fp raid log clear` starts over. Blocked and forbidden actions
+   are logged by ForeverProbe's baseline, in the same console.
 4. Lines stamped with `C` were logged in combat.
 
 You need a group for most items: a party first, then a raid, ideally with a healer class on
@@ -23,12 +30,12 @@ your side so real cures exist. A training dummy or a low mob works for combat.
 ## Checklist
 
 ### 1. Group buttons: manual vs header (gates `Roster.lua`)
-- [x] `/rprobe build` out of combat: 45 tiles appear, the player's tile shows, and the rest
+- [x] `/fp raid build` out of combat: 45 tiles appear, the player's tile shows, and the rest
       follow the roster.
 - [ ] Join and leave a party, out of combat and **in combat**. Check the `roster:` lines: the
       right tiles are shown, names are correct, and there is no `ADDON_ACTION_BLOCKED`.
 - [ ] Convert party → raid in combat, if you can arrange it. Note what shows.
-- [ ] `/rprobe header` (do it on a separate `/reload`, so the two builds don't interfere):
+- [ ] `/fp raid header` (do it on a separate `/reload`, so the two builds don't interfere):
       does the header spawn children? Are their units right? Do they survive roster changes in
       and out of combat, and a `/reload`? Do left and right clicks on a child target and open
       the menu?
@@ -43,8 +50,8 @@ the secure handler resolved (`click … -> type value`), then `cast sent/succeed
 - [ ] alt-left: `spell` = `"Name(Rank n)"`. Does it downrank?
 - [ ] shift-right: `macro` + `macrotext` `/cast [@partyN] Name`.
 - [ ] middle with any modifier: the `*type3` wildcard.
-- [ ] `/rprobe clear`, then shift-left: does it fall back to a plain left click (target)?
-- [ ] `/rprobe spell <id>` switches the test spell (out of combat).
+- [ ] `/fp raid clear`, then shift-left: does it fall back to a plain left click (target)?
+- [ ] `/fp raid spell <id>` switches the test spell (out of combat).
 - **Decision:** `type=spell` with whichever `spell` form works. If none cast in combat, fall
   back to `macro`.
 
@@ -59,30 +66,30 @@ left, blue for right, yellow for middle.
       the box? Aura buttons created in combat must not eat the click.
 - [ ] Is a debuff of a type you can't cure left unlit?
 - [ ] The debuff row (bottom-left icons): do icons show, and do clicks on them reach the tile?
-- [ ] `/rprobe enums`: `CustomAuraButtonDispelTypeTextureStyle` has `PreserveAsset`.
+- [ ] `/fp raid enums`: `CustomAuraButtonDispelTypeTextureStyle` has `PreserveAsset`.
 
 ### 4. Sounds (gates the alert design)
-- [ ] `/rprobe sound`: do you hear the chime (addon `.ogg`) and the raid-warning kit?
+- [ ] `/fp raid sound`: do you hear the chime (addon `.ogg`) and the raid-warning kit?
       `willPlay` should be true.
-- [ ] `/rprobe aurasound` in a group: which struct shapes return a handle and which error? The
+- [ ] `/fp raid aurasound` in a group: which struct shapes return a handle and which error? The
       errors name the fields the client expects.
-- [ ] `/rprobe aurasound <spellID>` with the ID of a debuff you can reproduce (`/rprobe auras`
+- [ ] `/fp raid aurasound <spellID>` with the ID of a debuff you can reproduce (`/fp raid auras`
       shows IDs out of combat). Does the chime play when it lands **in combat**?
-- [ ] `/rprobe aurasound clear` afterwards.
-- [ ] `/rprobe auras party1` out of combat: do `HARMFUL` and `HARMFUL|RAID` differ? Is
+- [ ] `/fp raid aurasound clear` afterwards.
+- [ ] `/fp raid auras party1` out of combat: do `HARMFUL` and `HARMFUL|RAID` differ? Is
       `dispelName` readable?
 - **Decision:** a dispel-type trigger means full in-combat sound coverage. A spell-ID-only
   trigger means the learned-ID route, with limited coverage.
 
 ### 5. Secrecy and range (gates `Frames.lua`)
-- [ ] `/rprobe secrets` in a party and in a raid, **out of and in combat**. `S` = secret, `ERR`
+- [ ] `/fp raid secrets` in a party and in a raid, **out of and in combat**. `S` = secret, `ERR`
       = threw. Check `hp`, `hpMax`, `dead`, `conn`, `role`, `name`, `class`, `guid`,
       `inRange`/`checked`, `leader`, `mark`, and `GetRaidRosterInfo` subgroup.
-- [ ] `/rprobe watch`, then walk away from a party member: do `UNIT_IN_RANGE_UPDATE` lines
+- [ ] `/fp raid watch`, then walk away from a party member: do `UNIT_IN_RANGE_UPDATE` lines
       arrive, and are the values readable? Is the `UNIT_AURA` payload secret in combat?
 
 ### 6. Hiding Blizzard's frames (gates `Blizzard.lua`)
-- [ ] `/rprobe hide` in a party and in a raid: which of `PartyFrame` (the classic-style party
+- [ ] `/fp raid hide` in a party and in a raid: which of `PartyFrame` (the classic-style party
       frames, shown by default), `CompactPartyFrame`,
       `CompactRaidFrameContainer` and `CompactRaidFrameManager` exist, and are protected?
       Do they stay hidden?
@@ -98,16 +105,16 @@ frame**, not mouse clicks:
 
 Ranks are pinned (`"635:7"`). Cell does hover keys with restricted snippets, which are broken
 here, so three other routes get measured, each out of and **in** combat. Use a helpful test
-spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
-- [ ] `/rprobe mocast`: is `IsMouseoverCastSupported()` true? Then `/rprobe mocast on`, put a
+spell (`/fp raid spell <id>`); pass a rank-specific spell ID to test downranking.
+- [ ] `/fp raid mocast`: is `IsMouseoverCastSupported()` true? Then `/fp raid mocast on`, put a
       heal on an action-bar key, hover a probe tile and press the key. Does it cast on the
       hovered member, in combat? What does `mouseoverCastModifier` do? This is the client's own
       feature, so if it works it needs no binding code at all.
-- [ ] `/rprobe hoverkeys`: hover a tile and press **8**. Does the `OnEnter bind` line say `ok`
+- [ ] `/fp raid hoverkeys`: hover a tile and press **8**. Does the `OnEnter bind` line say `ok`
       out of combat, and is it refused in combat (expected)?
-- [ ] `/rprobe permkey`: key **9** always runs `/cast [@mouseover,help,nodead] <spell>` from a
+- [ ] `/fp raid permkey`: key **9** always runs `/cast [@mouseover,help,nodead] <spell>` from a
       hidden secure button. Does it cast on a hovered tile in combat? What happens when you
-      press 9 while hovering nothing? `/rprobe permkey` again releases it.
+      press 9 while hovering nothing? `/fp raid permkey` again releases it.
 - **Decision:** keyboard hover-casting is back in scope for milestone 2, through whichever
   route works in combat. With route (c), the addon owns the key only while you are in a group,
   and the options have to say so.
@@ -115,53 +122,53 @@ spell (`/rprobe spell <id>`); pass a rank-specific spell ID to test downranking.
 ### 9. Spec and role (gates per-role settings, issue #7)
 The talent-tab API is gone on Forever, and what `C_SpecializationInfo` returns for Vanilla
 trees is unmeasured.
-- [ ] `/rprobe spec` on a character with talent points spent. It logs:
+- [ ] `/fp raid spec` on a character with talent points spent. It logs:
       `GetSpecialization`, the `GetSpecializationInfo` rows (name, **role**, **pointsSpent**),
       the active spec group, and whether `EventRegistry` is usable.
 - [ ] Spend a talent point, and switch dual spec if available. Which of
       `PLAYER_TALENT_UPDATE`, `CHARACTER_POINTS_CHANGED`, `ACTIVE_TALENT_GROUP_CHANGED`,
-      `PLAYER_SPECIALIZATION_CHANGED` and `TRAIT_CONFIG_UPDATED` are logged? Run `/rprobe spec`
+      `PLAYER_SPECIALIZATION_CHANGED` and `TRAIT_CONFIG_UPDATED` are logged? Run `/fp raid spec`
       again after each.
 - **Decision:** auto role from the spec if these answer, with the manual `/grf role` override
   either way. Otherwise manual plus a class default.
 
 ### 10. Buff and debuff indicators (gates `Indicators.lua`, issue #19)
-Only Renew, Power Word: Shield and Weakened Soul are needed. `/rprobe ind` opens a panel of
-labelled test containers (numbered like the items below) on yourself. `/rprobe ind party1`
+Only Renew, Power Word: Shield and Weakened Soul are needed. `/fp raid ind` opens a panel of
+labelled test containers (numbered like the items below) on yourself. `/fp raid ind party1`
 moves it to a party member, in combat too. Do each item out of combat, then in combat.
-**Right after casting (within Renew's 15 s), run `/rprobe ind state`:** it logs each aura's
+**Right after casting (within Renew's 15 s), run `/fp raid ind state`:** it logs each aura's
 source and filters, and tries to read which rows are lit. The client keeps the buttons' shown
 state secret even out of combat (second run), so those reads come back `unknown`: **which rows
 light up still needs a look (or a screenshot)**. Everything lands in `RaidProbeDB.log`;
 `/reload` writes it to `SavedVariables\RaidProbe.lua`.
-- [ ] `/rprobe ind ids`: does every planned spell ID resolve to the right name and rank?
+- [ ] `/fp raid ind ids`: does every planned spell ID resolve to the right name and rank?
       (A wrong or missing ID shows `nil`.)
 - [ ] **1.** Cast Renew and Shield. Does row 1 (`RAID_IN_COMBAT`, no IDs) show both, growing
-      left? Row 1b shows all your own buffs, for comparison. `/rprobe ind src` (out of combat)
+      left? Row 1b shows all your own buffs, for comparison. `/fp raid ind src` (out of combat)
       prints, for each aura, whether `PLAYER|RAID_IN_COMBAT` keeps it (`IN`) or not (`out`).
 - [ ] **2.** Row 2 (your Renew) and 2b (anyone's Renew): icon, swipe and timer text show. If
       your other priest can join: their Renew shows in 2b but **not** in 2.
 - [ ] **3.** Shield someone: does row 3's red square show for Weakened Soul? The chat line
       `GetSpellAuraSecrecy(6788 …)` printed when the panel opens says whether the client
-      allows it (`NeverSecret` needed). `/rprobe ind src` shows Weakened Soul's `src`.
+      allows it (`NeverSecret` needed). `/fp raid ind src` shows Weakened Soul's `src`.
 - [ ] **4.** Row 4 (Renew + Shield IDs): both show, the row grows left, and closes up when one
       ends.
-- [ ] **5.** `/rprobe ind reconf` (out of combat): row 2 now tracks Shield at a larger size,
+- [ ] **5.** `/fp raid ind reconf` (out of combat): row 2 now tracks Shield at a larger size,
       row 2b stops showing. Again to undo. Any `FAIL` line?
 - [ ] **6.** Row 6: with both up, Shield covers Renew (swipe and text too). When Shield
       ends, Renew shows.
-- [ ] **7.** `/rprobe fps` (baseline), `/rprobe ind cost`, `/rprobe fps` again. Note the build
+- [ ] **7.** `/fp raid fps` (baseline), `/fp raid ind cost`, `/fp raid fps` again. Note the build
       time, button count, heap, and the two fps lines. Then spam heals for a minute and run
-      `/rprobe fps` once more.
+      `/fp raid fps` once more.
 - [ ] **8.** If you can get a debuff you can dispel: does row 8 (`HARMFUL|RAID`) show it?
 - **Decisions:** item 1 decides whether "My heals" needs a spell list. Item 3 decides
   whether a Weakened Soul indicator can ship. Items 4 and 6 decide icon rows and
   single-icon priority. Item 7 decides the default indicator count.
 
 ### 7. Scale (gates the tile budget)
-- [ ] The `built … in … ms` line after `/rprobe build`.
-- [ ] `/rprobe fps` in a raid, out of combat and in combat, with debuffs going on and off.
-      Compare with a `/reload` without `/rprobe build`.
+- [ ] The `built … in … ms` line after `/fp raid build`.
+- [ ] `/fp raid fps` in a raid, out of combat and in combat, with debuffs going on and off.
+      Compare with a `/reload` without `/fp raid build`.
 
 ## Results
 
@@ -266,10 +273,10 @@ light up still needs a look (or a screenshot)**. Everything lands in `RaidProbeD
   DAMAGER. **The spec API can't tell Holy from Shadow, or a tank from DPS**, so the automatic role
   can't come from it.
 - `C_ClassTalents.GetActiveConfigID()` = 88388: the Vanilla trees appear to live in Retail's
-  trait system. `/rprobe traits` maps the config, its trees, currency spent and nodes per subtree
+  trait system. `/fp raid traits` maps the config, its trees, currency spent and nodes per subtree
   or column. It's a candidate for "the tree with the most points"; to be run, then run again once
   points are spent.
-- **Trait layout (`/rprobe traits nodes`, priest, 0 points):**
+- **Trait layout (`/fp raid traits nodes`, priest, 0 points):**
   - Config 88388 ("Priest", type 4) has **one** tree (1114), with currency 3820 (quantity, spent
     and spentInTree all 0) and **54 nodes, no subtrees**.
   - The three Vanilla trees are **column clusters on one canvas**, split by gaps of over 2000
@@ -319,7 +326,7 @@ light up still needs a look (or a screenshot)**. Everything lands in `RaidProbeD
   Optional dedicated keys use the permanent-binding route. Still to measure: what a dedicated
   key does with **no** friendly mouseover, and whether a
   `/click [@mouseover,noexists][@mouseover,harm][@mouseover,dead] ActionButton<n>` fallback line keeps
-  the key's action-bar action (`/rprobe permkey fallback`).
+  the key's action-bar action (`/fp raid permkey fallback`).
 
 ### 2. Click-cast attributes (1.60.1.70009, 2026-09-28, priest, header children)
 - **All five forms cast out of combat** on a header child: Lesser Heal (2050), logged
@@ -338,7 +345,7 @@ light up still needs a look (or a screenshot)**. Everything lands in `RaidProbeD
   **the player** in combat. Every other form hit the clicked unit. Alt is the client's default
   `SELFCAST` modifier, and it wins over the button's `unit`. This matters for bindings: the owner's
   paladin binds Alt-left and Alt-right in Cell. Next run: an Alt `@mouseover` macro
-  (`alt-type2`), and `/rprobe selfcast none` (unbinds the modifier) followed by alt-left again.
+  (`alt-type2`), and `/fp raid selfcast none` (unbinds the modifier) followed by alt-left again.
 - **Self-cast measured (third run).** The client options were Self Cast = "Auto and Key Press",
   key ALT (`GetModifiedClick("SELFCAST") == "ALT"`, `autoSelfCast = 1`). In combat, with ALT:
   - alt-left (`spell`) cast on the player;
@@ -351,7 +358,7 @@ light up still needs a look (or a screenshot)**. Everything lands in `RaidProbeD
   with consent, out of combat). It never changes the key on its own.
 - One shift-left on the partner also landed on the player, while later identical clicks
   didn't. That fits `autoSelfCast` retargeting an invalid (out-of-range) unit. It's unconfirmed;
-  `/rprobe selfcast` now logs the CVar.
+  `/fp raid selfcast` now logs the CVar.
 - **Clearing a modified binding does not fall back to `type1`.** After clearing `shift-type1`,
   shift-left resolved to `nil`. The template tries `shift-type1`, `*type1`, `shift-type*`,
   `*type*` and a bare `type`, but never `type1`. **Defaults must be `*type1=target` and

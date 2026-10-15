@@ -1,8 +1,9 @@
 ## Interface: 16001
 ## Title: RaidProbe
-## Notes: Throwaway probe for GlassRaidFrames: group buttons, click-casting, dispel box, sounds. /rprobe help
+## Notes: Throwaway probe for GlassRaidFrames: group buttons, click-casting, dispel box, sounds. A ForeverProbe module: /fp raid
 ## Author: Spotnick
 ## Version: dev
+## Dependencies: ForeverProbe
 ## OptionalDeps: GlassRaidFrames
 ## SavedVariables: RaidProbeDB
 

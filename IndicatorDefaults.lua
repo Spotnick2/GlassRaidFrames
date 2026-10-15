@@ -3,7 +3,7 @@
 --
 -- Spells by ID only (owner rule: localized clients): names and icons are
 -- resolved at runtime. Every ID here was checked on 70205 with
--- `/rprobe ind ids` (docs/FOREVER-PROBE.md item 10, second run).
+-- `/fp raid ind ids` (docs/FOREVER-PROBE.md item 10, second run).
 
 GlassRaidFrames = GlassRaidFrames or {}
 local GRF = GlassRaidFrames

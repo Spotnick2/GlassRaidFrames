@@ -1,5 +1,5 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
-    <!-- The child template for the SecureGroupHeaderTemplate probe (/rprobe header).
+    <!-- The child template for the SecureGroupHeaderTemplate probe (/fp raid header).
          No initialConfigFunction: restricted snippets are broken on Forever, so
          everything the child needs is declared here. Size must come from the
          template, since nothing else can set it on a header-spawned child. -->

@@ -4,6 +4,10 @@
     The repo keeps "## Version: @project-version@" for the packager; the deployed
     copy gets "dev". The repo copy is never modified.
 
+    RaidProbe is a ForeverProbe module (#44), so -Probe and -ProbeOnly deploy the
+    ForeverProbe checkout first ($env:FOREVERPROBE, else ..\ForeverProbe) through
+    its own Tools\deploy.ps1, and stop if it refuses.
+
     The glass material is the embedded LibGlass-1.0. The packager fetches it
     into Libs\LibGlass-1.0 (.pkgmeta externals); for a dev copy this script
     hands that job to the LibGlass checkout's own deploy.ps1, which checks the
@@ -28,6 +32,7 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path $AddOnsPath)) { Write-Error "AddOns path not found: $AddOnsPath"; exit 1 }
 
 $LibGlass = if ($env:LIBGLASS) { $env:LIBGLASS } else { Join-Path (Split-Path -Parent $RepoRoot) "LibGlass" }
+$ForeverProbe = if ($env:FOREVERPROBE) { $env:FOREVERPROBE } else { Join-Path (Split-Path -Parent $RepoRoot) "ForeverProbe" }
 
 # The textures that moved into LibGlass (Libs\LibGlass-1.0\Media): a deployed
 # Media\ from before the move still holds them.
@@ -101,6 +106,14 @@ function Deploy-Addon {
 }
 
 function Deploy-Probe {
+    # The host first: RaidProbe has ## Dependencies: ForeverProbe, so without
+    # it the client loads no RaidProbe at all.
+    if (-not (Test-Path -LiteralPath (Join-Path $ForeverProbe "Tools\deploy.ps1"))) {
+        Write-Error "ForeverProbe checkout not found at $ForeverProbe (clone github.com/Spotnick2/ForeverProbe there, or set `$env:FOREVERPROBE)"
+        exit 1
+    }
+    & pwsh -NoProfile -File (Join-Path $ForeverProbe "Tools\deploy.ps1") -AddOnsPath $AddOnsPath
+    if ($LASTEXITCODE -ne 0) { Write-Error "ForeverProbe deploy refused; RaidProbe was not touched"; exit 1 }
     $dest = Join-Path $AddOnsPath "RaidProbe"
     Write-Host "Deploying RaidProbe -> $dest" -ForegroundColor Cyan
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
@@ -115,5 +128,5 @@ if (-not $ProbeOnly) { Deploy-Addon }
 if ($Probe -or $ProbeOnly) { Deploy-Probe }
 
 Write-Host ""
-Write-Host "Changed or new files: /reload is enough (measured on 70009). A brand-new addon folder needs a client restart." -ForegroundColor Yellow
-Write-Host "In game:  /console scriptErrors 1   then   /grf help   (probe: /rprobe help)" -ForegroundColor Green
+Write-Host "Changed or new files, a brand-new addon folder included: /reload is enough (ForeverProbe guide, section 7)." -ForegroundColor Yellow
+Write-Host "In game:  /console scriptErrors 1   then   /grf help   (probe: /fp raid, its lines in /fp)" -ForegroundColor Green

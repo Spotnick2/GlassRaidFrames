@@ -53,6 +53,31 @@ function libGlassRoot()
     return root
 end
 
+-- RaidProbe is a ForeverProbe module (#44): its test loads the host from a
+-- checkout ($FOREVERPROBE, else ../ForeverProbe), copied from GlassChat's
+-- harness (ForeverProbe docs/GUIDE.md section 8). The host reads every client
+-- API through rawget, so the strict stub doesn't trip on what it lacks. CI
+-- has no checkout (private, local): FOREVERPROBE_OPTIONAL=1 skips the file.
+function loadForeverProbe()
+    local root = (os.getenv("FOREVERPROBE") or "../ForeverProbe"):gsub("\\", "/"):gsub("/$", "")
+    local toc = io.open(root .. "/ForeverProbe.toc", "rb")
+    if not toc then
+        if os.getenv("FOREVERPROBE_OPTIONAL") == "1" then
+            io.write("SKIPPED: ForeverProbe isn't here (private, local only); the probe tests run locally\n")
+            os.exit(0)
+        end
+        error("ForeverProbe checkout not found at " .. root .. ": clone it there or set FOREVERPROBE", 0)
+    end
+    local files = {}
+    for line in toc:read("*a"):gmatch("[^\r\n]+") do
+        if line:match("%.lua$") and not line:match("^#") then files[#files + 1] = root .. "/" .. line end
+    end
+    toc:close()
+    for _, file in ipairs(files) do assert(loadfile(file))("ForeverProbe", {}) end
+    WoW.fire("ADDON_LOADED", "ForeverProbe")
+    return ForeverProbe
+end
+
 -- The Lua files the library's XML loads, as paths, in order: what the client
 -- runs for the TOC's XML line. A listed file that is missing fails here.
 function libGlassScripts()

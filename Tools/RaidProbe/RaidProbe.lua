@@ -1,23 +1,25 @@
 -- RaidProbe: the throwaway measurement addon for GlassRaidFrames, milestone 0.
 -- It answers the questions the plan leaves open before any real frame code
--- is written. Every line it prints also goes to RaidProbeDB.log (SavedVariables),
--- so a full client exit leaves the whole session on disk for review.
+-- is written. A ForeverProbe module (#44, ForeverProbe docs/GUIDE.md): its
+-- commands are /fp raid <command>, its lines go to the /fp console (never
+-- chat) and to RaidProbeDB.log (SavedVariables), so a /reload leaves the whole
+-- session on disk for review.
 --
 -- What it measures (the numbers match the plan's probe items):
 --   1. manual party1-4/raid1-40 buttons vs SecureGroupHeaderTemplate, through
---      roster changes in and out of combat          /rprobe build, /rprobe header
+--      roster changes in and out of combat          /fp raid build, /fp raid header
 --   2. click-cast attribute forms on SecureUnitButtonTemplate  (click the tiles)
 --   3. the dispel box: a secure button over an AuraContainer   (the corner box)
---   4. C_UnitAuras.AddAuraSound                               /rprobe aurasound
---   5. secrecy of group-unit values, range                    /rprobe secrets
---   6. hiding Blizzard's compact frames                       /rprobe hide
---   7. the cost of 45 tiles x 2 containers                    /rprobe fps
---   later, #19: buff/debuff indicators                        /rprobe ind ...
+--   4. C_UnitAuras.AddAuraSound                               /fp raid aurasound
+--   5. secrecy of group-unit values, range                    /fp raid secrets
+--   6. hiding Blizzard's compact frames                       /fp raid hide
+--   7. the cost of 45 tiles x 2 containers                    /fp raid fps
+--   later, #19: buff/debuff indicators                        /fp raid ind ...
 --
 -- Every client call that may be missing or throw goes through try(), so one
 -- refusal cannot stop the rest of the probe.
 
-local ADDON = ...
+local ADDON, NS = ...
 local MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\Media\\"
 local SOUND = MEDIA .. "dispel.ogg"
 local MAX_LOG = 3000
@@ -28,36 +30,17 @@ local order = {}             -- tiles in build order
 local applyMode              -- defined with the events, used by build()
 
 --------------------------------------------------------------------------------
--- Log
+-- Log: the host's helpers (the console stamps time, combat and run). show
+-- keeps strings unquoted, as the probe always printed them; try returns
+-- pcall's full tuple and logs "label: ERROR msg", or "label: MISSING" for a
+-- function the client lacks.
 --------------------------------------------------------------------------------
 
-local function stamp()
-    local t = GetTime and GetTime() or 0
-    return string.format("%.1f%s", t, InCombatLockdown() and " C" or "")
-end
+local Probe = ForeverProbe:Module("RaidProbe", { api = 1, cmd = "raid" })
 
-local function say(msg)
-    msg = tostring(msg)
-    print("|cff7fd4ffRaidProbe|r " .. msg)
-    if type(RaidProbeDB) == "table" and type(RaidProbeDB.log) == "table" then
-        local log = RaidProbeDB.log
-        log[#log + 1] = stamp() .. " " .. msg
-        if #log > MAX_LOG then table.remove(log, 1) end
-    end
-end
-
--- Describe a value without ever operating on a secret one.
-local function show(v)
-    if issecretvalue and issecretvalue(v) then return "<secret>" end
-    if v == nil then return "nil" end
-    return tostring(v)
-end
-
-local function try(label, fn, ...)
-    local ok, a, b, c, d = pcall(fn, ...)
-    if not ok then say("|cffff6060FAIL|r " .. label .. ": " .. tostring(a)) end
-    return ok, a, b, c, d
-end
+local function say(msg) Probe:Say(tostring(msg)) end
+local function show(v) return Probe.Show(v, true) end
+local function try(label, fn, ...) return Probe:Try(label, fn, ...) end
 
 --------------------------------------------------------------------------------
 -- Class data: a helpful test spell, and the cures (Vanilla spell IDs;
@@ -458,7 +441,7 @@ end
 
 local function headerReport()
     local h = P.header
-    if not h then say("no header: /rprobe header") return end
+    if not h then say("no header: /fp raid header") return end
     local n, shown = 0, 0
     local i = 1
     while true do
@@ -793,7 +776,7 @@ local function permKey(arg)
     end
     local id = testSpell()
     local name = id and spellName(id)
-    if not name then say("no test spell: /rprobe spell <id>") return end
+    if not name then say("no test spell: /fp raid spell <id>") return end
     local b = CreateFrame("Button", "RaidProbeMouseoverKey", UIParent, "SecureActionButtonTemplate")
     b:RegisterForClicks("AnyUp", "AnyDown")   -- both edges: the template acts on one (measured)
     b:SetAttribute("type", "macro")
@@ -960,7 +943,7 @@ end
 local function ranks(arg)
     if InCombatLockdown() then say("out of combat only") return end
     local id = tonumber(arg)
-    if not id then say("usage: /rprobe ranks <spellID of a LOWER rank you know>") return end
+    if not id then say("usage: /fp raid ranks <spellID of a LOWER rank you know>") return end
     local okN, name = pcall(C_Spell.GetSpellName, id)
     local okS, sub = pcall(C_Spell.GetSpellSubtext, id)
     local okK, knownIt = pcall(C_SpellBook.IsSpellKnown, id)
@@ -979,7 +962,7 @@ local function longMacro()
     if InCombatLockdown() then say("out of combat only") return end
     local id = testSpell()
     local name = id and spellName(id)
-    if not name then say("no test spell: /rprobe spell <id>") return end
+    if not name then say("no test spell: /fp raid spell <id>") return end
     local lines = {}
     -- Lines that can never cast ([mod,nomod] is always false), then the real one.
     for i = 1, 14 do lines[#lines + 1] = "/cast [mod,nomod][@player,noexists] " .. name .. " " .. string.rep("x", 4) .. i end
@@ -1025,11 +1008,13 @@ local ev = CreateFrame("Frame")
 ev:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
     if event == "ADDON_LOADED" then
         if a1 ~= ADDON then return end
+        Probe:Ready()   -- logs EARLY if the host somehow isn't loaded
         if type(RaidProbeDB) ~= "table" then RaidProbeDB = {} end
-        RaidProbeDB.log = RaidProbeDB.log or {}
+        if type(RaidProbeDB.log) ~= "table" then RaidProbeDB.log = {} end
+        Probe:UseLog(RaidProbeDB.log, MAX_LOG)   -- from here on, lines are saved too
         RaidProbeDB.sessions = (RaidProbeDB.sessions or 0) + 1
         say("session " .. RaidProbeDB.sessions .. ", build " .. table.concat({ GetBuildInfo() }, " ", 1, 2)
-            .. ", log " .. #RaidProbeDB.log .. " lines. /rprobe help")
+            .. ", log " .. #RaidProbeDB.log .. " lines. /fp raid for the commands")
     elseif event == "GROUP_ROSTER_UPDATE" then
         -- Identity repaints at once, in combat too; the unit watch decides shown.
         for _, t in ipairs(order) do paint(t) end
@@ -1061,8 +1046,6 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
         or event == "CHARACTER_POINTS_CHANGED" or event == "PLAYER_SPECIALIZATION_CHANGED"
         or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "TRAIT_CONFIG_UPDATED" then
         say(string.format("|cff7fd4ff%s|r %s %s", event, show(a1), show(a2)))
-    elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
-        say(string.format("|cffff6060%s|r %s %s", event, show(a1), show(a2)))
     elseif event == "PLAYER_REGEN_DISABLED" then
         say("combat starts")
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -1071,29 +1054,27 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
         C_Timer.After(0.3, rosterLog)
     end
 end)
-for _, e in ipairs({ "ADDON_LOADED", "GROUP_ROSTER_UPDATE", "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE",
-    "UNIT_CONNECTION", "UNIT_AURA", "UNIT_IN_RANGE_UPDATE", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN",
-    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE",
-    "CHARACTER_POINTS_CHANGED", "PLAYER_SPECIALIZATION_CHANGED", "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
-    "TRAIT_CONFIG_UPDATED" }) do
-    local ok, r = pcall(ev.RegisterEvent, ev, e)
-    if not ok or r == false then print("RaidProbe could not register " .. e .. ": " .. tostring(r)) end
-end
+-- Blocked and forbidden actions are the host's baseline's (logged in the
+-- same console), so they're no longer registered here.
+Probe:RegisterEvents(ev, { "ADDON_LOADED", "GROUP_ROSTER_UPDATE", "UNIT_HEALTH", "UNIT_MAXHEALTH",
+    "UNIT_NAME_UPDATE", "UNIT_CONNECTION", "UNIT_AURA", "UNIT_IN_RANGE_UPDATE", "PLAYER_REGEN_DISABLED",
+    "PLAYER_REGEN_ENABLED", "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED",
+    "PLAYER_SPECIALIZATION_CHANGED", "ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "TRAIT_CONFIG_UPDATED" })
 for _, e in ipairs({ "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_FAILED" }) do
     local ok, r = pcall(ev.RegisterUnitEvent, ev, e, "player")
-    if not ok or r == false then print("RaidProbe could not register " .. e .. ": " .. tostring(r)) end
+    if not ok or r == false then say("could not register " .. e .. ": " .. show(r)) end
 end
 
 --------------------------------------------------------------------------------
 -- Indicators (#19): what one tile's aura containers can show, measured with
 -- Renew, Power Word: Shield and Weakened Soul (what the owner can cast).
---   /rprobe ind [unit]  a panel of labelled test containers on unit
---   /rprobe ind state   out of combat: which rows are lit, plus src
---   /rprobe ind src [u] out of combat: each aura's id, source, and which
+--   /fp raid ind [unit]  a panel of labelled test containers on unit
+--   /fp raid ind state   out of combat: which rows are lit, plus src
+--   /fp raid ind src [u] out of combat: each aura's id, source, and which
 --                       filter strings let it through (no container involved)
---   /rprobe ind reconf  out of combat: change filters, enable, size live
---   /rprobe ind cost    40 tiles x the planned default indicators
---   /rprobe ind ids     names and ranks of the planned default spell IDs
+--   /fp raid ind reconf  out of combat: change filters, enable, size live
+--   /fp raid ind cost    40 tiles x the planned default indicators
+--   /fp raid ind ids     names and ranks of the planned default spell IDs
 --------------------------------------------------------------------------------
 
 -- Every Vanilla rank, lowest first (to be checked in game with "ind ids").
@@ -1323,7 +1304,7 @@ local function shownOf(frame)
 end
 
 local function indState()
-    if not P.indPanel then say("run /rprobe ind first") return end
+    if not P.indPanel then say("run /fp raid ind first") return end
     for _, r in ipairs(P.indRows) do
         local parts = {}
         if r.group then
@@ -1353,7 +1334,7 @@ end
 -- Out of combat, a toggle: Renew-mine slot -> Shield IDs at 22 px, the
 -- anyone slot disabled; again to undo. Logs what each call did.
 local function indReconf()
-    if not P.indPanel then say("run /rprobe ind first") return end
+    if not P.indPanel then say("run /fp raid ind first") return end
     P.indReconf = not P.indReconf
     local on = P.indReconf
     local B, C = P.indByKey.RP_IND_RENEW_MINE, P.indByKey.RP_IND_RENEW_ANY
@@ -1368,7 +1349,7 @@ local function indReconf()
 end
 
 -- 40 tiles with the planned defaults: my HoTs row, received row, Weakened
--- Soul slot, debuff row. Run /rprobe fps before and after.
+-- Soul slot, debuff row. Run /fp raid fps before and after.
 local function indCost()
     if P.indCost then say("already built (/reload to drop)") return end
     if InCombatLockdown() then say("out of combat only") return end
@@ -1416,7 +1397,7 @@ local function indCost()
     local ms = debugprofilestop() - t0
     collectgarbage("collect")
     P.indCost = root
-    say(string.format("cost: 40 tiles x 4 containers in %.1f ms, %d buttons, Lua heap +%.0f KB (now /rprobe fps)",
+    say(string.format("cost: 40 tiles x 4 containers in %.1f ms, %d buttons, Lua heap +%.0f KB (now /fp raid fps)",
         ms, (P.indInits or 0) - inits0, collectgarbage("count") - kb0))
 end
 
@@ -1448,83 +1429,67 @@ local function indicators(arg)
 end
 
 --------------------------------------------------------------------------------
--- /rprobe
+-- Commands: /fp raid <command> (/fp raid alone lists them)
 --------------------------------------------------------------------------------
 
-local HELP = {
-    "build - 5 party + 40 raid secure tiles, click bindings, dispel box, debuff row",
-    "header - a SecureGroupHeaderTemplate with no initialConfigFunction (again: list children)",
-    "secrets - secrecy of group-unit values, range, roster (run in and out of combat)",
-    "auras [unit] - read debuffs out of combat (HARMFUL vs HARMFUL|RAID)",
-    "watch - toggle UNIT_AURA payload and range event logging",
-    "spell <id> - the test spell for the tile bindings (rebinds out of combat)",
-    "clear - remove shift-type1/shift-spell1 from every tile (does shift-left fall back?)",
-    "sound - play the addon's ogg and a sound kit",
-    "aurasound [spellID|clear] - try C_UnitAuras.AddAuraSound shapes on every group unit",
-    "hide - hide Blizzard's compact party/raid frames by reparenting",
-    "fps - 5 s frame-time sample",
-    "spec - what the spec/talent APIs return (role source for per-role settings)",
-    "ranks <id> - can a lower rank be pinned (keys 0 / ALT-0 at your target), and how are ranks found",
-    "longmacro - CTRL-0 runs a >255-character macro whose last line casts on you",
-    "traits [nodes] - how the talent trees are laid out in the trait system (nodes: every talent)",
-    "selfcast [none|alt] - show the self-cast modifier; none/alt changes it (a global setting)",
-    "mocast [on|off] - the client's mouseover cast: support and CVars",
-    "hoverkeys - toggle: hovering a tile binds key 8 to cast the test spell on it",
-    "permkey [fallback|group] - toggle: key 9 casts on @mouseover (fallback: else action button 9; group: group members only)",
-    "enums - dump the enums the dispel box relies on",
-    "ind [unit] - indicator test panel (Renew, Shield, Weakened Soul) on unit; again to switch unit",
-    "ind state - which panel rows are lit now, plus src (out of combat, right after casting)",
-    "ind src [unit] - out of combat: each aura's id, source, and which filters keep it",
-    "ind reconf - out of combat: change a slot's spells, size and enable live (again to undo)",
-    "ind cost - 40 tiles x the planned default indicators (then /rprobe fps)",
-    "ind ids - names and ranks of the planned default spell IDs",
-    "log clear - empty RaidProbeDB.log",
-}
+local function outOfCombat()
+    if InCombatLockdown() then say("out of combat only") return false end
+    return true
+end
 
-SLASH_RAIDPROBE1 = "/rprobe"
-SlashCmdList.RAIDPROBE = function(msg)
-    local cmd, arg = (msg or ""):match("^%s*(%S*)%s*(.-)%s*$")
-    cmd = cmd:lower()
-    if cmd == "build" then build()
-    elseif cmd == "header" then header()
-    elseif cmd == "secrets" then secrets()
-    elseif cmd == "auras" then auras(arg)
-    elseif cmd == "watch" then P.watch = not P.watch; say("watch " .. (P.watch and "on" or "off"))
-    elseif cmd == "spell" then
-        if InCombatLockdown() then say("out of combat only") return end
+local COMMANDS = {
+    { "build", build, "5 party + 40 raid secure tiles, click bindings, dispel box, debuff row" },
+    { "header", header, "a SecureGroupHeaderTemplate with no initialConfigFunction (again: list children)" },
+    { "secrets", secrets, "secrecy of group-unit values, range, roster (run in and out of combat)" },
+    { "auras", auras, "[unit] read debuffs out of combat (HARMFUL vs HARMFUL|RAID)" },
+    { "watch", function() P.watch = not P.watch; say("watch " .. (P.watch and "on" or "off")) end,
+        "toggle UNIT_AURA payload and range event logging" },
+    { "spell", function(arg)
+        if not outOfCombat() then return end
         P.spell = tonumber(arg)
         say("test spell: " .. show(P.spell) .. " " .. show(P.spell and spellName(P.spell)))
         for unit, t in pairs(tiles) do applyBindings(t, unit) end
         for _, c in ipairs(P.headerChildren or {}) do applyBindings(c, nil) end
-    elseif cmd == "clear" then
-        if InCombatLockdown() then say("out of combat only") return end
+    end, "<id> the test spell for the tile bindings (rebinds out of combat)" },
+    { "clear", function()
+        if not outOfCombat() then return end
         for _, t in pairs(tiles) do t:SetAttribute("shift-type1", nil); t:SetAttribute("shift-spell1", nil) end
         for _, c in ipairs(P.headerChildren or {}) do c:SetAttribute("shift-type1", nil); c:SetAttribute("shift-spell1", nil) end
         say("cleared shift-type1/shift-spell1")
-    elseif cmd == "sound" then sound()
-    elseif cmd == "aurasound" then auraSound(arg)
-    elseif cmd == "hide" then hide()
-    elseif cmd == "fps" then fps()
-    elseif cmd == "selfcast" then selfCast(arg)
-    elseif cmd == "spec" then spec()
-    elseif cmd == "ranks" then ranks(arg)
-    elseif cmd == "longmacro" then longMacro()
-    elseif cmd == "traits" then P.traitNodes = arg == "nodes"; traits()
-    elseif cmd == "mocast" then mouseoverCast(arg)
-    elseif cmd == "hoverkeys" then hoverKeys()
-    elseif cmd == "permkey" then permKey(arg)
-    elseif cmd == "ind" then indicators(arg)
-    elseif cmd == "enums" then
+    end, "remove shift-type1/shift-spell1 from every tile (does shift-left fall back?)" },
+    { "sound", sound, "play the addon's ogg and a sound kit" },
+    { "aurasound", auraSound, "[spellID|clear] try C_UnitAuras.AddAuraSound shapes on every group unit" },
+    { "hide", hide, "hide Blizzard's compact party/raid frames by reparenting" },
+    { "fps", fps, "5 s frame-time sample" },
+    { "spec", spec, "what the spec/talent APIs return (role source for per-role settings)" },
+    { "ranks", ranks, "<id> can a lower rank be pinned (keys 0 / ALT-0 at your target), and how are ranks found" },
+    { "longmacro", longMacro, "CTRL-0 runs a >255-character macro whose last line casts on you" },
+    { "traits", function(arg) P.traitNodes = arg == "nodes"; traits() end,
+        "[nodes] how the talent trees are laid out in the trait system (nodes: every talent)" },
+    { "selfcast", selfCast, "[none|alt] show the self-cast modifier; none/alt changes it (a global setting)" },
+    { "mocast", mouseoverCast, "[on|off] the client's mouseover cast: support and CVars" },
+    { "hoverkeys", hoverKeys, "toggle: hovering a tile binds key 8 to cast the test spell on it" },
+    { "permkey", permKey,
+        "[fallback|group] toggle: key 9 casts on @mouseover (fallback: else action button 9; group: group members only)" },
+    { "enums", function()
         enumKeys("Enum.CustomAuraButtonDispelTypeTextureStyle", Enum.CustomAuraButtonDispelTypeTextureStyle)
         enumKeys("Enum.UnitAuraSoundTrigger", Enum.UnitAuraSoundTrigger)
         enumKeys("Enum.LuaCurveType", Enum.LuaCurveType)
-    elseif cmd == "log" and arg == "clear" then
-        RaidProbeDB.log = {}
+    end, "dump the enums the dispel box relies on" },
+    { "ind", indicators, "[unit|state|src [unit]|reconf|cost|ids] indicator test panel (Renew, Shield, Weakened Soul); "
+        .. "state: which rows are lit; src: each aura's id, source and filters; reconf: change a slot live; "
+        .. "cost: 40 tiles x the default indicators (then /fp raid fps); ids: names and ranks of the default spell IDs" },
+    { "log", function(arg)
+        if arg ~= "clear" then say("usage: /fp raid log clear") return end
+        Probe:ClearLog()   -- empties RaidProbeDB.log in place (the host holds it by reference)
         say("log cleared")
-    else
-        for _, line in ipairs(HELP) do say("/rprobe " .. line) end
-    end
+    end, "clear - empty RaidProbeDB.log" },
+}
+for _, c in ipairs(COMMANDS) do
+    local fn = c[2]
+    -- The host passes the rest of the line; the probe's functions took it trimmed.
+    Probe:Command(c[1], function(args) fn(((args or ""):gsub("^%s+", ""):gsub("%s+$", ""))) end, c[3])
 end
 
 -- Seam for tests/test_probe.lua: file-local state and the hover-key toggle.
-RaidProbe_test = { P = P, order = order, hoverKeys = hoverKeys, HOVER_KEY = HOVER_KEY, indButton = indButton }
+NS._test = { Probe = Probe, P = P, order = order, hoverKeys = hoverKeys, HOVER_KEY = HOVER_KEY, indButton = indButton }
