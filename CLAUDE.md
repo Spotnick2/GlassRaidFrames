@@ -186,8 +186,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     or use instance-wide setters to tune this editor. Its hybrid separates shell
     reflection from continuous dark reading panes; decoration stays below text
     and uses gradient alpha (not `SetAlpha` on gradients). Temporary developer
-    `SetMaterialPreview("baseline"|"hybrid"|"reflective")` changes decoration only, preserving
-    drafts/input state. Remove that comparison API after in-game acceptance.
+    `SetMaterialPreview("baseline"|"hybrid"|"reflective"|"altstable")` changes decoration only, preserving
+    drafts/input state. Retain the comparison modes for clear-theme follow-up #52;
+    `reflective` is the accepted default.
 - **Incoming heals** (GlassUnitFrames' recipe, `API.NewHealCalculator` / `API.IncomingHeals`
   from its Compat):
   - a translucent bar with the health bar's **full** width, anchored at the health fill's moving

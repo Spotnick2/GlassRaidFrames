@@ -19,6 +19,11 @@ local refresh, layout, guard, showRanks, startRecord, selectRow
 -- mutated; baseline snapshots belong only to surfaces created by this editor.
 local material = { mode = "reflective", surfaces = {}, panes = {} }
 
+local function paintPane(pane)
+    pane:SetColorTexture(0.072, 0.082, 0.10, material.mode == "altstable" and 1 or 0.94)
+    pane:SetShown(material.mode ~= "baseline")
+end
+
 local function paintShellReflection(g)
     if not g.editorLayers then return end
     local enhanced = material.mode == "reflective"
@@ -39,7 +44,8 @@ local function materialTint(g, accent)
     elseif accent or g.editorSelected then
         Glass.SetSurfaceTint(g, 0.06, 0.24, 0.32, 0.88)
     elseif g.editorKind == "shell" then
-        Glass.SetSurfaceTint(g, 0.085, 0.095, 0.115, 0.78)
+        if material.mode == "altstable" then Glass.SetSurfaceTint(g, 0.13, 0.16, 0.22, 0.24)
+        else Glass.SetSurfaceTint(g, 0.085, 0.095, 0.115, 0.78) end
     elseif g.editorKind == "control" then
         Glass.SetSurfaceTint(g, 0.095, 0.11, 0.135, 0.90)
     else
@@ -53,6 +59,7 @@ local function paintMaterial(g)
     -- reapply the original disabled state through LibGlass's gradient handling.
     Glass.SetSurfaceEnabled(g, true)
     local shellSurface = g.editorKind == "shell"
+    local clearShell = shellSurface and material.mode == "altstable"
     g.rim:SetAlpha(hybrid and (shellSurface and 0.12 or 0.22) or base.rim)
     g.dark:SetAlpha(hybrid and (shellSurface and 0.55 or 0.35) or base.dark)
     g.grain:SetAlpha(hybrid and 0 or base.grain)
@@ -62,8 +69,20 @@ local function paintMaterial(g)
     else Glass.SetEdge(g, base.edge, base.edge * base.glow, base.edge * base.bottom, base.glowh) end
     if g.editorBacking then
         g.editorBacking:SetColorTexture(0.03, 0.03, 0.035, hybrid and shellSurface and 0.55 or 0.82)
+        g.editorBacking:SetShown(not clearShell)
     end
-    for _, layer in ipairs(g.editorLayers or {}) do layer:SetShown(hybrid) end
+    for _, layer in ipairs(g.editorLayers or {}) do layer:SetShown(hybrid and not clearShell) end
+    if shellSurface then
+        -- AltStable's clean/clear shell, independently of the reading panels.
+        -- Restore the original geometry when comparing previous treatments.
+        local S = Glass.SIZES[clearShell and "thin" or g.size]
+        g.rim:SetTexture(Glass.MEDIA .. S.rim); g.dark:SetTexture(Glass.MEDIA .. S.dark)
+        if clearShell then
+            g.rim:SetAlpha(1); g.dark:SetAlpha(1); g.grain:SetAlpha(0); g.shadow:SetAlpha(0.30)
+            Glass.SetWash(g, 0.18); Glass.SetEdge(g, 0, 0, 0)
+        end
+        g.editorTitleBand:SetShown(clearShell)
+    end
     paintShellReflection(g)
     materialTint(g, g.editorAccent)
     Glass.SetSurfaceEnabled(g, g.editorEnabled ~= false)
@@ -86,15 +105,23 @@ local function shellReflections(f, g)
     reflection:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
     reflection:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0); reflection:SetHeight(125)
     g.editorLayers = { rim, top, reflection }
+    -- SkinTitleBand's white canvas and gradient, clipped by the shell mask.
+    -- This editor's title occupies 52 UI units; no content or input frame moves.
+    local titleBand = f:CreateTexture(nil, "BACKGROUND", nil, -2)
+    titleBand:SetColorTexture(1, 1, 1, 1); titleBand:AddMaskTexture(g.mask)
+    titleBand:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    titleBand:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0); titleBand:SetHeight(52)
+    titleBand:SetGradient("VERTICAL", CreateColor(1, 1, 1, 0.05), CreateColor(1, 1, 1, 0.16))
+    g.editorTitleBand = titleBand
 end
 
 -- Developer-only, session-only comparison; repaint decoration without refresh,
 -- rebuilding frames, changing focus, stopping capture or touching draft state.
 function CCO.SetMaterialPreview(mode)
-    if mode ~= "baseline" and mode ~= "hybrid" and mode ~= "reflective" then return false end
+    if mode ~= "baseline" and mode ~= "hybrid" and mode ~= "reflective" and mode ~= "altstable" then return false end
     material.mode = mode
     for _, g in ipairs(material.surfaces) do paintMaterial(g) end
-    for _, pane in ipairs(material.panes) do pane:SetShown(mode ~= "baseline") end
+    for _, pane in ipairs(material.panes) do paintPane(pane) end
     return true
 end
 
@@ -629,7 +656,7 @@ local function build(parent)
         local pane = root:CreateTexture(nil, "BACKGROUND", nil, -7)
         -- Lighter charcoal and stronger opacity are independent: the reading
         -- area loses its black-card appearance without exposing world labels.
-        pane:SetColorTexture(0.072, 0.082, 0.10, 0.94)
+        paintPane(pane)
         local S = Glass.SIZES.thin_small
         pane:AddMaskTexture(Glass.Mask(root, S.mask, S.maskMargin, 0, pane))
         pane:SetShown(material.mode ~= "baseline"); material.panes[i] = pane

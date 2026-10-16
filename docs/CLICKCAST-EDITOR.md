@@ -91,6 +91,11 @@ Text/icon opacity and the layout are unchanged. No shared instance settings,
 library defaults, other addon surfaces, captured scenery or continuous effects
 are involved. Pane dimensions follow the window, never the filtered rows.
 
+For other addons adapting this material, the shared recipe and layering values
+are in `../References/LIBGLASS-WINDOW-STYLING.md` (relative to the repository root).
+It distinguishes the outer shell from reading panels and documents the PetStable
+adaptation findings without changing shared-library defaults.
+
 ### Temporary developer material comparison
 
 With the editor open, run either command (no reload):
@@ -99,16 +104,25 @@ With the editor open, run either command (no reload):
 /run GlassRaidFrames.ClickCastOptions.SetMaterialPreview("baseline")
 /run GlassRaidFrames.ClickCastOptions.SetMaterialPreview("hybrid")
 /run GlassRaidFrames.ClickCastOptions.SetMaterialPreview("reflective")
+/run GlassRaidFrames.ClickCastOptions.SetMaterialPreview("altstable")
 ```
 
-`hybrid` restores the accepted smoked-glass appearance. `reflective` (the new
-default) changes only the outer upper rim and faint header reflection; fill,
+`hybrid` restores the smoked-glass appearance before its final reflection tweak.
+`reflective` is the default and restores the accepted treatment with that upper-rim/reflection tweak; fill,
 opacity, panes, controls and bottom edge match `hybrid`. Use these two modes for
-the current comparison. `baseline` retains the older pre-hybrid treatment.
+that comparison. `baseline` retains the older pre-hybrid treatment.
+`altstable` remains an opt-in experiment: a clean, clear shell with tint
+RGBA (0.13, 0.16, 0.22, 0.24), wash 0.18, rim alpha 1 and no dark shell backing.
+Its masked title band uses AltStable's white 0.16-to-0.05 gradient, fitted to this
+editor's existing title area. Both reading panes keep their charcoal color and
+become opaque, following AltStable's separation of glass chrome and data surface.
+Controls are unchanged. Compare `altstable` against `reflective` without reloading;
+all prior modes remain available. No AltStable dependency or shared-library edit.
 The switch only repaints decorative regions, preserving draft, role,
 selection, text focus, capture state and scroll positions. It is session-only,
 not saved, and deliberately absent from product controls and `/grf help`.
-Remove this temporary API and baseline snapshots once the material is accepted.
+Retain these developer comparison modes for clear-theme follow-up #52; the
+accepted default remains `reflective`.
 
 Compare at the same window size and UI scale over bright terrain, dark interiors,
 and moving detailed scenery. Check secondary text, spell names/icons, disabled
@@ -143,6 +157,8 @@ editor state.
 Offline tests do not establish secure execution, actual key propagation,
 rendering or SavedVariables persistence in the client. The following checks
 remain to be performed on Forever; they are not recorded as passed.
+The owner accepted merging the unreleased addon on 2026-10-16 with these checks
+as follow-up validation during normal in-game use, rather than merge blockers.
 
 - Start with existing mouse/keyboard bindings, a pinned rank and an unavailable
   spell. Open and cancel edits; confirm all saved assignments remain intact.
