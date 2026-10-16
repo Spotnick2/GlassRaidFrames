@@ -20,13 +20,11 @@ Enum.SpellBookSpellBank = { Player = 0 }
 -- Base key bindings (what the player bound) and our overrides.
 local BASE = { ["1"] = "ACTIONBUTTON1", ["3"] = "ACTIONBUTTON3", ["SHIFT-R"] = nil, W = "MOVEFORWARD" }
 rawset(_G, "GetBindingAction", function(key, checkOverride) return BASE[key] end)
-local overrides, clears = {}, 0
-local refuse = {}
-rawset(_G, "SetOverrideBindingClick", function(owner, _, key, name)
-    if refuse[key] then error("refused " .. key) end
-    overrides[key] = name
-end)
-rawset(_G, "ClearOverrideBindings", function() overrides = {}; clears = clears + 1 end)
+-- Keys are never bound permanently any more: only a hovered tile binds them.
+local permanent = 0
+rawset(_G, "SetOverrideBindingClick", function() permanent = permanent + 1 end)
+local clears = 0
+rawset(_G, "ClearOverrideBindings", function() clears = clears + 1 end)
 local selfCast = "ALT"
 rawset(_G, "GetModifiedClick", function(what) return what == "SELFCAST" and selfCast or nil end)
 -- The main action bar's buttons, as Blizzard's ActionBar.lua builds them.
@@ -42,6 +40,34 @@ party(2)
 GlassRaidFramesCharDB = { role = "HEALER" }
 local GRF = loadAddon()
 local CC = GRF.ClickCast
+
+-- What hovering a tile binds: its OnEnter wrap run the way the restricted
+-- environment runs it (control = the header's handle, self = the tile's;
+-- RestrictedFrames.lua: SetBindingClick, ClearBindings, RunFor).
+local function run(body, env)
+    local f = assert(loadstring(body))
+    setfenv(f, env)
+    f()
+end
+local function hoverBinds(child)
+    child = child or GRF.Header.children[1]
+    local bound = {}
+    local w = child._wraps and child._wraps.OnEnter
+    if not w then return bound end
+    local handle = {
+        SetBindingClick = function(_, priority, key, name)
+            check(priority == true, "a hover key binds with priority")
+            bound[key] = name
+        end,
+        ClearBindings = function() for k in pairs(bound) do bound[k] = nil end end,
+    }
+    local control = {
+        GetAttribute = function(_, k) return w.header:GetAttribute(k) end,
+        RunFor = function(_, other, body) run(body, { self = other }) end,
+    }
+    run(w.pre, { self = handle, control = control })
+    return bound, handle
+end
 
 -- Pure helpers.
 eq(CC.MouseBind(true, true, true, 1), "alt-ctrl-shift-1", "mouse binds in Blizzard's prefix order")
@@ -67,18 +93,29 @@ eq(c:GetAttribute("ctrl-spell1"), 10963, "pinned: the rank's own spell ID (measu
 eq(GRF.Header.children[40]:GetAttribute("ctrl-spell1"), 10963, "on every child")
 eq(c:GetAttribute("*type1"), "target", "the plain click still targets")
 
--- Key rows: one secure button each, bound, with the group-only macro.
+-- Key rows: one secure button each, bound only while a GROUP tile is hovered
+-- ([party]/[raid] read false in combat, measured: they can't keep strangers out).
 local kb = CC._test.keyButtons
 check(kb["1"] and kb["1"]._template == "SecureActionButtonTemplate", "key 1 has its own secure button")
-eq(overrides["1"], kb["1"]:GetName(), "key 1 is bound to it")
+eq(permanent, 0, "no key is bound permanently: off a tile it keeps its normal job")
+local overrides, tile = hoverBinds()
+eq(overrides["1"], kb["1"]:GetName(), "hovering a tile binds key 1 to it")
+eq(overrides["SHIFT-R"], kb["SHIFT-R"]:GetName(), "and every other key")
+tile:ClearBindings()
+eq(GRF.Header.children[1]._wraps.OnLeave.pre, "self:ClearBindings()", "leaving the tile clears them")
+eq(GRF.Header.children[1]._wraps.OnHide.pre, "self:ClearBindings()", "so does a tile hidden under the cursor")
+eq(hoverBinds(GRF.Header.children[40])["1"], kb["1"]:GetName(), "every group tile")
+eq(GRF.Header.petChildren[1]._wraps, nil, "not pets: hover keys aim at members")
+eq(CC._test.keyHeader()._template, "SecureHandlerBaseTemplate", "the wraps run against a secure handler")
 local m1 = kb["1"]:GetAttribute("macrotext")
-check(m1:find("/cast [@mouseover,help,nodead,party][@mouseover,help,nodead,raid] Power Word: Shield", 1, true),
-    "only a living group member under the cursor gets the spell")
-check(m1:find("/click [@mouseover,noparty,noraid][@mouseover,noexists][@mouseover,nohelp][@mouseover,dead] ActionButton1", 1, true),
+check(m1:find("/cast [@mouseover,help,nodead] Power Word: Shield", 1, true),
+    "a living member under the cursor gets the spell")
+check(not m1:find("party", 1, true), "no [party]/[raid] check (false in combat)")
+check(m1:find("/click [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead] ActionButton1", 1, true),
     "anything else: the key's own action button (the exact complement)")
 check(kb["3"]:GetAttribute("macrotext"):find("Greater Heal(Rank 2)", 1, true), "a pinned rank in a macro: Name(localized rank)")
 local mr = kb["SHIFT-R"]:GetAttribute("macrotext")
-check(mr:find("[@mouseover,help,dead,party][@mouseover,help,dead,raid] Resurrection", 1, true), "a rez aims at DEAD members")
+check(mr:find("/cast [@mouseover,help,dead] Resurrection", 1, true), "a rez aims at DEAD members")
 check(not mr:find("/click", 1, true), "an unbound key has no fallback line")
 for key, b in pairs(kb) do
     check(#b:GetAttribute("macrotext") <= CC.MAX_MACRO, key .. "'s macro fits a macro")
@@ -87,7 +124,7 @@ end
 -- A key bound to something that isn't an action button is left alone.
 CC.Set("W", false, 139)
 flush()
-eq(overrides.W, nil, "a key bound to MOVEFORWARD is not taken over")
+eq(hoverBinds()["W"], nil, "a key bound to MOVEFORWARD is not taken over")
 local wrow
 for _, r in ipairs(CC.Rows()) do if r.key == "W" then wrow = r end end
 check(table.concat(CC.Warnings(wrow), ";"):find("MOVEFORWARD"), "and the options say why")
@@ -115,7 +152,7 @@ CC.Remove(plain); CC.Remove(arow); CC.Remove(keyAlt)
 flush()
 eq(c:GetAttribute("type1"), nil, "a removed mouse row's attribute is cleared")
 eq(c:GetAttribute("alt-type2"), nil, "every removed one")
-eq(overrides["ALT-R"], nil, "a removed key is unbound")
+eq(hoverBinds()["ALT-R"], nil, "a removed key is unbound")
 
 -- In combat: the installed bindings stay; the change waits, marked pending.
 WoW.combat = true
@@ -133,11 +170,11 @@ check(not CC.pending, "no longer pending")
 GRF.Settings.SetRole("caster")
 flush()
 eq(c:GetAttribute("shift-spell1"), nil, "the caster role has none of the healer's clicks")
-eq(overrides["1"], nil, "nor its keys")
+eq(hoverBinds()["1"], nil, "nor its keys")
 GRF.Settings.SetRole("healer")
 flush()
 eq(c:GetAttribute("shift-spell1"), "Flash Heal", "back to healer: they return")
-eq(overrides["1"], kb["1"]:GetName(), "keys too")
+eq(hoverBinds()["1"], kb["1"]:GetName(), "keys too")
 check(GlassRaidFramesCharDB.profiles.HEALER.bindings[1] ~= nil, "stored per character, per role")
 eq(GlassRaidFramesDB.profiles.HEALER.bindings, nil, "never in the account-wide layout profiles")
 
@@ -172,7 +209,7 @@ SPELLS[4242] = { string.rep("Very Long Localized Spell Name ", 5), "Rank 9" }
 LEARNED[4242] = true
 local long = CC.Set("3", false, 4242, true)
 flush()
-eq(overrides["3"], nil, "a key whose macro wouldn't fit isn't bound")
+eq(hoverBinds()["3"], nil, "a key whose macro wouldn't fit isn't bound")
 check(table.concat(CC.Warnings(long), ";"):find("too long"), "and the options say why")
 
 -- Capturing a binding that already exists keeps its spell (code review:
@@ -183,7 +220,7 @@ local again = CC.Set("SHIFT-R", false, nil)
 eq(again, rez, "re-capturing returns the existing row")
 eq(rez.spell, 2006, "and keeps its spell")
 flush()
-check(overrides["SHIFT-R"] ~= nil, "the rez key stays bound")
+check(hoverBinds()["SHIFT-R"] ~= nil, "the rez key stays bound")
 
 -- An unbound modified key falls back like the client does, to the plain
 -- key: an action button there is clicked; any other command is only noted.
@@ -193,20 +230,25 @@ check(kb["SHIFT-R"]:GetAttribute("macrotext"):find("ActionButton5", 1, true), "S
 BASE.R = "REPLY"
 CC.Request(); flush()
 check(not kb["SHIFT-R"]:GetAttribute("macrotext"):find("/click", 1, true), "R bound to REPLY: no /click line")
-check(overrides["SHIFT-R"] ~= nil, "the rez key is still bound")
+check(hoverBinds()["SHIFT-R"] ~= nil, "the rez key is still bound")
 check(table.concat(CC.Warnings(rez), ";"):find("REPLY"), "and the options say REPLY is lost off-frame")
 BASE.R = nil
 
--- A key the client refuses isn't recorded as installed: retried later.
-refuse["F"] = true
+-- Every hover binds and clears, so UPDATE_BINDINGS fires all through combat:
+-- it re-checks quietly, never raising "pending" (the options banner).
+WoW.combat = true
+CC.pending = false
+WoW.fire("UPDATE_BINDINGS")
+check(not CC.pending, "a hover's UPDATE_BINDINGS in combat isn't a pending change")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+eq(#WoW.blocked, 0, "nothing protected was touched")
+-- A key list change drops keys a hovered tile still holds (out of combat).
+local before2 = clears
 local frow = CC.Set("F", false, 139)
 flush()
-eq(overrides.F, nil, "a refused key isn't bound")
-check(table.concat(CC.Warnings(frow), ";"):find("refused"), "and says so")
-refuse["F"] = nil
-WoW.fire("SPELLS_CHANGED"); flush()
-check(overrides.F ~= nil, "the next reconciliation retries it")
-GRF.paintFailures["bind F"] = nil
+check(clears > before2, "a key list change clears the tiles' current bindings")
+eq(hoverBinds()["F"], kb["F"]:GetName(), "and the next hover binds the new key")
 CC.Remove(frow); flush()
 
 -- A role change in combat marks the bindings pending at once (the old
@@ -215,10 +257,10 @@ WoW.combat = true
 CC.pending = false
 GRF.Settings.SetRole("caster")
 check(CC.pending, "a role change in combat is pending for click-casting")
-check(overrides["1"] ~= nil, "the healer keys stay installed meanwhile")
+check(hoverBinds()["1"] ~= nil, "the healer keys stay installed meanwhile")
 WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
-eq(overrides["1"], nil, "switched when combat ends")
+eq(hoverBinds()["1"], nil, "switched when combat ends")
 GRF.Settings.SetRole("healer"); flush()
 
 eq(next(GRF.paintFailures), nil, "no failures")

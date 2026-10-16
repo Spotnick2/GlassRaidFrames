@@ -453,3 +453,23 @@ Seen on the panel (screenshots by the owner), the same out of and in combat:
 - Cosmetic: the default duration text ("28 s") overflows a 16 px icon. `|R` inside a label is
   read as a colour code.
 - Not tested: another priest's Renew in the "only mine" slot (no second priest available).
+
+### 11. Hover keys in combat, secure snippets again (1.60.1.70425, 2026-10-15/16, priest, party of 2)
+The owner reported a hover key (6 = Lesser Heal) healing them, not the hovered member. Measured
+with `/fp steps raid hoverkey`, `hoverkeycombat`, `snippets` and `hoverkeyfix`:
+- **`[@mouseover,party]` reads false in combat.** Over the partner's tile (`unit` = party1),
+  out of combat every condition of the group-only macro read yes and the heal (2052) landed on
+  her. In combat `[@mouseover,party]` read **no** while `UnitInParty("mouseover")` was true;
+  `[help]`, `[nodead]`, `[exists]`, `[@party1,exists]` still read yes. So the macro took the
+  `/click ActionButton6` fallback, and `autoSelfCast` sent the bar's rank-1 heal to the player.
+  `[group]` / `[@mouseover,group]` test the player, not the unit: no help.
+  Item 8's test B was only ever run out of combat.
+- **Secure snippets run on 70425**, although `loadstring_untainted` is still absent from `_G`:
+  `Execute` ran, a `RegisterStateDriver` `[combat] in; out` delivered `out`, then `in` in combat,
+  and a `SecureHandlerWrapScript` `OnEnter` running `self:SetBindingClick(true, "7", self)` (with
+  `OnLeave` → `self:ClearBindings()`) made 7 click the hovered button, **in combat too**; off the
+  button 7 did its normal action. Clique 5.1.3-alpha turned its Forever snippet block off too.
+- **The fix, measured:** keys bound only while a group tile is hovered (`ClickCast.lua`). Keys 1,
+  4 and 7 with the partner's tile hovered: Renew on her, out of combat and in combat. Off the
+  frames: the action-bar action, in and out of combat. Unhovered, `GetBindingAction(key, true)`
+  is the base binding: nothing is bound permanently.

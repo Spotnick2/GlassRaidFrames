@@ -14,12 +14,19 @@
 --   bare name, which casts the highest rank known.
 -- - KEY rows: one hidden SecureActionButtonTemplate per key (a modifier held
 --   on a key binding does NOT select modified attributes: measured), bound
---   with SetOverrideBindingClick. Its macro casts only on a hovered GROUP
---   MEMBER (the owner's rule: never a stranger under the cursor; measured,
---   test B) and otherwise clicks the key's own action button, so the key keeps
---   its normal job. The fallback is the exact complement of the cast's
---   condition (Codex: [nohelp], not [harm]). Macros stay under 255 characters
---   (an 848-character one never reached its end: measured).
+--   ONLY WHILE A GROUP TILE IS HOVERED: a secure OnEnter wrap on each group
+--   child runs SetBindingClick (the tile owns the binding), OnLeave/OnHide
+--   clear it (Cell's and Clique's design). Our tiles only ever show group
+--   members, so the owner's rule (never a stranger under the cursor) holds in
+--   combat too. A [party]/[raid] macro check can't do it: both read false in
+--   combat, for a member (measured on 70425, /fp steps raid hoverkeycombat).
+--   Secure snippets run on 70425 (Execute, state drivers, OnEnter wraps with
+--   SetBindingClick, in combat: /fp steps raid snippets), though early builds
+--   threw. Off a tile the key keeps its normal job. On a tile, the macro casts
+--   on the living member (a rez: the dead one) and otherwise clicks the key's
+--   own action button: the exact complement (Codex: [nohelp], not [harm]).
+--   Macros stay under 255 characters (an 848-character one never reached its
+--   end: measured).
 -- - Resurrection spells (by ID) aim at DEAD members instead.
 -- - Everything protected happens out of combat, through the addon's one combat
 --   queue, in ONE reconciliation that only changes what differs, so our own
@@ -155,13 +162,13 @@ function ClickCast.KeyMacro(row, buttons)
     if not cast then return nil, "spell unknown" end
     local rez = ClickCast.REZ[row.spell]
     local alive, notAlive = rez and "dead" or "nodead", rez and "nodead" or "dead"
-    local text = "/cast [@mouseover,help," .. alive .. ",party][@mouseover,help," .. alive .. ",raid] " .. cast
+    -- Bound only while a group tile is hovered, so no [party]/[raid] check.
+    local text = "/cast [@mouseover,help," .. alive .. "] " .. cast
     local fallback, command, lostPlain = ClickCast.Fallback(row.key, buttons)
     if fallback == false then return nil, "key is bound to " .. command .. ", not an action button" end
-    if lostPlain then ClickCast.notes[row] = "off a frame it no longer does " .. lostPlain end
+    if lostPlain then ClickCast.notes[row] = "on a frame it no longer does " .. lostPlain end
     if fallback then
-        text = text .. "\n/click [@mouseover,noparty,noraid][@mouseover,noexists][@mouseover,nohelp][@mouseover,"
-            .. notAlive .. "] " .. fallback
+        text = text .. "\n/click [@mouseover,noexists][@mouseover,nohelp][@mouseover," .. notAlive .. "] " .. fallback
     end
     if #text > ClickCast.MAX_MACRO then return nil, "too long for a macro (" .. #text .. " characters)" end
     return text
@@ -214,7 +221,13 @@ end
 
 local installedAttrs, installedKeys = {}, {}
 local keyButtons = {}   -- KEY -> hidden secure button
-local owner              -- the override bindings' owner (one frame, cleared as a whole)
+local keyHeader          -- the secure handler whose snippets bind the keys on hover
+local wrapped = setmetatable({}, { __mode = "k" })   -- group children already wrapped
+
+-- What a hovered tile runs (as itself): bind every key to its button.
+ClickCast.KEYS_ATTR = "grf-hoverkeys"
+local ENTER = "control:RunFor(self, control:GetAttribute(\"" .. ClickCast.KEYS_ATTR .. "\"))"
+local LEAVE = "self:ClearBindings()"
 ClickCast.problems = {}
 ClickCast.notes = {}     -- [row] = a non-blocking remark for the options
 ClickCast.pending = false
@@ -264,25 +277,35 @@ function ClickCast.Apply()
         installedAttrs = attrs
     end
 
-    if not same(keys, installedKeys) then
-        owner = owner or CreateFrame("Frame", "GlassRaidFramesKeyOwner", UIParent)
-        ClearOverrideBindings(owner)
-        local bound = {}
+    -- Hover keys: the group tiles (not pets: keys aim at members) get the
+    -- wraps once; the key list lives in one header attribute the wraps read.
+    local tiles = GRF.Header and GRF.Header.children or {}
+    if #tiles > 0 then
+        keyHeader = keyHeader or CreateFrame("Frame", "GlassRaidFramesKeyHeader", UIParent, "SecureHandlerBaseTemplate")
+        for _, child in ipairs(tiles) do
+            if not wrapped[child] then
+                local ok, err = pcall(function()
+                    SecureHandlerWrapScript(child, "OnEnter", keyHeader, ENTER)
+                    SecureHandlerWrapScript(child, "OnLeave", keyHeader, LEAVE)
+                    SecureHandlerWrapScript(child, "OnHide", keyHeader, LEAVE)
+                end)
+                if ok then wrapped[child] = true else API.Fail("hover keys", err) end
+            end
+        end
+    end
+    if keyHeader and not same(keys, installedKeys) then
+        local lines = {}
         for key, text in pairs(keys) do
             local b = keyButton(key)
             b:SetAttribute("macrotext", text)
-            local ok, err = pcall(SetOverrideBindingClick, owner, true, key, b:GetName())
-            if ok then
-                bound[key] = text
-            else
-                -- Not recorded as installed, so the next reconciliation retries it.
-                API.Fail("bind " .. key, err)
-                for _, row in ipairs(ClickCast.Rows()) do
-                    if row.key == key then problems[row] = "the client refused this key" end
-                end
-            end
+            lines[#lines + 1] = string.format("self:SetBindingClick(true, %q, %q)", key, b:GetName())
         end
-        installedKeys = bound
+        table.sort(lines)
+        keyHeader:SetAttribute(ClickCast.KEYS_ATTR, table.concat(lines, "\n"))
+        -- A tile hovered right now still holds the old keys: drop them (the
+        -- next OnEnter binds the new ones).
+        for _, child in ipairs(tiles) do ClearOverrideBindings(child) end
+        installedKeys = keys
     end
     if ClickCast.onApplied then pcall(ClickCast.onApplied) end
     return true
@@ -299,8 +322,17 @@ function ClickCast.Request()
 end
 
 -- Anything that can change a spell's name/rank or a key's base binding.
+-- UPDATE_BINDINGS also fires on every hover (the tiles bind and clear their
+-- keys), so it re-checks quietly: no "pending" banner, no repaint; Apply
+-- changes nothing when nothing differs.
 local watcher = CreateFrame("Frame")
-watcher:SetScript("OnEvent", function() ClickCast.Request() end)
+watcher:SetScript("OnEvent", function(_, event)
+    if event == "UPDATE_BINDINGS" then
+        GRF.WhenOutOfCombat("clickcast", ClickCast.Apply, false)
+    else
+        ClickCast.Request()
+    end
+end)
 API.RegisterEvents(watcher, { "SPELLS_CHANGED", "UPDATE_BINDINGS" })
 
 --------------------------------------------------------------------------------
@@ -354,4 +386,4 @@ function ClickCast.Warnings(row)
 end
 
 ClickCast._test = { installed = function() return installedAttrs, installedKeys end, keyButtons = keyButtons,
-                    owner = function() return owner end, watcher = watcher }
+                    keyHeader = function() return keyHeader end, watcher = watcher }
