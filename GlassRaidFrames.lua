@@ -512,6 +512,8 @@ local function slash(msg)
         end
     elseif cmd == "options" or cmd == "config" then
         if not (GRF.Options and GRF.Options.Open()) then say("Game Menu > Options > AddOns > Glass Raid Frames") end
+    elseif cmd == "clickcast" then
+        GRF.ClickCastOptions.Toggle()
     elseif cmd == "ind" or cmd == "indicators" then
         indicatorsCommand((msg or ""):match("^%s*%S+%s*(.-)%s*$") or "")
     elseif cmd == "failures" then
@@ -520,6 +522,7 @@ local function slash(msg)
         say("client " .. API.ClientBuild() .. ", measured on " .. GRF.MEASURED_ON_BUILD)
     else
         say("/grf options - the settings (Options > AddOns)")
+        say("/grf clickcast - the click-casting editor")
         say("/grf role [auto|healer|caster|melee|tank] - settings follow your role; " .. roleLine())
         say("/grf unlock | lock - move the group frames for this role (out of combat)")
         say("/grf reset - this role's default position")

@@ -250,6 +250,13 @@ local function build()
     local S = GRF.Settings
     place(label("Glass Raid Frames", "GameFontNormalHuge"), 34)
 
+    local casting = button("Click-casting", 180, function()
+        closeSettings()
+        GRF.ClickCastOptions.Toggle()
+    end)
+    place(casting, 36, 4)
+    controls.clickcast = casting
+
     header("Role")
     note("Every setting below the role is kept per role: the healer layout and the damage layouts don't move each other.")
     local current = note("")
@@ -416,9 +423,6 @@ local function register()
     category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
     Settings.RegisterAddOnCategory(category)
     Options.category = category
-    -- The Click-casting page, under this one: registered here, in order,
-    -- rather than by its own PLAYER_LOGIN handler (no ordering between frames).
-    if GRF.ClickCastOptions then GRF.ClickCastOptions.Register(category) end
     if GRF.IndicatorOptions then GRF.IndicatorOptions.Register(category) end
 end
 

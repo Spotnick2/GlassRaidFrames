@@ -307,7 +307,11 @@ function Methods.GetStringHeight(fs)
     local w, text = fs._width, fs._text
     if type(text) ~= "string" or text == "" then return 0 end
     if not w or w <= 0 then return 14 end
-    return math.ceil(#text * 7 / w) * 14
+    local lines = 0
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        lines = lines + math.max(1, math.ceil(#line * 7 / w))
+    end
+    return lines * 14
 end
 function Methods.CreateAnimationGroup(w)
     local ag = newWidget("AnimationGroup", w)
@@ -341,6 +345,13 @@ function Methods.IsEnabled(w) return w._enabled ~= false end
 function Methods.GetChecked(cb) return cb._checked == true end
 function Methods.LockHighlight(b) b._highlightLocked = true end
 function Methods.SetScrollChild(sf, child) sf._scrollChild = child end
+function Methods.SetVerticalScroll(sf, value)
+    sf._verticalScroll = value
+    if sf._scripts.OnVerticalScroll then sf._scripts.OnVerticalScroll(sf, value) end
+end
+function Methods.GetVerticalScroll(sf) return sf._verticalScroll or 0 end
+function Methods.SetPropagateKeyboardInput(f, value) f._propagateKeyboard = value end
+function Methods.EnableKeyboard(f, value) f._keyboardEnabled = value end
 -- Focus changes fire the edit box's focus scripts, as the client does.
 function Methods.SetFocus(e)
     if e._focus then return end

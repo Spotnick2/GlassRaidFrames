@@ -46,12 +46,15 @@ rawset(_G, "GetCursorInfo", function() return nil end)
 rawset(_G, "C_Spell", { GetSpellName = function() return "Renew" end, GetSpellSubtext = function() return "Rank 1" end,
                         GetSpellTexture = function() return 1 end })
 local CT = GlassRaidFrames.ClickCastOptions._test
-CT.page:Show()
-local cap = CT.capture()
-cap._scripts.OnClick(cap, "LeftButton")
-cap._scripts.OnKeyDown(cap, "5")
-GlassRaidFrames.ClickCast.Rows()[1].spell = 139
+GlassRaidFrames.ClickCastOptions.Open()
+CT.ui.add._scripts.OnClick(CT.ui.add, "LeftButton")
+CT.root()._scripts.OnKeyDown(CT.root(), "5")
+CT.state().draft.spell = 139
 GlassRaidFrames.ClickCastOptions.Refresh()
+CT.ui.rank._scripts.OnClick(CT.ui.rank)
+CT.ui.tabs.macro._scripts.OnClick(CT.ui.tabs.macro)
+CT.ui.macroIcon._scripts.OnClick(CT.ui.macroIcon)
+CT.ui.warning._scripts.OnClick(CT.ui.warning)
 WoW.tick()
 
 -- The Indicators page: shown, every kind of control used once.
