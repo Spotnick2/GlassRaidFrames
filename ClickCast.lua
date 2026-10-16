@@ -4,6 +4,8 @@
 -- A binding row: { key = "SHIFT-R" } or { mouse = "shift-1" }, plus
 -- { spell = <spell ID>, pinned = true|nil }. Spells are stored by ID, never by
 -- name (localized clients); names are resolved from the ID at apply time.
+-- Unit/macro rows instead set action = target|togglemenu|macro; macros carry
+-- macrotext and optional display-only name/icon. Old spell rows need no migration.
 --
 -- What the design rests on (docs/FOREVER-PROBE.md):
 -- - MOUSE rows are attributes on the 40 header children ("shift-type1" =
@@ -107,7 +109,8 @@ function ClickCast.CastText(row)
     if not name then return nil end
     if row.pinned then
         local sub = API.SpellSubtext(row.spell)
-        if sub then return name .. "(" .. sub .. ")" end
+        if type(sub) == "string" and sub ~= "" then return name .. "(" .. sub .. ")" end
+        return nil -- never silently turn a missing fixed rank into Highest
     end
     return name
 end
@@ -158,6 +161,13 @@ end
 
 -- The key's macro, or nil plus a reason.
 function ClickCast.KeyMacro(row, buttons)
+    if row.action == "macro" then
+        local fallback, command = ClickCast.Fallback(row.key, buttons)
+        if fallback == false then return nil, "key is bound to " .. command .. ", not an action button" end
+        if type(row.macrotext) ~= "string" or not row.macrotext:find("%S") then return nil, "enter macro text" end
+        if #row.macrotext > ClickCast.MAX_MACRO then return nil, "macro exceeds 255 bytes" end
+        return row.macrotext
+    end
     local cast = ClickCast.CastText(row)
     if not cast then return nil, "spell unknown" end
     local rez = ClickCast.REZ[row.spell]
@@ -191,16 +201,36 @@ function ClickCast.Rows(role)
 end
 
 -- Desired state for `rows`: mouse attributes { attr = value } and key macros
--- { KEY = text }, plus per-row problems { [row] = reason } for the options.
+-- { KEY = text|{type, unit} }, plus per-row problems for the options.
 function ClickCast.Desired(rows)
     local attrs, keys, problems = {}, {}, {}
     local buttons = actionButtons()
     for _, row in ipairs(rows) do
+        local action = row.action or "spell"
         -- A row for a spell this character hasn't learned (a respec, another
         -- character's list) stays saved but isn't installed: the click or key
         -- keeps its normal job, and the row says why (Codex review).
         local learned = row.spell ~= nil and API.SpellKnown(row.spell)
-        if row.spell and not learned and API.SpellName(row.spell) then
+        if action == "target" or action == "togglemenu" or action == "macro" then
+            local valid = action ~= "macro" or (type(row.macrotext) == "string"
+                and row.macrotext:find("%S") and #row.macrotext <= ClickCast.MAX_MACRO)
+            if not valid then
+                problems[row] = "enter macro text (maximum 255 bytes)"
+            elseif row.mouse then
+                local mods, button = ClickCast.ParseMouse(row.mouse)
+                if mods then
+                    attrs[mods .. "type" .. button] = action
+                    if action == "macro" then attrs[mods .. "macrotext" .. button] = row.macrotext end
+                else problems[row] = "bad binding" end
+            elseif type(row.key) == "string" and row.key ~= "" then
+                local fallback, command = ClickCast.Fallback(row.key, buttons)
+                if fallback == false then problems[row] = "key is bound to " .. command .. ", not an action button"
+                elseif action == "macro" then keys[row.key] = row.macrotext
+                else keys[row.key] = { type = action, unit = "mouseover" } end
+            end
+        elseif action ~= "spell" then
+            problems[row] = "unsupported saved action"
+        elseif row.spell and not learned and API.SpellName(row.spell) then
             problems[row] = "not learned on this character"
         elseif row.mouse then
             local mods, button = ClickCast.ParseMouse(row.mouse)
@@ -234,7 +264,11 @@ ClickCast.pending = false
 ClickCast.onApplied = nil   -- set by the options page: repaint after each Apply
 
 local function same(a, b)
-    for k, v in pairs(a) do if b[k] ~= v then return false end end
+    for k, v in pairs(a) do
+        if type(v) == "table" then
+            if type(b[k]) ~= "table" or not same(v, b[k]) then return false end
+        elseif b[k] ~= v then return false end
+    end
     for k in pairs(b) do if a[k] == nil then return false end end
     return true
 end
@@ -302,7 +336,9 @@ function ClickCast.Apply()
         local lines = {}
         for key, text in pairs(keys) do
             local b = keyButton(key)
-            b:SetAttribute("macrotext", text)
+            b:SetAttribute("macrotext", type(text) == "string" and text or nil)
+            b:SetAttribute("unit", type(text) == "table" and text.unit or nil)
+            b:SetAttribute("type", type(text) == "table" and text.type or "macro")
             lines[#lines + 1] = string.format("self:SetBindingClick(true, %q, %q)", key, b:GetName())
         end
         table.sort(lines)
@@ -335,6 +371,7 @@ watcher:SetScript("OnEvent", function(_, event)
     if event == "UPDATE_BINDINGS" then
         GRF.WhenOutOfCombat("clickcast", ClickCast.Apply, false)
     else
+        if API.ResetClickCastCatalog then API.ResetClickCastCatalog() end
         ClickCast.Request()
     end
 end)
@@ -353,6 +390,7 @@ function ClickCast.Set(bind, isMouse, spell, pinned)
         if (isMouse and row.mouse == bind) or (not isMouse and row.key == bind) then
             if spell == nil then return row end
             row.spell, row.pinned = spell, pinned or nil
+            row.action, row.macrotext, row.name, row.icon = nil, nil, nil, nil
             ClickCast.Request()
             return row
         end
@@ -380,8 +418,9 @@ function ClickCast.Warnings(row)
     if ClickCast.notes[row] then out[#out + 1] = ClickCast.notes[row] end
     if row.mouse then
         local ok, mod = pcall(GetModifiedClick, "SELFCAST")
-        if ok and type(mod) == "string" and mod ~= "NONE" and ClickCast.UsesModifier(row, mod) then
-            out[#out + 1] = mod:lower() .. " is your Self Cast key: this click casts on you"
+        if (not row.action or row.action == "spell" or row.action == "macro")
+            and ok and type(mod) == "string" and mod ~= "NONE" and ClickCast.UsesModifier(row, mod) then
+            out[#out + 1] = mod:lower() .. " is your Self Cast key: spell casts from this click may target you"
         end
         if row.mouse == "1" or row.mouse == "2" then
             out[#out + 1] = "replaces the plain " .. (row.mouse == "1" and "target" or "menu") .. " click"
