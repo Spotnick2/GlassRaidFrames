@@ -38,7 +38,8 @@ then the dispel box and sound (#4). Work goes through GitHub issues and PRs at
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) → `Compat.lua` →
 `Glass.lua` → `Role.lua` → `Engine.lua` → `Frames.lua` → `IndicatorDefaults.lua` →
 `Indicators.lua` → `Header.lua` → `GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` →
-`ClickCast.lua` → `GlassRaidFrames.lua` → `Options.lua` → `ClickCastOptions.lua` →
+`ClickCast.lua` → `ClickCastCatalog.lua` → `ClickCastEditor.lua` →
+`GlassRaidFrames.lua` → `Options.lua` → `ClickCastOptions.lua` →
 `IndicatorOptions.lua`. Planned: `Dispel.lua`.
 
 - **`Compat.lua`**: `GlassRaidFrames.API` is the only route to client APIs that moved or may be
@@ -163,15 +164,24 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - Warnings (`ClickCast.Warnings`): a mouse row on the SELFCAST modifier (clicks self-cast,
     keys don't, measured), a row replacing the plain target/menu click, an unknown spell, a
     macro too long, a key bound to a non-action command.
-- **`ClickCastOptions.lua`**: the "Click-casting" subcategory page (under Options.category).
-  - Rows show the binding, the spell (dragged from the spellbook: `GetCursorInfo()`'s 4th
-    return), a rank button (the spellbook holds every rank as its own item, grouped by the
-    client's own name at runtime) and Remove.
-  - A capture button takes the next key or click; bare modifiers are ignored, Esc cancels,
-    and it's refused in combat.
-  - It flags Blizzard's Mouseover Cast (**it casts on hovered strangers, measured**) with a
-    turn-off button, lists Blizzard's own spell/macro click bindings, and warns when its
-    "Target Unit Frame" is unbound.
+- **Click-casting editor (#50)**: the main settings page's Click-casting button and
+  `/grf clickcast` open a standalone LibGlass window; the old subcategory is removed.
+  - `ClickCastEditor.lua` owns drafts, explicit-role transactions, conflict replacement,
+    staged Quick Bind and descriptive preview. Editing a role never activates it. Saved
+    rows stay live until Save/Apply. Combat stops capture and commits, retaining drafts.
+  - `ClickCastCatalog.lua` builds learned spell families using verified ID families or
+    exact rank-qualified lookup round trips, not name matching alone. It caches until
+    SPELLS_CHANGED and leaves ambiguous spells separate. Indicator ranks are unchanged.
+  - `ClickCastOptions.lua` owns the table/browser and input UI. Mouse recording only
+    accepts a fresh press/release in the capture area (Quick Bind: an armed spell row).
+    Preview has no secure template or execution calls. Existing Blizzard/Self Cast warnings remain.
+  - Saved spell rows need no migration. Unit/macro rows add `action` (`target`, `togglemenu`,
+    `macro`), `macrotext`, optional display `name`/`icon`. Target/menu keyboard actions use
+    the existing hover-bound buttons with `unit="mouseover"`; custom macros retain their
+    explicit targeting and the 255-byte limit. The established spell execution path remains.
+  - The content is hostable: `ClickCastOptions.Open(parent)` mounts it, and
+    `RequestClose(callback)` guards host navigation. Minimum 900×600; the standalone shell
+    owns movement/scaling. See `docs/CLICKCAST-EDITOR.md` for the contract and client checklist.
 - **Incoming heals** (GlassUnitFrames' recipe, `API.NewHealCalculator` / `API.IncomingHeals`
   from its Compat):
   - a translucent bar with the health bar's **full** width, anchored at the health fill's moving
@@ -283,7 +293,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     `onUnitChanged` (`SetUnit` + `UpdateAllAuras`, in combat too). Per-tile and per-indicator
     `pcall`. `/grf ind` lists, `/grf ind <n|key> on|off`, `/grf ind reset` (`GRF.Settings`).
 - **`IndicatorOptions.lua`**: the "Indicators" sub-page (owner's pick over a window of our own:
-  gpt-6-astra mockups, 2026-10-04), registered after Click-casting. Three areas: the class's
+  gpt-6-astra mockups, 2026-10-04). Three areas: the class's
   indicator list (add, delete with a second click, up/down; the built-in debuff row can't be
   deleted or renamed), the selected one's settings (name box, enabled, only mine, buffs/debuffs,
   kind, a 3×3 anchor grid, X/Y/size sliders, grow buttons, swipe, timer, a palette-cycling
