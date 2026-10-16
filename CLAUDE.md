@@ -182,6 +182,12 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - The content is hostable: `ClickCastOptions.Open(parent)` mounts it, and
     `RequestClose(callback)` guards host navigation. Minimum 900×600; the standalone shell
     owns movement/scaling. See `docs/CLICKCAST-EDITOR.md` for the contract and client checklist.
+  - Material is local to `ClickCastOptions.lua`: never mutate shared `Glass.STYLE`
+    or use instance-wide setters to tune this editor. Its hybrid separates shell
+    reflection from continuous dark reading panes; decoration stays below text
+    and uses gradient alpha (not `SetAlpha` on gradients). Temporary developer
+    `SetMaterialPreview("baseline"|"hybrid"|"reflective")` changes decoration only, preserving
+    drafts/input state. Remove that comparison API after in-game acceptance.
 - **Incoming heals** (GlassUnitFrames' recipe, `API.NewHealCalculator` / `API.IncomingHeals`
   from its Compat):
   - a translucent bar with the health bar's **full** width, anchored at the health fill's moving

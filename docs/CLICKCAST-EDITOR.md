@@ -82,9 +82,41 @@ resumes afterward. No restricted keyboard-setting calls run during combat.
 Saved installation failures and fallback notes appear in the table and Warnings,
 including when the selected binding is being edited as a draft copy.
 
-Reading panels use the existing GlassChat/GlassQuestTracker approach: zero wash
-and a masked dark backing beneath the shared glass material. Compact controls
-retain a restrained wash through LibGlass's gradient-aware setter.
+The click-casting-only hybrid material separates the moderately smoked shell
+from two continuous, darker reading panes extending through the preview/footer.
+The shell adds a static feathered pearl reflection and directional silver/cool
+rim using LibGlass's existing textures and gradient conventions. Controls have
+quieter rims and wash; selected/focused/hovered/recording states keep accents.
+Text/icon opacity and the layout are unchanged. No shared instance settings,
+library defaults, other addon surfaces, captured scenery or continuous effects
+are involved. Pane dimensions follow the window, never the filtered rows.
+
+### Temporary developer material comparison
+
+With the editor open, run either command (no reload):
+
+```text
+/run GlassRaidFrames.ClickCastOptions.SetMaterialPreview("baseline")
+/run GlassRaidFrames.ClickCastOptions.SetMaterialPreview("hybrid")
+/run GlassRaidFrames.ClickCastOptions.SetMaterialPreview("reflective")
+```
+
+`hybrid` restores the accepted smoked-glass appearance. `reflective` (the new
+default) changes only the outer upper rim and faint header reflection; fill,
+opacity, panes, controls and bottom edge match `hybrid`. Use these two modes for
+the current comparison. `baseline` retains the older pre-hybrid treatment.
+The switch only repaints decorative regions, preserving draft, role,
+selection, text focus, capture state and scroll positions. It is session-only,
+not saved, and deliberately absent from product controls and `/grf help`.
+Remove this temporary API and baseline snapshots once the material is accepted.
+
+Compare at the same window size and UI scale over bright terrain, dark interiors,
+and moving detailed scenery. Check secondary text, spell names/icons, disabled
+buttons, hover/focus/selected states, recording and the preview/footer. Resize
+and scroll both panes, filter rows, type a macro and record modified inputs.
+If dense content loses readability, strengthen its pane backing first rather
+than darkening the entire shell. Offline checks verify state/isolation and API
+availability; they do not establish in-game readability or the rendered result.
 
 ## Hosting in GlassUI
 

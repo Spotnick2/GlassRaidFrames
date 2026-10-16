@@ -15,6 +15,88 @@ local ui = { rows = {}, spells = {}, ranks = {}, fields = {}, roles = {}, tabs =
 local recording, armed, mouseDown, previewArmed, refreshing, message
 local consumed = {}
 local refresh, layout, guard, showRanks, startRecord, selectRow
+-- Temporary local material comparison. No shared STYLE or library instance is
+-- mutated; baseline snapshots belong only to surfaces created by this editor.
+local material = { mode = "reflective", surfaces = {}, panes = {} }
+
+local function paintShellReflection(g)
+    if not g.editorLayers then return end
+    local enhanced = material.mode == "reflective"
+    local rim, top, reflection = unpack(g.editorLayers)
+    -- Only the upper light changes. Keep the accepted bottom-edge alpha,
+    -- reflection extent, shell fill and content backing exactly as before.
+    rim:SetGradient("VERTICAL", CreateColor(0.55, 0.65, 0.75, 0.035), CreateColor(0.84, 0.88, 0.91, enhanced and 0.52 or 0.48))
+    top:SetGradient("HORIZONTAL", CreateColor(0.88, 0.91, 0.93, enhanced and 0.58 or 0.45), CreateColor(0.65, 0.73, 0.8, 0.035))
+    reflection:SetGradient("VERTICAL", CreateColor(0.77, 0.81, 0.85, 0), CreateColor(0.77, 0.81, 0.85, enhanced and 0.105 or 0.085))
+end
+
+local function materialTint(g, accent)
+    g.editorAccent = accent
+    local t = g.editorBase.tint
+    if material.mode == "baseline" then
+        if accent then Glass.SetSurfaceTint(g, 0.12, 0.75, 1, accent == "hover" and 0.3 or 0.25)
+        else Glass.SetSurfaceTint(g, t[1], t[2], t[3], GRF.SMOKED) end
+    elseif accent or g.editorSelected then
+        Glass.SetSurfaceTint(g, 0.06, 0.24, 0.32, 0.88)
+    elseif g.editorKind == "shell" then
+        Glass.SetSurfaceTint(g, 0.085, 0.095, 0.115, 0.78)
+    elseif g.editorKind == "control" then
+        Glass.SetSurfaceTint(g, 0.095, 0.11, 0.135, 0.90)
+    else
+        Glass.SetSurfaceTint(g, 0.055, 0.07, 0.09, 0.86)
+    end
+end
+
+local function paintMaterial(g)
+    local base, hybrid = g.editorBase, material.mode ~= "baseline"
+    -- Restore the undimmed region values before changing their bases, then
+    -- reapply the original disabled state through LibGlass's gradient handling.
+    Glass.SetSurfaceEnabled(g, true)
+    local shellSurface = g.editorKind == "shell"
+    g.rim:SetAlpha(hybrid and (shellSurface and 0.12 or 0.22) or base.rim)
+    g.dark:SetAlpha(hybrid and (shellSurface and 0.55 or 0.35) or base.dark)
+    g.grain:SetAlpha(hybrid and 0 or base.grain)
+    g.shadow:SetAlpha(hybrid and (shellSurface and 0.18 or 0.05) or base.shadow)
+    Glass.SetWash(g, hybrid and (g.editorKind == "control" and 0.025 or 0) or base.wash)
+    if hybrid then Glass.SetEdge(g, shellSurface and 0 or 0.10, shellSurface and 0 or 0.015, 0.12, 3)
+    else Glass.SetEdge(g, base.edge, base.edge * base.glow, base.edge * base.bottom, base.glowh) end
+    if g.editorBacking then
+        g.editorBacking:SetColorTexture(0.03, 0.03, 0.035, hybrid and shellSurface and 0.55 or 0.82)
+    end
+    for _, layer in ipairs(g.editorLayers or {}) do layer:SetShown(hybrid) end
+    paintShellReflection(g)
+    materialTint(g, g.editorAccent)
+    Glass.SetSurfaceEnabled(g, g.editorEnabled ~= false)
+end
+
+local function shellReflections(f, g)
+    local S = Glass.SIZES[g.size]
+    -- Existing sliced rim texture supplies rounded geometry. Alpha lives in
+    -- the gradient itself on Forever, never in SetAlpha on gradient textures.
+    local rim = g.top:CreateTexture(nil, "OVERLAY", nil, 6)
+    rim:SetAllPoints(f); rim:SetTexture(Glass.MEDIA .. S.rim)
+    rim:SetTextureSliceMargins(S.rimMargin, S.rimMargin, S.rimMargin, S.rimMargin)
+    rim:SetTextureSliceMode((Enum.UITextureSliceMode and Enum.UITextureSliceMode.Stretched) or 0)
+    local top = g.top:CreateTexture(nil, "OVERLAY", nil, 7)
+    top:SetColorTexture(1, 1, 1, 1)
+    top:SetPoint("TOPLEFT", f, "TOPLEFT", S.maskMargin, -1)
+    top:SetPoint("TOPRIGHT", f, "TOPRIGHT", -S.maskMargin, -1); top:SetHeight(1)
+    local reflection = f:CreateTexture(nil, "BACKGROUND", nil, -3)
+    reflection:SetColorTexture(1, 1, 1, 1); reflection:AddMaskTexture(g.mask)
+    reflection:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    reflection:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0); reflection:SetHeight(125)
+    g.editorLayers = { rim, top, reflection }
+end
+
+-- Developer-only, session-only comparison; repaint decoration without refresh,
+-- rebuilding frames, changing focus, stopping capture or touching draft state.
+function CCO.SetMaterialPreview(mode)
+    if mode ~= "baseline" and mode ~= "hybrid" and mode ~= "reflective" then return false end
+    material.mode = mode
+    for _, g in ipairs(material.surfaces) do paintMaterial(g) end
+    for _, pane in ipairs(material.panes) do pane:SetShown(mode ~= "baseline") end
+    return true
+end
 
 local function at(f, parent, x, y, w, h)
     f:ClearAllPoints(); f:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -y); f:SetSize(w, h)
@@ -24,7 +106,7 @@ local function font(parent, text, size)
     f:SetTextColor(0.91, 0.94, 1); f:SetText(text)
     return f
 end
-local function surface(f, small)
+local function surface(f, small, kind)
     local g = Glass.Apply(f, small and "small" or "large")
     local tint = Glass.STYLE.tint
     Glass.SetSurfaceTint(g, tint[1], tint[2], tint[3], GRF.SMOKED)
@@ -37,7 +119,15 @@ local function surface(f, small)
         local backing = f:CreateTexture(nil, "BACKGROUND", nil, -7)
         backing:SetAllPoints(f); backing:AddMaskTexture(g.mask)
         backing:SetColorTexture(0.03, 0.03, 0.035, 0.82)
+        g.editorBacking = backing
     end
+    g.editorKind = kind or (small and "control" or "panel")
+    g.editorBase = { tint = { tint[1], tint[2], tint[3] }, rim = g.rim:GetAlpha(), dark = g.dark:GetAlpha(),
+        grain = g.grain:GetAlpha(), shadow = g.shadow:GetAlpha(), wash = small and 0.06 or 0,
+        edge = Glass.STYLE.edge, glow = Glass.EDGE.glow, bottom = Glass.EDGE.bottom, glowh = Glass.EDGE.glowh }
+    if kind == "shell" then shellReflections(f, g) end
+    material.surfaces[#material.surfaces + 1] = g
+    paintMaterial(g)
     f.glass = g
     return g
 end
@@ -93,16 +183,16 @@ local function button(parent, text, fn, hint)
         stopCapture(); clearFocus(); hideTooltip(); message = nil; fn(self, mouse)
     end)
     b:SetScript("OnEnter", function(self)
-        if self:IsEnabled() then Glass.SetSurfaceTint(self.glass, 0.12, 0.75, 1, 0.3) end
+        if self:IsEnabled() then materialTint(self.glass, "hover") end
         if hint then tooltip(self, hint) end
     end)
     b:SetScript("OnLeave", function(self)
-        local tint = Glass.STYLE.tint
-        Glass.SetSurfaceTint(self.glass, tint[1], tint[2], tint[3], GRF.SMOKED); hideTooltip()
+        materialTint(self.glass); hideTooltip()
     end)
     return b
 end
 local function enable(b, enabled)
+    b.glass.editorEnabled = enabled and true or false
     b:SetEnabled(enabled); Glass.SetSurfaceEnabled(b.glass, enabled); b.text:SetAlpha(enabled and 1 or 0.45)
 end
 local function edit(parent, hint, changed, multiline)
@@ -114,12 +204,11 @@ local function edit(parent, hint, changed, multiline)
     box.placeholder:SetPoint("RIGHT", box, "RIGHT", -10, 0)
     box.placeholder:SetTextColor(0.55, 0.67, 0.8)
     box:SetScript("OnEditFocusGained", function()
-        stopCapture(); Glass.SetSurfaceTint(box.glass, 0.12, 0.75, 1, 0.25)
+        stopCapture(); materialTint(box.glass, "focus")
         if refresh then refresh() end
     end)
     box:SetScript("OnEditFocusLost", function()
-        local tint = Glass.STYLE.tint
-        Glass.SetSurfaceTint(box.glass, tint[1], tint[2], tint[3], GRF.SMOKED)
+        materialTint(box.glass)
     end)
     box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     if not multiline then box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end) end
@@ -389,18 +478,21 @@ refresh = function()
         or #state.staged > 0 and "Quick Bind stopped · Apply or discard staged changes"
         or "Mouse: GRF group and pet frames · Keyboard: while hovering GRF group-member frames")
     ui.quick.text:SetText(state.quick and "Stop Quick Bind" or "Quick Bind"); enable(ui.quick, not combat)
-    for role, b in pairs(ui.roles) do b.text:SetText((role == state.role and "• " or "") .. ROLE_NAMES[role]) end
+    for role, b in pairs(ui.roles) do
+        b.text:SetText((role == state.role and "• " or "") .. ROLE_NAMES[role])
+        b.glass.editorSelected = role == state.role; materialTint(b.glass, b.glass.editorAccent)
+    end
     ui.input.text:SetText(d and E.BindingText(d) or "Record input"); ui.record.text:SetText(recording and "Recording…" or "Record")
     ui.captureLabel:SetText(recording and "Press a key or click INSIDE this box · Esc cancels" or "Mouse recording area · Click Record to begin")
     ui.captureLabel:SetTextColor(recording and 0.2 or 0.65, recording and 0.9 or 0.75, 1)
-    local tint = Glass.STYLE.tint
-    Glass.SetSurfaceTint(ui.capture.glass, recording and 0.12 or tint[1], recording and 0.75 or tint[2], recording and 1 or tint[3], recording and 0.25 or GRF.SMOKED)
+    materialTint(ui.capture.glass, recording and "recording" or nil)
     enable(ui.record, d ~= nil and not combat and not batch); enable(ui.input, d ~= nil and not combat and not batch)
     enable(ui.add, not combat and not batch)
     ui.detail:SetText(d and (state.original and "Edit binding" or "New binding") or "Browse actions")
     for kind, b in pairs(ui.tabs) do
         local selected = kind == action or (kind == "unit" and (action == "target" or action == "togglemenu"))
         b.text:SetText((selected and "• " or "") .. b.caption); enable(b, not batch and not combat)
+        b.glass.editorSelected = selected; materialTint(b.glass, b.glass.editorAccent)
     end
     ui.unitTarget:SetShown(action == "unit" or action == "target" or action == "togglemenu")
     ui.unitMenu:SetShown(action == "unit" or action == "target" or action == "togglemenu")
@@ -494,6 +586,8 @@ layout = function(w, h)
     local left = math.floor((w - 54) * 0.60)
     local right, rx = w - left - 54, left + 36
     ui.leftWidth, ui.rightWidth = left, right
+    at(material.panes[1], root, 12, 138, left + 12, h - 150)
+    at(material.panes[2], root, left + 30, 138, right + 14, h - 150)
     at(ui.title, root, 20, 16, w - 70, 28); at(ui.profile, root, 20, 51, w - 200, 22)
     at(ui.divider, root, left + 28, 144, 1, h - 160)
     for i, role in ipairs(GRF.Role.ROLES) do at(ui.roles[role], root, 20 + (i - 1) * 87, 80, 82, 27) end
@@ -529,6 +623,17 @@ end
 local function build(parent)
     root = CreateFrame("Frame", "GlassRaidFramesClickCastEditor", parent); root:SetAllPoints(parent)
     root:EnableMouse(true)
+    -- Two continuous backings, below all content and independent of row count
+    -- and scrolling. Their rounded masks use the library's own pane geometry.
+    for i = 1, 2 do
+        local pane = root:CreateTexture(nil, "BACKGROUND", nil, -7)
+        -- Lighter charcoal and stronger opacity are independent: the reading
+        -- area loses its black-card appearance without exposing world labels.
+        pane:SetColorTexture(0.072, 0.082, 0.10, 0.94)
+        local S = Glass.SIZES.thin_small
+        pane:AddMaskTexture(Glass.Mask(root, S.mask, S.maskMargin, 0, pane))
+        pane:SetShown(material.mode ~= "baseline"); material.panes[i] = pane
+    end
     keyboard = CreateFrame("Frame", nil, root); keyboard:SetAllPoints(root); keyboard:Hide()
     state = E.New(GRF.role)
     ui.title, ui.profile, ui.banner = font(root, "Glass Raid Frames / Click-casting", 23), font(root, "", 14), font(root, "", 12)
@@ -718,7 +823,7 @@ local function standalone()
     if shell then return shell end
     shell = CreateFrame("Frame", "GlassRaidFramesClickCastWindow", UIParent)
     shell:Hide(); shell:SetFrameStrata("DIALOG"); shell:SetClampedToScreen(true)
-    shell:SetMovable(true); shell:SetResizable(true); shell:EnableMouse(true); shell:SetPoint("CENTER", UIParent, "CENTER", 0, 0); surface(shell, false)
+    shell:SetMovable(true); shell:SetResizable(true); shell:EnableMouse(true); shell:SetPoint("CENTER", UIParent, "CENTER", 0, 0); surface(shell, false, "shell")
     local drag = CreateFrame("Frame", nil, shell)
     drag:SetPoint("TOPLEFT", shell, "TOPLEFT", 12, -8); drag:SetPoint("TOPRIGHT", shell, "TOPRIGHT", -48, -8); drag:SetHeight(34)
     drag:EnableMouse(true); drag:RegisterForDrag("LeftButton"); drag:SetFrameLevel(shell:GetFrameLevel() + 50)
@@ -747,5 +852,6 @@ function CCO.Toggle() if root and root:IsVisible() then CCO.RequestClose() else 
 CCO.MIN_WIDTH, CCO.MIN_HEIGHT = 900, 600
 CC.onApplied = function() externalWarnings = nil; if root and root:IsVisible() then refresh() end end
 CCO._test = { ui = ui, state = function() return state end, root = function() return root end,
+    material = material,
     keyboard = function() return keyboard end,
     recording = function() return recording end, armed = function() return armed end, shell = function() return shell end }
