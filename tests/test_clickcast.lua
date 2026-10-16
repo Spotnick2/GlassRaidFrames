@@ -63,11 +63,27 @@ local function hoverBinds(child)
     }
     local control = {
         GetAttribute = function(_, k) return w.header:GetAttribute(k) end,
-        RunFor = function(_, other, body) run(body, { self = other }) end,
+        -- RestrictedFrames.lua HANDLE:RunFor: a non-string body is an error.
+        RunFor = function(_, other, body)
+            if type(body) ~= "string" then error("Invalid function body") end
+            run(body, { self = other })
+        end,
     }
     run(w.pre, { self = handle, control = control })
     return bound, handle
 end
+
+-- Before any key row (a fresh character): hovering a tile binds nothing,
+-- and doesn't throw (Codex P2 on #49: RunFor refuses a nil body).
+local okH, errH = pcall(hoverBinds)
+check(okH, "hovering with no key rows runs: " .. tostring(errH))
+eq(next((okH and errH) or {}), nil, "and binds nothing")
+-- A mouse-only profile: same.
+CC.Set("shift-1", true, 2061)
+flush()
+okH, errH = pcall(hoverBinds)
+check(okH, "hovering with mouse rows only runs: " .. tostring(errH))
+eq(next((okH and errH) or {}), nil, "and binds no key")
 
 -- Pure helpers.
 eq(CC.MouseBind(true, true, true, 1), "alt-ctrl-shift-1", "mouse binds in Blizzard's prefix order")

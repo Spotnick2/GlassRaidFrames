@@ -281,7 +281,12 @@ function ClickCast.Apply()
     -- wraps once; the key list lives in one header attribute the wraps read.
     local tiles = GRF.Header and GRF.Header.children or {}
     if #tiles > 0 then
-        keyHeader = keyHeader or CreateFrame("Frame", "GlassRaidFramesKeyHeader", UIParent, "SecureHandlerBaseTemplate")
+        if not keyHeader then
+            keyHeader = CreateFrame("Frame", "GlassRaidFramesKeyHeader", UIParent, "SecureHandlerBaseTemplate")
+            -- RunFor refuses a non-string body: with no key rows (a mouse-only
+            -- profile) a hover must still find one (Codex P2 on #49).
+            keyHeader:SetAttribute(ClickCast.KEYS_ATTR, "")
+        end
         for _, child in ipairs(tiles) do
             if not wrapped[child] then
                 local ok, err = pcall(function()
