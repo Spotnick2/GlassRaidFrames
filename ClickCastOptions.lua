@@ -201,9 +201,15 @@ selectRow = function(row, focus)
     if row == state.original then focusField(); return end
     guard(function()
         state:DiscardQuick()
-        if row.default then state:NewDraft(); state.draft = { mouse = row.mouse, action = row.action }
-        else state:Select(row) end
-        ui.rankList:Hide(); message = nil; refresh(); focusField()
+        -- Saving in the guard can replace/remove the requested destination.
+        -- Prefer its saved identity, then resolve the input against the new list.
+        local destination
+        for _, saved in ipairs(E.Rows(state.role)) do if saved == row then destination = saved; break end end
+        destination = destination or E.Conflict(E.Rows(state.role), row)
+        if destination then state:Select(destination)
+        elseif row.default then state:NewDraft(); state.draft = { mouse = row.mouse, action = row.action }
+        else state:Select(nil) end
+        ui.rankList:Hide(); message = nil; refresh(); if state.draft then focusField() end
     end)
 end
 local function capture(kind, bind)
@@ -402,6 +408,7 @@ refresh = function()
     ui.unitMenu.text:SetText((action == "togglemenu" and "• " or "") .. "Open unit menu")
     enable(ui.unitTarget, not combat); enable(ui.unitMenu, not combat)
     local macro = action == "macro"
+    if not macro or not d or ui.iconDraft ~= d then ui.iconList:Hide(); ui.iconDraft = nil end
     ui.macroName:SetShown(macro); ui.macroScroll:SetShown(macro); ui.macroHelp:SetShown(macro); ui.macroIcon:SetShown(macro)
     enable(ui.macroIcon, not combat)
     if macro and d then
@@ -588,6 +595,7 @@ local function build(parent)
     ui.macroHelp = font(root, "", 12); ui.macroHelp:SetWordWrap(true)
     ui.iconList = scroll(root); ui.iconList:SetFrameLevel(root:GetFrameLevel() + 25); surface(ui.iconList, false); ui.iconList:Hide()
     ui.macroIcon = button(root, "Choose icon", function()
+        ui.iconDraft = state.draft
         local icons, seen = { "Interface\\Icons\\INV_Misc_QuestionMark" }, {}
         for _, group in ipairs(API.ClickCastCatalog()) do if group.icon and not seen[group.icon] then seen[group.icon] = true; icons[#icons + 1] = group.icon end end
         local cols = math.max(1, math.floor((ui.rightWidth - 28) / 38))
@@ -595,8 +603,9 @@ local function build(parent)
             local b = ui.icons[i]
             if not b then
                 b = button(ui.iconList.child, "", function(self)
-                    if state.draft then state.draft.icon = self.texture end
-                    ui.iconList:Hide(); refresh()
+                    if ui.iconList:IsShown() and state.draft and state.draft == ui.iconDraft
+                        and state.draft.action == "macro" then state.draft.icon = self.texture end
+                    ui.iconList:Hide(); ui.iconDraft = nil; refresh()
                 end)
                 b.icon = icon(b.glass.top); b.icon:SetPoint("CENTER", b, "CENTER", 0, 0); ui.icons[i] = b
             end
@@ -670,6 +679,7 @@ local function build(parent)
     root:SetScript("OnShow", syncKeyboard)
     root:SetScript("OnHide", function()
         stopCapture(); clearFocus(); hideTooltip(); consumed = {}; keyboard:Hide()
+        ui.rankList:Hide(); ui.iconList:Hide(); ui.iconDraft = nil
         if not InCombatLockdown() then keyboard:SetPropagateKeyboardInput(true) end
     end)
     root:SetScript("OnSizeChanged", function(_, w, h) layout(w, h) end)
