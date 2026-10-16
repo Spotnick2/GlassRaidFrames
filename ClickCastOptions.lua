@@ -9,7 +9,8 @@ CCO.BindingText, CCO.Ranks = E.BindingText, API.ClickCastRanks
 local ROLE_NAMES = { HEALER = "Healer", CASTER = "Caster", MELEE = "Melee", TANK = "Tank" }
 -- Existing game assets used by Clique's action catalog on the target client.
 local ACTION_ICONS = { target = 132331, togglemenu = 132212, macro = 134332 }
-local root, shell, host, state
+local root, shell, host, state, keyboard
+local externalWarnings
 local ui = { rows = {}, spells = {}, ranks = {}, fields = {}, roles = {}, tabs = {}, icons = {} }
 local recording, armed, mouseDown, previewArmed, refreshing, message
 local consumed = {}
@@ -27,6 +28,16 @@ local function surface(f, small)
     local g = Glass.Apply(f, small and "small" or "large")
     local tint = Glass.STYLE.tint
     Glass.SetSurfaceTint(g, tint[1], tint[2], tint[3], GRF.SMOKED)
+    -- Like GlassChat, omit the wash on reading panels. Forever ignores
+    -- SetAlpha on this gradient; the setter also preserves disabled dimming.
+    Glass.SetWash(g, small and 0.06 or 0)
+    if not small then
+        -- GlassQuestTracker's reading backing: below the material, above its
+        -- shadow, clipped to the same mask. Keep live frames out of the text.
+        local backing = f:CreateTexture(nil, "BACKGROUND", nil, -7)
+        backing:SetAllPoints(f); backing:AddMaskTexture(g.mask)
+        backing:SetColorTexture(0.03, 0.03, 0.035, 0.82)
+    end
     f.glass = g
     return g
 end
@@ -39,6 +50,18 @@ local function hideTooltip()
     if tip then tip:Hide() end
 end
 local function stopCapture() recording, armed, mouseDown, previewArmed = nil, nil, nil, nil end
+local function syncKeyboard()
+    if not keyboard then return end
+    consumed = {}
+    if InCombatLockdown() then
+        -- An ordinary child can hide in combat. Do not call restricted
+        -- keyboard setters, even when the editor was first opened in combat.
+        keyboard:Hide()
+    else
+        if not keyboard.initialized then keyboard:EnableKeyboard(true); keyboard.initialized = true end
+        keyboard:SetPropagateKeyboardInput(true); keyboard:Show()
+    end
+end
 local function clearFocus() for _, field in ipairs(ui.fields) do field:ClearFocus() end end
 local function hasFocus()
     local getFocus = rawget(_G, "GetCurrentKeyBoardFocus")
@@ -191,7 +214,8 @@ local function capture(kind, bind)
         local row = { spell = armed.spell }; row[kind] = bind; stopCapture()
         local ok, why, conflict = state:Stage(row)
         if not ok and conflict then
-            modal(E.BindingText(row) .. " is assigned to " .. E.ActionText(conflict) .. ".", {
+            modal(E.BindingText(row) .. " is assigned to " .. E.ActionText(conflict)
+                .. (conflict.default and " (default). Replace this behavior?" or "."), {
                 { "Replace assignment", function()
                     local staged, err = state:Stage(row, conflict)
                     message = staged and ("Staged " .. E.BindingText(row) .. " → " .. E.ActionText(row)) or err
@@ -207,6 +231,7 @@ local function capture(kind, bind)
     refresh()
 end
 local function keyDown(self, key)
+    if InCombatLockdown() then return end
     self:SetPropagateKeyboardInput(true)
     if consumed[key] then self:SetPropagateKeyboardInput(false); return end
     if hasFocus() then return end
@@ -251,6 +276,7 @@ local function bindingRow(i)
     local function enter(self)
         r.selection:Show()
         tooltip(self, E.BindingText(r.data) .. "\n" .. E.ActionText(r.data) .. "\n" .. E.RankText(r.data)
+            .. (r.warning and ("\n" .. r.warning) or "")
             .. (r.data.default and "\nImplicit default. Saving an assignment replaces this click." or "\nClick input, action, or rank to edit."))
     end
     local function leave() r.selection:SetShown(r.data == state.original or r.staged); hideTooltip() end
@@ -311,7 +337,7 @@ showRanks = function()
     for i = #choices + 1, #ui.ranks do ui.ranks[i]:Hide() end
     ui.rankList.child:SetSize(ui.rightWidth - 28, #choices * 32); ui.rankList:Show(); refresh()
 end
-local function warnings()
+local function clientWarnings()
     local out, cv = {}, rawget(_G, "C_CVar")
     if cv and cv.GetCVar then
         local ok, on = pcall(cv.GetCVar, "enableMouseoverCast")
@@ -331,8 +357,18 @@ local function warnings()
         end
         if not target then out[#out + 1] = "Blizzard's Target Unit Frame click is unbound; default targeting may not work." end
     end
-    if state.draft then for _, warning in ipairs(CC.Warnings(state.draft)) do out[#out + 1] = warning end end
     return table.concat(out, "\n")
+end
+local function warnings()
+    if externalWarnings == nil then externalWarnings = clientWarnings() end
+    local out = { externalWarnings }
+    for _, row in ipairs(E.Rows(state.role)) do
+        local problem, note = CC.problems[row], CC.notes[row]
+        if problem then out[#out + 1] = E.BindingText(row) .. ": " .. problem end
+        if note then out[#out + 1] = E.BindingText(row) .. ": " .. note end
+    end
+    if state.draft then for _, warning in ipairs(CC.Warnings(state.draft)) do out[#out + 1] = warning end end
+    return table.concat(out, "\n"):gsub("^\n", "")
 end
 refresh = function()
     if not root or refreshing then return end
@@ -414,12 +450,15 @@ refresh = function()
         r.icon:SetTexture(item.row.spell and API.SpellTexture(item.row.spell) or item.row.icon
             or ACTION_ICONS[item.row.action] or "Interface\\Icons\\INV_Misc_QuestionMark")
         r.selection:SetShown(item.row == state.original or item.staged)
+        local unavailable = item.row.spell and not API.SpellKnown(item.row.spell)
+        r.warning = not item.staged and (CC.problems[item.row] or CC.notes[item.row]) or nil
         r.note:SetText(item.draft and "Draft · Not active" or item.staged and "Staged · Not active"
             or item.row.default and "Default · Applies with modifiers unless overridden"
+            or r.warning
             or (item.row == state.original and state:Dirty()) and "Unsaved changes · Saved action remains active"
-            or (item.row.spell and not API.SpellKnown(item.row.spell)) and "Unavailable · Saved binding retained" or "")
-        local unavailable = item.row.spell and not API.SpellKnown(item.row.spell)
-        r.note:SetTextColor(unavailable and 1 or 0.6, unavailable and 0.65 or 0.8, unavailable and 0.2 or 1)
+            or unavailable and "Unavailable · Saved binding retained" or "")
+        local warning = unavailable or r.warning
+        r.note:SetTextColor(warning and 1 or 0.6, warning and 0.65 or 0.8, warning and 0.2 or 1)
         enable(r.input, not item.staged and not combat and not batch); enable(r.rank, item.row.spell ~= nil and not item.staged and not batch)
         r:Show()
     end
@@ -482,7 +521,8 @@ layout = function(w, h)
 end
 local function build(parent)
     root = CreateFrame("Frame", "GlassRaidFramesClickCastEditor", parent); root:SetAllPoints(parent)
-    root:EnableMouse(true); root:EnableKeyboard(true); root:SetPropagateKeyboardInput(true)
+    root:EnableMouse(true)
+    keyboard = CreateFrame("Frame", nil, root); keyboard:SetAllPoints(root); keyboard:Hide()
     state = E.New(GRF.role)
     ui.title, ui.profile, ui.banner = font(root, "Glass Raid Frames / Click-casting", 23), font(root, "", 14), font(root, "", 12)
     ui.divider = root:CreateTexture(nil, "BACKGROUND"); ui.divider:SetColorTexture(0.6, 0.8, 1, 0.18)
@@ -622,9 +662,16 @@ local function build(parent)
         b:SetSize(160, 32); b:SetPoint("BOTTOMLEFT", ui.modal.box, "BOTTOMLEFT", 20 + (i - 1) * 174, 16); ui.modal.buttons[i] = b
     end
     ui.modal:Hide()
-    root:SetScript("OnKeyDown", keyDown)
-    root:SetScript("OnKeyUp", function(self, key) self:SetPropagateKeyboardInput(not consumed[key]); consumed[key] = nil end)
-    root:SetScript("OnHide", function() stopCapture(); clearFocus(); hideTooltip(); consumed = {}; root:SetPropagateKeyboardInput(true) end)
+    keyboard:SetScript("OnKeyDown", keyDown)
+    keyboard:SetScript("OnKeyUp", function(self, key)
+        if InCombatLockdown() then return end
+        self:SetPropagateKeyboardInput(not consumed[key]); consumed[key] = nil
+    end)
+    root:SetScript("OnShow", syncKeyboard)
+    root:SetScript("OnHide", function()
+        stopCapture(); clearFocus(); hideTooltip(); consumed = {}; keyboard:Hide()
+        if not InCombatLockdown() then keyboard:SetPropagateKeyboardInput(true) end
+    end)
     root:SetScript("OnSizeChanged", function(_, w, h) layout(w, h) end)
     root:SetScript("OnReceiveDrag", function()
         if InCombatLockdown() or state.quick or #state.staged > 0 or ui.modal:IsShown() then return end
@@ -634,16 +681,17 @@ local function build(parent)
     ui.capture:SetScript("OnReceiveDrag", root:GetScript("OnReceiveDrag"))
     root:SetScript("OnEvent", function(_, event)
         stopCapture()
-        if event == "SPELLS_CHANGED" then API.ResetClickCastCatalog() end
+        externalWarnings = nil
         if event == "PLAYER_REGEN_DISABLED" then
             ui.rankList:Hide(); ui.iconList:Hide(); ui.modal:Hide(); message = "Editing paused in combat; drafts and staged bindings are kept."
         elseif event == "PLAYER_REGEN_ENABLED" then message = nil end
+        if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then syncKeyboard() end
         if root:IsShown() then refresh() end
     end)
-    API.RegisterEvents(root, { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "SPELLS_CHANGED" })
+    API.RegisterEvents(root, { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "SPELLS_CHANGED", "CVAR_UPDATE" })
     return root
 end
-function CCO.Refresh() if root then refresh() end end
+function CCO.Refresh() externalWarnings = nil; if root then refresh() end end
 function CCO.RequestClose(callback)
     if not root then if callback then callback() end; return end
     guard(function() stopCapture(); root:Hide(); if shell and host == shell then shell:Hide() end; if callback then callback() end end)
@@ -670,7 +718,6 @@ local function standalone()
     local resize = button(shell, "↘", function() end, "Drag to resize")
     resize:SetSize(18, 18); resize:SetPoint("BOTTOMRIGHT", shell, "BOTTOMRIGHT", -3, 3); resize:SetFrameLevel(shell:GetFrameLevel() + 50)
     resize:SetScript("OnMouseDown", function() stopCapture(); shell:StartSizing("BOTTOMRIGHT") end); resize:SetScript("OnMouseUp", function() shell:StopMovingOrSizing() end)
-    shell:SetScript("OnSizeChanged", function(_, w, h) if root and host == shell then layout(w, h) end end)
     shell:SetScript("OnEvent", fitShell); API.RegisterEvents(shell, { "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }); fitShell()
     CCO._test.close = close
     return shell
@@ -682,11 +729,13 @@ function CCO.Open(parent)
         if shell and destination ~= shell then shell:Hide() end
         root:SetParent(destination); root:ClearAllPoints(); root:SetAllPoints(destination); host = destination
     end
-    destination:Show(); root:Show(); layout(destination:GetWidth(), destination:GetHeight())
+    externalWarnings = nil
+    destination:Show(); root:Show(); syncKeyboard(); layout(destination:GetWidth(), destination:GetHeight())
     return root
 end
 function CCO.Toggle() if root and root:IsVisible() then CCO.RequestClose() else CCO.Open() end end
 CCO.MIN_WIDTH, CCO.MIN_HEIGHT = 900, 600
-CC.onApplied = function() if root and root:IsVisible() then refresh() end end
+CC.onApplied = function() externalWarnings = nil; if root and root:IsVisible() then refresh() end end
 CCO._test = { ui = ui, state = function() return state end, root = function() return root end,
+    keyboard = function() return keyboard end,
     recording = function() return recording end, armed = function() return armed end, shell = function() return shell end }

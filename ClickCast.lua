@@ -110,7 +110,8 @@ function ClickCast.CastText(row)
     if row.pinned then
         local sub = API.SpellSubtext(row.spell)
         if type(sub) == "string" and sub ~= "" then return name .. "(" .. sub .. ")" end
-        return nil -- never silently turn a missing fixed rank into Highest
+        if API.SpellTextID(name) == row.spell then return name end
+        return nil, "Pinned spell text unavailable; choose a learned rank or Highest."
     end
     return name
 end
@@ -168,8 +169,8 @@ function ClickCast.KeyMacro(row, buttons)
         if #row.macrotext > ClickCast.MAX_MACRO then return nil, "macro exceeds 255 bytes" end
         return row.macrotext
     end
-    local cast = ClickCast.CastText(row)
-    if not cast then return nil, "spell unknown" end
+    local cast, castError = ClickCast.CastText(row)
+    if not cast then return nil, castError or "spell unknown" end
     local rez = ClickCast.REZ[row.spell]
     local alive, notAlive = rez and "dead" or "nodead", rez and "nodead" or "dead"
     -- Bound only while a group tile is hovered, so no [party]/[raid] check.

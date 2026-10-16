@@ -6,6 +6,10 @@ local E = {}
 GRF.ClickCastEditor = E
 local MOUSE = { "Left click", "Right click", "Middle click", "Mouse 4", "Mouse 5" }
 local ACTIONS = { target = "Target unit", togglemenu = "Open unit menu", macro = "Macro" }
+local DEFAULTS = {
+    ["mouse:1"] = { mouse = "1", action = "target", default = true },
+    ["mouse:2"] = { mouse = "2", action = "togglemenu", default = true },
+}
 E.MODIFIER_KEYS = { LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true,
     LALT = true, RALT = true, LMETA = true, RMETA = true }
 E.MOUSE_BUTTONS = { LeftButton = 1, RightButton = 2, MiddleButton = 3, Button4 = 4, Button5 = 5 }
@@ -226,7 +230,7 @@ end
 function State:Stage(row, replace)
     local valid, why = E.Validate(row)
     if not valid then return false, why end
-    local conflict = E.Conflict(self.staged, row) or E.Conflict(E.Rows(self.role), row)
+    local conflict = E.Conflict(self.staged, row) or E.Conflict(E.Rows(self.role), row) or DEFAULTS[E.InputID(row)]
     if conflict and conflict ~= replace then return false, "Already assigned to " .. E.ActionText(conflict), conflict end
     local at = conflict and indexOf(self.staged, conflict)
     local item = E.Copy(row)

@@ -7,10 +7,7 @@ local catalog, byID
 function API.ResetClickCastCatalog() catalog, byID = nil, nil end
 
 local function qualifiedID(name, sub)
-    local spells = rawget(_G, "C_Spell")
-    if not (spells and spells.GetSpellInfo and sub and sub ~= "") then return nil end
-    local ok, info = pcall(spells.GetSpellInfo, name .. "(" .. sub .. ")")
-    if ok and type(info) == "table" and not API.IsSecret(info.spellID) then return info.spellID end
+    if sub and sub ~= "" then return API.SpellTextID(name .. "(" .. sub .. ")") end
 end
 
 function API.ClickCastCatalog()

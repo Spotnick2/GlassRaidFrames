@@ -48,7 +48,7 @@ rawset(_G, "C_Spell", { GetSpellName = function() return "Renew" end, GetSpellSu
 local CT = GlassRaidFrames.ClickCastOptions._test
 GlassRaidFrames.ClickCastOptions.Open()
 CT.ui.add._scripts.OnClick(CT.ui.add, "LeftButton")
-CT.root()._scripts.OnKeyDown(CT.root(), "5")
+CT.keyboard()._scripts.OnKeyDown(CT.keyboard(), "5")
 CT.state().draft.spell = 139
 GlassRaidFrames.ClickCastOptions.Refresh()
 CT.ui.rank._scripts.OnClick(CT.ui.rank)

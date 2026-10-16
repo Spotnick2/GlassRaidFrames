@@ -119,6 +119,13 @@ local function plainString(fn, ...)
 end
 function API.SpellName(id) return plainString(C_Spell and C_Spell.GetSpellName, id) end
 function API.SpellSubtext(id) return plainString(C_Spell and C_Spell.GetSpellSubtext, id) end
+-- Resolve localized cast text back to its exact ID before using a bare name
+-- for a pinned spell whose rank text is absent (including unranked spells).
+function API.SpellTextID(text)
+    if not (C_Spell and C_Spell.GetSpellInfo) then return nil end
+    local ok, info = pcall(C_Spell.GetSpellInfo, text)
+    if ok and type(info) == "table" and not API.IsSecret(info.spellID) then return info.spellID end
+end
 function API.SpellTexture(id)
     local ok, tex = pcall(C_Spell.GetSpellTexture, id)
     if ok and not API.IsSecret(tex) then return tex end

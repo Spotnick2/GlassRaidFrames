@@ -1,7 +1,7 @@
 # Click-casting editor (#50)
 
 Open **Options > AddOns > Glass Raid Frames > Click-casting**, or use
-`/grf clickcast`. The main page button toggles a dedicated glass window; the old
+`/grf clickcast`. The main page button opens a dedicated glass window; the old
 Click-casting subcategory is removed. The editor requires no additional library.
 
 ## Using the editor
@@ -27,7 +27,8 @@ Click-casting subcategory is removed. The editor requires no additional library.
   on that spell. Scrolling or leaving disarms capture. Assignments are visibly
   staged until Apply changes. Escape stops capture without applying anything;
   Discard removes the entire pending batch. Saved conflicts and staged conflicts
-  both require explicit replacement. A changed underlying profile blocks batch
+  both require explicit replacement, as do implicit plain-click target/menu
+  defaults. A changed underlying profile blocks batch
   application rather than overwriting an external edit.
 - Preview captures only over its sample frame. It describes **saved** assignments
   for the profile being edited, including unavailable spells and implicit
@@ -66,13 +67,24 @@ indicator rank API is unchanged.
 
 Highest retains the established name-based cast behavior. Fixed ranks retain
 their exact saved ID. A missing fixed-rank subtext cannot silently become a
-highest-rank keyboard cast. Unavailable saved entries remain visible and saved;
+highest-rank keyboard cast: a bare name is accepted only if the client resolves
+it back to that exact saved ID, supporting genuinely unranked pinned spells.
+Unavailable saved entries remain visible and saved;
 the user must explicitly replace them. There is no speculative Healing/Utility
 classification or unlearned-spell browser.
 
 Combat stops recording and prevents save/delete/apply. Drafts and staged rows
 remain in memory and resume after combat; active-role changes never move them
 to another profile. Drafts are session-only, not persisted across logout/reload.
+The editor's separate keyboard listener is hidden during combat, including when
+first opened there. Use the close button during combat; editor Escape handling
+resumes afterward. No restricted keyboard-setting calls run during combat.
+Saved installation failures and fallback notes appear in the table and Warnings,
+including when the selected binding is being edited as a draft copy.
+
+Reading panels use the existing GlassChat/GlassQuestTracker approach: zero wash
+and a masked dark backing beneath the shared glass material. Compact controls
+retain a restrained wash through LibGlass's gradient-aware setter.
 
 ## Hosting in GlassUI
 
@@ -131,6 +143,10 @@ remain to be performed on Forever; they are not recorded as passed.
   frames, and normal keyboard behavior elsewhere, including strangers in-world.
 - Enter combat during a draft and during Quick Bind. Existing bindings must keep
   working; capture/save/apply must pause, with drafts intact after combat.
+  Also open the editor for the first time in combat, press/release gameplay keys,
+  close with the mouse, and reopen. No blocked actions or swallowed gameplay keys;
+  keyboard capture must resume after combat. Check pinned unranked spells as well
+  as ranked spells with temporarily unavailable rank text.
 - Exit the client fully and log in again to verify saved roles, macros and pinned
   ranks. `/reload` alone is not a persistence test.
 

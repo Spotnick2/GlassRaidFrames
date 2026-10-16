@@ -86,6 +86,21 @@ check(not state:ApplyQuick(), "batch rejects external changes")
 eq(#state.staged, 1, "failed apply retains batch")
 state:DiscardQuick()
 
+-- A saved collision is approved before an assignment can enter the batch.
+state:BeginQuick()
+local savedFour = E.Conflict(rows, { key = "4" })
+ok, _, conflict = state:Stage({ key = "4", spell = 139 })
+check(not ok and conflict == savedFour, "saved collision blocks first staging")
+eq(#state.staged, 0, "unapproved saved replacement never stages")
+check(state:Stage({ key = "4", spell = 139 }, conflict), "saved replacement explicitly approved")
+ok, _, conflict = state:Stage({ key = "4", spell = 2060 })
+check(not ok and conflict == state.staged[1], "changing approved staged replacement asks again")
+check(state:Stage({ key = "4", spell = 2060 }, conflict), "staged replacement explicitly approved")
+check(state:ApplyQuick(), "approved replacement of saved input applies")
+eq(E.Conflict(rows, { key = "4" }).spell, 2060, "latest approved staged spell is saved")
+-- Restore the fixture for preview checks below.
+E.Conflict(rows, { key = "4" }).spell = 10963
+
 state:BeginQuick(); state:Stage({ key = "5", spell = 139 }); state:Stage({ key = "6", spell = 10963 })
 local beforeBatch = E.Copy(rows)
 learned[10963] = nil
@@ -126,6 +141,17 @@ check(CC.Commit("HEALER", { key = "9", spell = 139 }, menu, E.Copy(menu)), "keyb
 eq(CC._test.keyButtons["9"]:GetAttribute("unit"), nil, "obsolete keyboard unit cleared")
 eq(CC._test.keyButtons["9"]:GetAttribute("type"), "macro", "established spell macro path restored")
 eq(CC.CastText({ spell = 90001, pinned = true }), "Greater Heal(Rank 2)", "fixed rank text remains localized")
+local getInfo, subtext = C_Spell.GetSpellInfo, spells[139][2]
+spells[139][2] = ""
+C_Spell.GetSpellInfo = function(s) if s == "Renew" then return { spellID = 139 } end; return getInfo(s) end
+eq(CC.CastText({ spell = 139, pinned = true }), "Renew", "pinned unranked spell accepts exact bare-name ID")
+check(E.Validate({ key = "8", spell = 139, pinned = true }), "verified unranked pin can be re-saved")
+C_Spell.GetSpellInfo = function(s) if s == "Renew" then return { spellID = 999 } end; return getInfo(s) end
+local cast, why = CC.CastText({ spell = 139, pinned = true })
+check(not cast and why:find("Pinned"), "missing rank cannot resolve to a different ID")
+C_Spell.GetSpellInfo = function() return nil end
+check(not CC.CastText({ spell = 139, pinned = true }), "uncached text retains pin without guessing")
+C_Spell.GetSpellInfo, spells[139][2] = getInfo, subtext
 check(not E.Validate({ key = "W", action = "target" }), "non-action base binding restriction retained")
 check(not table.concat(CC.Warnings({ mouse = "alt-1", action = "target" }), ";"):find("Self Cast"), "unit actions have no spell Self Cast warning")
 check(not E.Validate({ key = "8", action = "macro", macrotext = string.rep("x", 256) }), "macro limit enforced without truncating")

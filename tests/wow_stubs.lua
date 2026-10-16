@@ -350,7 +350,10 @@ function Methods.SetVerticalScroll(sf, value)
     if sf._scripts.OnVerticalScroll then sf._scripts.OnVerticalScroll(sf, value) end
 end
 function Methods.GetVerticalScroll(sf) return sf._verticalScroll or 0 end
-function Methods.SetPropagateKeyboardInput(f, value) f._propagateKeyboard = value end
+function Methods.SetPropagateKeyboardInput(f, value)
+    if WoW.combat then error("SetPropagateKeyboardInput must not be called in combat") end
+    f._propagateKeyboard = value
+end
 function Methods.EnableKeyboard(f, value) f._keyboardEnabled = value end
 -- Focus changes fire the edit box's focus scripts, as the client does.
 function Methods.SetFocus(e)

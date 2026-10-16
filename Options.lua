@@ -252,7 +252,7 @@ local function build()
 
     local casting = button("Click-casting", 180, function()
         closeSettings()
-        GRF.ClickCastOptions.Toggle()
+        GRF.ClickCastOptions.Open()
     end)
     place(casting, 36, 4)
     controls.clickcast = casting
