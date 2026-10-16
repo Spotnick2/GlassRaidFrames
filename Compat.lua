@@ -119,6 +119,13 @@ local function plainString(fn, ...)
 end
 function API.SpellName(id) return plainString(C_Spell and C_Spell.GetSpellName, id) end
 function API.SpellSubtext(id) return plainString(C_Spell and C_Spell.GetSpellSubtext, id) end
+-- Resolve localized cast text back to its exact ID before using a bare name
+-- for a pinned spell whose rank text is absent (including unranked spells).
+function API.SpellTextID(text)
+    if not (C_Spell and C_Spell.GetSpellInfo) then return nil end
+    local ok, info = pcall(C_Spell.GetSpellInfo, text)
+    if ok and type(info) == "table" and not API.IsSecret(info.spellID) then return info.spellID end
+end
 function API.SpellTexture(id)
     local ok, tex = pcall(C_Spell.GetSpellTexture, id)
     if ok and not API.IsSecret(tex) then return tex end
@@ -137,6 +144,7 @@ function API.SpellBookSpells()
     end
     local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
     local future = Enum and Enum.SpellBookItemType and Enum.SpellBookItemType.FutureSpell
+    local spellType = Enum and Enum.SpellBookItemType and Enum.SpellBookItemType.Spell
     local okC, n = pcall(SB.GetNumSpellBookSkillLines)
     if not (okC and type(n) == "number") then return out end
     for line = 1, n do
@@ -145,8 +153,9 @@ function API.SpellBookSpells()
             for i = li.itemIndexOffset + 1, li.itemIndexOffset + li.numSpellBookItems do
                 local okB, item = pcall(SB.GetSpellBookItemInfo, i, bank)
                 if okB and type(item) == "table" and item.spellID and type(item.name) == "string"
-                    and (future == nil or item.itemType ~= future) and not item.isPassive and not item.isOffSpec then
-                    out[#out + 1] = { spellID = item.spellID, name = item.name }
+                    and (future == nil or item.itemType ~= future) and (spellType == nil or item.itemType == spellType)
+                    and not item.isPassive and not item.isOffSpec then
+                    out[#out + 1] = { spellID = item.spellID, name = item.name, skillLine = line }
                 end
             end
         end

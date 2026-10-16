@@ -27,8 +27,8 @@ local function click(b, ...) b._scripts.OnClick(b, ...) end
 local function slots(b, key) return b.grfInd.byKey[key] and b.grfInd.byKey[key].c._slots or {} end
 local p1 = childFor("party1")
 
-eq(subs[2] and subs[2].name, "Indicators", "the page sits under Glass Raid Frames, after Click-casting")
-eq(subs[2].parent, GRF.Options.category, "(its parent)")
+eq(subs[1] and subs[1].name, "Indicators", "Indicators remains under Glass Raid Frames")
+eq(subs[1].parent, GRF.Options.category, "(its parent)")
 check(not T.page._shown, "created hidden (OnShow always fires)")
 T.page:Show()
 check(ui.rows, "built on show")

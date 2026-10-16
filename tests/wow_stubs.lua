@@ -307,7 +307,11 @@ function Methods.GetStringHeight(fs)
     local w, text = fs._width, fs._text
     if type(text) ~= "string" or text == "" then return 0 end
     if not w or w <= 0 then return 14 end
-    return math.ceil(#text * 7 / w) * 14
+    local lines = 0
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        lines = lines + math.max(1, math.ceil(#line * 7 / w))
+    end
+    return lines * 14
 end
 function Methods.CreateAnimationGroup(w)
     local ag = newWidget("AnimationGroup", w)
@@ -317,6 +321,7 @@ end
 function Methods.CreateAnimation(ag, atype) return newWidget(atype or "Animation", ag) end
 function Methods.Play(ag) ag._plays = (ag._plays or 0) + 1 end
 function Methods.SetTexture(t, file) t._file = file; return true end
+function Methods.SetColorTexture(t, r, g, b, a) t._color = { r, g, b, a } end
 function Methods.SetAlpha(w, a) w._alpha = a end
 function Methods.SetTexCoord(t, ...) t._texCoord = { ... } end
 function Methods.GetAlpha(w) return w._alpha or 1 end
@@ -341,6 +346,16 @@ function Methods.IsEnabled(w) return w._enabled ~= false end
 function Methods.GetChecked(cb) return cb._checked == true end
 function Methods.LockHighlight(b) b._highlightLocked = true end
 function Methods.SetScrollChild(sf, child) sf._scrollChild = child end
+function Methods.SetVerticalScroll(sf, value)
+    sf._verticalScroll = value
+    if sf._scripts.OnVerticalScroll then sf._scripts.OnVerticalScroll(sf, value) end
+end
+function Methods.GetVerticalScroll(sf) return sf._verticalScroll or 0 end
+function Methods.SetPropagateKeyboardInput(f, value)
+    if WoW.combat then error("SetPropagateKeyboardInput must not be called in combat") end
+    f._propagateKeyboard = value
+end
+function Methods.EnableKeyboard(f, value) f._keyboardEnabled = value end
 -- Focus changes fire the edit box's focus scripts, as the client does.
 function Methods.SetFocus(e)
     if e._focus then return end

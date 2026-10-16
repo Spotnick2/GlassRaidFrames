@@ -19,6 +19,8 @@ GlassRaidFrames.xml
 Blizzard.lua
 Movers.lua
 ClickCast.lua
+ClickCastCatalog.lua
+ClickCastEditor.lua
 GlassRaidFrames.lua
 Options.lua
 ClickCastOptions.lua
