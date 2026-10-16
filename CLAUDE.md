@@ -25,7 +25,8 @@ a new idiom.
   import/export or raid-debuff database. Mouse-wheel bindings are out.
 - **Keyboard hover-casting is in.** Keys pressed while hovering a frame are the owner's main
   healing binds (keys 1–8, Shift-R to resurrect, pinned spell ranks, from their Cell data).
-  Cell does it with restricted snippets, which are broken here; probe item 8 picks the route.
+  Like Cell, a secure `OnEnter` snippet binds the keys while a tile is hovered (snippets
+  threw on early builds and work on 70425; see `ClickCast.lua`).
 
 **Status: milestone 1 (glass party and raid frames).** Milestone 0's probe settled the
 design (`docs/FOREVER-PROBE.md`); the approved plan is `docs/PLAN.md`. Next: click-casting (#3),
@@ -128,24 +129,29 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     measured); unpinned uses the bare localized name (the highest rank). Blizzard's Click Cast
     Bindings act first on the same click (Forever's `SecureUnitButton_OnClick`).
   - **Key rows**: one hidden `SecureActionButtonTemplate` per key (a modifier held on a key
-    binding does **not** select modified attributes, measured), bound with
-    `SetOverrideBindingClick`. Its macro is `/cast [@mouseover,help,nodead,party][…,raid]
-    <spell>`, then `/click` of the key's own action button on the **exact complement**
-    (`[noparty,noraid][noexists][nohelp][dead]`). So **a stranger under the cursor never gets
-    the spell** (the owner's rule, measured), and anything else does the key's usual action.
-    Rez spells (`ClickCast.REZ`, by ID) swap dead/nodead. The fallback button comes from
+    binding does **not** select modified attributes, measured), bound **only while a group tile
+    is hovered**: a secure `OnEnter` wrap on each group child (`SecureHandlerWrapScript`,
+    header `GlassRaidFramesKeyHeader`) runs `control:RunFor(self, <grf-hoverkeys>)`, whose
+    lines are `self:SetBindingClick(true, key, button)` (the tile owns the binding); `OnLeave`
+    and `OnHide` run `self:ClearBindings()`. Cell's and Clique's design. Our tiles only show
+    group members, so **a stranger under the cursor never gets the spell**, in combat too (the
+    owner's rule). A `[party]`/`[raid]` macro check **can't** do it: both read false in combat,
+    for a member (measured on 70425). Off a tile the key does its usual action. Pets aren't
+    wrapped. The macro is `/cast [@mouseover,help,nodead] <spell>`, then `/click` of the key's
+    own action button on the **exact complement** (`[noexists][nohelp][dead]`). Rez spells
+    (`ClickCast.REZ`, by ID) swap dead/nodead. The fallback button comes from
     `GetBindingAction(key)` (the base binding) matched to the bars' `.commandName`; a key bound
     to anything else isn't taken over. Macros stay ≤ 255 characters (an 848-character one never
     reached its end, measured).
   - **One reconciliation** (`ClickCast.Apply`): desired vs installed, changing only what
-    differs, so our own override can't loop through `UPDATE_BINDINGS`. `ClickCast.Request()`
+    differs, so our own bindings can't loop through `UPDATE_BINDINGS`. `ClickCast.Request()`
     queues it through the combat queue (the installed bindings stay until combat ends:
     `pending`). It re-runs on role changes, `SPELLS_CHANGED`, `UPDATE_BINDINGS`, and after the
-    build.
+    build. Every hover fires `UPDATE_BINDINGS`, so that one re-checks quietly (no `pending`).
+    A key-list change clears the tiles' current bindings.
   - Capturing an existing binding again returns that row untouched (it never erases its spell).
     An unbound **modified** key (SHIFT-R) falls back, as the client does, to the plain key (R):
-    an action button there gets the `/click`, and any other command is noted as lost off-frame.
-    Only keys the client accepted count as installed, so a refused one is retried.
+    an action button there gets the `/click`, and any other command is noted as lost on a frame.
     **A row installs only if its spell ID is learned** (`API.SpellKnown`, via `IsSpellKnown` /
     `IsSpellInSpellBook`): a name alone proves nothing, since `C_Spell.GetSpellName` answers
     for unlearned spells. After a respec, `SPELLS_CHANGED` clears the stale binding; the row
@@ -382,7 +388,7 @@ our own code**.
 - **`Cell-r274-release\Cell` is the design reference** for *what* group frames and
   click-casting do.
   - It is not Forever-aware. Almost all its secure machinery depends on restricted snippets,
-    which are broken here:
+    which threw on early builds (they run on 70425; only the hover keys use one here):
     - `SecureGroupHeaderTemplate` with `_initialAttribute-*` / `initialConfigFunction`;
     - `SecureHandlerEnterLeave`/`ShowHide` on the unit button;
     - the `@cell` placeholder rewrite;
@@ -515,10 +521,16 @@ not port cleanly.
   `modules\auras.lua` (`ForeverEnsureAuraContainer`) and EllesmereUI
   `EUI_UnitFrames_AuraContainers.lua`. A GUID-keyed cache with an "unknown" state is only
   needed for logic that must *know* about an aura.
-- **Secure snippets are broken.** `loadstring_untainted` is missing, so
-  `SecureHandlerWrapScript`, `_onstate-*` attributes and `RegisterStateDriver` throw. **Don't
-  introduce a `SecureHandler*`.** Plain `SecureActionButtonTemplate` + `SetAttribute` + insecure
-  `PreClick`/`PostClick` **works**, in and out of combat.
+- **Secure snippets work on 70425** (measured 2026-10-16, `/fp steps raid snippets`): `Execute`,
+  a `RegisterStateDriver` + `_onstate-*` (in combat too) and `SecureHandlerWrapScript` `OnEnter`
+  with `SetBindingClick`, in combat, although `loadstring_untainted` is still absent from `_G`.
+  **They threw on early builds** (70009), which is why most of this addon avoids them; Clique
+  5.1.3 turned its Forever block off too. Use one only where nothing plain works (the hover
+  keys), and re-measure on a new build. Plain `SecureActionButtonTemplate` + `SetAttribute` +
+  insecure `PreClick`/`PostClick` **works**, in and out of combat.
+- **`[party]`/`[raid]` macro conditions read false in combat**, for a group member under the
+  cursor (`UnitInParty` true; `[help]`, `[nodead]`, `[exists]` fine; measured on 70425). Out of
+  combat they work. Don't gate a macro on group membership.
 - **Single-unit frames:** `SecureUnitButtonTemplate` + `RegisterUnitWatch(frame)` for
   show/hide. Both references ship this on Forever, and DinoUF's changelog calls its UnitWatch
   path the stable baseline. We haven't measured it ourselves.

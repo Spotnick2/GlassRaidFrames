@@ -975,6 +975,202 @@ local function longMacro()
 end
 
 --------------------------------------------------------------------------------
+-- The addon's own hover keys (ClickCast.lua), when one casts on you instead of
+-- the hovered tile: is our override the key's live binding, and which line of
+-- its macro does the client pick for this mouseover? (/fp steps x hoverkey)
+--------------------------------------------------------------------------------
+
+-- GlassRaidFrames' KEY -> hidden button, read through its test seam (nil when
+-- the addon isn't loaded).
+local function grfKeys()
+    local grf = rawget(_G, "GlassRaidFrames")
+    local cc = type(grf) == "table" and grf.ClickCast
+    return type(cc) == "table" and type(cc._test) == "table" and cc._test.keyButtons or nil
+end
+
+-- The macro's conditions, one clause each, for the current mouseover.
+local CLAUSES = {
+    "[@mouseover,exists]", "[@mouseover,help]", "[@mouseover,nodead]", "[@mouseover,party]", "[@mouseover,raid]",
+    "[@mouseover,help,nodead,party]", "[@mouseover,help,nodead,raid]",
+    -- Run 2: [@mouseover,party] read "no" in combat (yes out of combat) while
+    -- UnitInParty("mouseover") was true. What else can tell a group member from
+    -- a stranger in combat?
+    "[party]", "[raid]", "[group]", "[group:party]", "[@mouseover,group]", "[@mouseover,group:party]",
+    "[@party1,exists]", "[@party1,help]", "[@mouseover,noparty]", "[combat]",
+}
+
+local function mouseoverReport(label)
+    local function q(fn, ...) local ok, v = pcall(fn, ...) return ok and show(v) or "ERR" end
+    say(string.format("%s: mouseover exists=%s name=%s isPlayer=%s inParty=%s inRaid=%s canAssist=%s deadOrGhost=%s",
+        label, q(UnitExists, "mouseover"), q(GetUnitName, "mouseover", false), q(UnitIsUnit, "mouseover", "player"),
+        q(UnitInParty, "mouseover"), q(UnitInRaid, "mouseover"), q(UnitCanAssist, "player", "mouseover"),
+        q(UnitIsDeadOrGhost, "mouseover")))
+    local parts = {}
+    for _, c in ipairs(CLAUSES) do
+        local ok, r = pcall(SecureCmdOptionParse, c .. "yes;no")
+        parts[#parts + 1] = c .. "=" .. (ok and show(r) or "ERR")
+    end
+    say("  " .. table.concat(parts, " "))
+    local focus = rawget(_G, "GetMouseFoci") and select(2, pcall(GetMouseFoci))
+    local f = type(focus) == "table" and focus[1]
+    say("  under the cursor: " .. show(f and f.GetName and f:GetName()) .. " unit attr=" .. show(f and f.GetAttribute and f:GetAttribute("unit")))
+end
+
+local function hoverKeyState()
+    local keys = grfKeys()
+    if not keys then say("GlassRaidFrames' key buttons not found (addon not loaded?)") return false end
+    local n = 0
+    for key, b in pairs(keys) do
+        n = n + 1
+        local okA, live = pcall(GetBindingAction, key, true)
+        local okB, base = pcall(GetBindingAction, key)
+        say(string.format("key %s -> %s: live binding=%s base=%s", key, show(b:GetName()), okA and show(live) or "ERR",
+            okB and show(base) or "ERR"))
+        say("  macrotext: " .. show((b:GetAttribute("macrotext") or ""):gsub("\n", " | ")))
+        if not b.raidProbeHooked then
+            b:HookScript("PostClick", function(_, mouse, down)
+                mouseoverReport("key " .. key .. " pressed (" .. show(mouse) .. ", " .. (down and "down" or "up") .. ")")
+            end)
+            b.raidProbeHooked = true
+        end
+    end
+    say(string.format("in group=%s raid=%s  SELFCAST=%s autoSelfCast=%s enableMouseoverCast=%s ActionButtonUseKeyDown=%s",
+        show(IsInGroup()), show(IsInRaid()), show(select(2, pcall(GetModifiedClick, "SELFCAST"))),
+        show(cvar("autoSelfCast")), show(cvar("enableMouseoverCast")), show(cvar("ActionButtonUseKeyDown"))))
+    local failures = rawget(_G, "GlassRaidFrames") and GlassRaidFrames.paintFailures
+    for k, v in pairs(type(failures) == "table" and failures or {}) do say("  GRF failure " .. show(k) .. ": " .. show(v)) end
+    return n
+end
+
+Probe:Steps("hoverkey", {
+    rev = 2,
+    title = "A hover key casts on you",
+    { text = "Out of combat, in a group. Reading GlassRaidFrames' hover keys and hooking them.",
+      auto = true, run = hoverKeyState, check = function() local k = grfKeys() return k and next(k) ~= nil, "key buttons" end },
+    { text = "Hover a group member's tile (not yours) and press your hover key (6) once.",
+      event = "UNIT_SPELLCAST_SENT" },
+    { text = "Did the heal land on the hovered member?", ask = true },
+    { text = "Now hover that member's own character in the world (or their Blizzard party frame) and press 6.",
+      event = "UNIT_SPELLCAST_SENT" },
+    { text = "Did that heal land on them?", ask = true },
+    -- Run 1 (out of combat) worked; the self-casts in the earlier log were all in combat.
+    { text = "Pull a mob. Once in combat, hover the member's TILE and press 6 once.", event = "UNIT_SPELLCAST_SENT" },
+    { text = "Did that heal land on the hovered member?", ask = true },
+    { text = "Still in combat: hover NOTHING (empty ground, no unit) and press 6 once.", event = "UNIT_SPELLCAST_SENT" },
+    { text = "Did that cast on you or on your target?", ask = true },
+    { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
+})
+
+-- The fix: keys bound only while a group tile is hovered (secure OnEnter
+-- wraps). Ask steps: event steps also completed on unrelated casts.
+Probe:Steps("hoverkeyfix", {
+    rev = 1,
+    title = "Hover keys bound on the tile",
+    { text = "Out of combat, in a group. Hooking GlassRaidFrames' hover keys.",
+      auto = true, run = hoverKeyState, check = function() local k = grfKeys() return k and next(k) ~= nil, "key buttons" end },
+    { text = "Hover the member's TILE and press 6. Did the heal land on them?", ask = true },
+    { text = "Move OFF the frames (empty ground) and press 6. Did 6 do its usual action-bar action?", ask = true },
+    { text = "Pull a mob. In combat, hover the member's TILE and press 6. Did the heal land on them?", ask = true },
+    { text = "Still in combat, OFF the frames: press 6. Usual action-bar action?", ask = true },
+    { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
+})
+
+-- Run 2 found the failure in combat; this one only collects the conditions
+-- there, over a member's tile, a stranger, and nothing.
+Probe:Steps("hoverkeycombat", {
+    rev = 1,
+    title = "Hover-key conditions in combat",
+    { text = "Out of combat, in a group. Hooking GlassRaidFrames' hover keys.",
+      auto = true, run = hoverKeyState, check = function() local k = grfKeys() return k and next(k) ~= nil, "key buttons" end },
+    { text = "Out of combat: hover the member's TILE and press 6 once (the baseline).", event = "UNIT_SPELLCAST_SENT" },
+    { text = "Pull a mob. In combat, hover the member's TILE and press 6 once.", event = "UNIT_SPELLCAST_SENT" },
+    { text = "Still in combat: hover a friendly player NOT in your group (in the world) and press 6 once. "
+        .. "Skip if there is none nearby.", event = "UNIT_SPELLCAST_SENT" },
+    { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
+})
+
+--------------------------------------------------------------------------------
+-- Secure snippets again (/fp steps raid snippets). Measured broken on early
+-- builds (loadstring_untainted missing), but Clique 5.1.3 turned its Forever
+-- kill-switch off and EllesmereUI wraps OnEnter with SetBindingClick on 16001.
+-- If they run now, a hover key can be bound only while a tile is hovered
+-- (Cell/Clique's design), which needs no [party] check ([party] reads false
+-- in combat, measured above).
+--------------------------------------------------------------------------------
+
+local SNIP_KEY = "7"
+
+local function snippetsSetup()
+    if InCombatLockdown() then say("out of combat only") return false end
+    say("loadstring_untainted in _G: " .. show(type(rawget(_G, "loadstring_untainted"))))
+    local h = P.snipHeader
+    if not h then
+        h = CreateFrame("Frame", "RaidProbeSnippetHeader", UIParent, "SecureHandlerStateTemplate")
+        P.snipHeader = h
+    end
+    -- 1. Execute: a plain snippet.
+    local okE, errE = pcall(h.Execute, h, [[ self:SetAttribute("exec", "ran") ]])
+    say("Execute: " .. (okE and "ok" or tostring(errE)) .. " -> exec=" .. show(h:GetAttribute("exec")))
+    -- 2. A state driver and its _onstate- snippet.
+    h:SetAttribute("_onstate-probe", [[ self:SetAttribute("seen", newstate) ]])
+    local okD, errD = pcall(RegisterStateDriver, h, "probe", "[combat] in; out")
+    say("RegisterStateDriver: " .. (okD and "ok" or tostring(errD)))
+    C_Timer.After(0.5, function() say("  state driver after 0.5 s: seen=" .. show(h:GetAttribute("seen"))) end)
+    -- 3. The hover-key design: OnEnter binds key 7 to the hovered button, OnLeave clears it.
+    local b = P.snipButton
+    if not b then
+        b = CreateFrame("Button", "RaidProbeSnippetButton", UIParent, "SecureActionButtonTemplate")
+        b:SetSize(140, 44)
+        b:SetPoint("CENTER", UIParent, "CENTER", 0, 180)
+        b:RegisterForClicks("AnyUp", "AnyDown")
+        local bg = b:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0.1, 0.4, 0.8, 0.7)
+        local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        fs:SetPoint("CENTER")
+        fs:SetText("hover me, press " .. SNIP_KEY)
+        b:SetScript("PostClick", function(_, mouse, down)
+            P.snipClicks = (P.snipClicks or 0) + 1
+            say(string.format("key %s reached the hovered button (%s, %s), entered=%s, %d so far", SNIP_KEY,
+                show(mouse), down and "down" or "up", show(b:GetAttribute("entered")), P.snipClicks))
+        end)
+        local okW, errW = pcall(h.WrapScript, h, b, "OnEnter", ([[
+            self:SetAttribute("entered", (self:GetAttribute("entered") or 0) + 1)
+            self:SetBindingClick(true, %q, self, "LeftButton")
+        ]]):format(SNIP_KEY))
+        say("WrapScript OnEnter: " .. (okW and "ok" or tostring(errW)))
+        local okL, errL = pcall(h.WrapScript, h, b, "OnLeave", [[ self:ClearBindings() ]])
+        say("WrapScript OnLeave: " .. (okL and "ok" or tostring(errL)))
+        P.snipButton = b
+    end
+    b:Show()
+    P.snipClicks = 0
+    return okE and h:GetAttribute("exec") == "ran", okD
+end
+
+local function snippetsCheck(wantState)
+    return function()
+        local h = P.snipHeader
+        local seen = h and h:GetAttribute("seen")
+        local clicks = P.snipClicks or 0
+        P.snipClicks = 0
+        return clicks > 0 and (not wantState or seen == wantState), "clicks=" .. clicks, "state=" .. show(seen)
+    end
+end
+
+Probe:Steps("snippets", {
+    rev = 1,
+    title = "Do secure snippets run on this build?",
+    { text = "Out of combat. Setting up a snippet header and a blue 'hover me' box.",
+      auto = true, run = snippetsSetup, check = function() return P.snipHeader and P.snipHeader:GetAttribute("exec") == "ran", "Execute ran" end },
+    { text = "Hover the blue box and press 7 once, then press Next.", check = snippetsCheck("out") },
+    { text = "Move the cursor OFF the box and press 7 once (it should do 7's usual action). Then Next.",
+      check = function() local n = P.snipClicks or 0; P.snipClicks = 0 return n == 0, "clicks=" .. n end },
+    { text = "Pull a mob. In combat, hover the blue box and press 7 once, then press Next.", check = snippetsCheck("in") },
+    { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
+})
+
+--------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
 
@@ -1471,6 +1667,7 @@ local COMMANDS = {
     { "hoverkeys", hoverKeys, "toggle: hovering a tile binds key 8 to cast the test spell on it" },
     { "permkey", permKey,
         "[fallback|group] toggle: key 9 casts on @mouseover (fallback: else action button 9; group: group members only)" },
+    { "hoverkey", hoverKeyState, "GlassRaidFrames' hover keys: live binding, macro, and a log line per press" },
     { "enums", function()
         enumKeys("Enum.CustomAuraButtonDispelTypeTextureStyle", Enum.CustomAuraButtonDispelTypeTextureStyle)
         enumKeys("Enum.UnitAuraSoundTrigger", Enum.UnitAuraSoundTrigger)

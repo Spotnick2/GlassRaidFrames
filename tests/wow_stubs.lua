@@ -484,6 +484,15 @@ function IsShiftKeyDown() return WoW.shift end
 function IsAltKeyDown() return WoW.alt == true end
 function RegisterUnitWatch(frame) WoW.unitWatch[frame] = true end
 function UnregisterUnitWatch(frame) WoW.unitWatch[frame] = nil; frame._unwatched = true end
+-- Blizzard_RestrictedAddOnEnvironment/SecureHandlers.lua:602. The snippet is
+-- recorded, not run: a test runs it with its own handle stubs.
+function SecureHandlerWrapScript(frame, script, header, preBody, postBody)
+    assert(type(script) == "string" and type(preBody) == "string", "Invalid wrap")
+    assert(header and header._protected, "Header frame must be explicitly protected")
+    if WoW.combat then table.insert(WoW.blocked, (frame._name or frame._type) .. ":wrap " .. script) return end
+    frame._wraps = frame._wraps or {}
+    frame._wraps[script] = { header = header, pre = preBody, post = postBody }
+end
 
 -- Post-hook a method, as the client does: the original runs first.
 function hooksecurefunc(t, name, fn)
