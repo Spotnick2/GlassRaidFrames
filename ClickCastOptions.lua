@@ -25,14 +25,14 @@ local function paintPane(pane)
 end
 
 local function paintShellReflection(g)
-    if not g.editorLayers then return end
-    local enhanced = material.mode == "reflective"
-    local rim, top, reflection = unpack(g.editorLayers)
-    -- Only the upper light changes. Keep the accepted bottom-edge alpha,
-    -- reflection extent, shell fill and content backing exactly as before.
-    rim:SetGradient("VERTICAL", CreateColor(0.55, 0.65, 0.75, 0.035), CreateColor(0.84, 0.88, 0.91, enhanced and 0.52 or 0.48))
-    top:SetGradient("HORIZONTAL", CreateColor(0.88, 0.91, 0.93, enhanced and 0.58 or 0.45), CreateColor(0.65, 0.73, 0.8, 0.035))
-    reflection:SetGradient("VERTICAL", CreateColor(0.77, 0.81, 0.85, 0), CreateColor(0.77, 0.81, 0.85, enhanced and 0.105 or 0.085))
+    if not g.reflect or material.mode ~= "hybrid" then return end
+    -- hybrid's softer upper light over Reflect's gradients (the accepted
+    -- reflective values). A layer's own SetGradient lasts until the next
+    -- disable, which paintMaterial uses to put Reflect's back.
+    local rf = g.reflect
+    rf.rim:SetGradient("VERTICAL", CreateColor(0.55, 0.65, 0.75, 0.035), CreateColor(0.84, 0.88, 0.91, 0.48))
+    rf.top:SetGradient("HORIZONTAL", CreateColor(0.88, 0.91, 0.93, 0.45), CreateColor(0.65, 0.73, 0.8, 0.035))
+    rf.header:SetGradient("VERTICAL", CreateColor(0.77, 0.81, 0.85, 0), CreateColor(0.77, 0.81, 0.85, 0.085))
 end
 
 local function materialTint(g, accent)
@@ -57,6 +57,9 @@ local function paintMaterial(g)
     local base, hybrid = g.editorBase, material.mode ~= "baseline"
     -- Restore the undimmed region values before changing their bases, then
     -- reapply the original disabled state through LibGlass's gradient handling.
+    -- Disabling first makes enabling repaint Reflect's layers from its own
+    -- gradients, undoing hybrid's.
+    if g.reflect then Glass.SetSurfaceEnabled(g, false) end
     Glass.SetSurfaceEnabled(g, true)
     local shellSurface = g.editorKind == "shell"
     local clearShell = shellSurface and material.mode == "altstable"
@@ -71,7 +74,9 @@ local function paintMaterial(g)
         g.editorBacking:SetColorTexture(0.03, 0.03, 0.035, hybrid and shellSurface and 0.55 or 0.82)
         g.editorBacking:SetShown(not clearShell)
     end
-    for _, layer in ipairs(g.editorLayers or {}) do layer:SetShown(hybrid and not clearShell) end
+    if g.reflect then
+        for _, layer in pairs(g.reflect) do layer:SetShown(hybrid and not clearShell) end
+    end
     if shellSurface then
         -- AltStable's clean/clear shell, independently of the reading panels.
         -- Restore the original geometry when comparing previous treatments.
@@ -89,22 +94,9 @@ local function paintMaterial(g)
 end
 
 local function shellReflections(f, g)
-    local S = Glass.SIZES[g.size]
-    -- Existing sliced rim texture supplies rounded geometry. Alpha lives in
-    -- the gradient itself on Forever, never in SetAlpha on gradient textures.
-    local rim = g.top:CreateTexture(nil, "OVERLAY", nil, 6)
-    rim:SetAllPoints(f); rim:SetTexture(Glass.MEDIA .. S.rim)
-    rim:SetTextureSliceMargins(S.rimMargin, S.rimMargin, S.rimMargin, S.rimMargin)
-    rim:SetTextureSliceMode((Enum.UITextureSliceMode and Enum.UITextureSliceMode.Stretched) or 0)
-    local top = g.top:CreateTexture(nil, "OVERLAY", nil, 7)
-    top:SetColorTexture(1, 1, 1, 1)
-    top:SetPoint("TOPLEFT", f, "TOPLEFT", S.maskMargin, -1)
-    top:SetPoint("TOPRIGHT", f, "TOPRIGHT", -S.maskMargin, -1); top:SetHeight(1)
-    local reflection = f:CreateTexture(nil, "BACKGROUND", nil, -3)
-    reflection:SetColorTexture(1, 1, 1, 1); reflection:AddMaskTexture(g.mask)
-    reflection:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    reflection:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0); reflection:SetHeight(125)
-    g.editorLayers = { rim, top, reflection }
+    -- The lit rim, top highlight and header reflection, fitted to the header
+    -- so it is gone before the content at 138.
+    Glass.Reflect(g, f, { header = 125 })
     -- SkinTitleBand's white canvas and gradient, clipped by the shell mask.
     -- This editor's title occupies 52 UI units; no content or input frame moves.
     local titleBand = f:CreateTexture(nil, "BACKGROUND", nil, -2)
