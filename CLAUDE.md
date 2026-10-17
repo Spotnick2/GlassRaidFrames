@@ -231,8 +231,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - When hidden, its children release their units, and they re-sync when shown.
   - Pets get a fixed colour (`Frames.PET`).
   - The announced rectangle covers the pets when they're shown.
-  - Mouse bindings reach pet tiles (`Header.AllChildren`). Hover keys don't target pets
-    (`[party]`/`[raid]`).
+  - Mouse bindings reach pet tiles (`Header.AllChildren`). Hover keys don't target pets: only
+    the group tiles (`Header.children`) get the `OnEnter` wrap that binds them.
 - **Tile size per role** (`profiles[role].size`, `/grf size`, width and height sliders on the
   main page). The default is **82×58** (Cell's look, measured side by side), and
   `GlassRaidFrames.xml` must match `Header.DEFAULT_W/H` (`test_toc`).
