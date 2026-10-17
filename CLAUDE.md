@@ -73,8 +73,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   group (`groupFilter` 1..8), side by side in one protected container, as in EllesmereUI's
   separated mode. Header 1 also has `showParty`/`showPlayer`, so **the client switches between
   the party column and the raid grid, in combat too; there is no mode code**. No
-  `initialConfigFunction` (snippets are broken): the child template in `GlassRaidFrames.xml`
-  carries the size. All 40 children are **precreated out of combat** (`startingIndex = -4`, show,
+  `initialConfigFunction` (snippets threw when this was built; they run on 70425, but nothing
+  needs one): the child template in `GlassRaidFrames.xml` carries the size. All 40 children are **precreated out of combat** (`startingIndex = -4`, show,
   back to `1`) and dressed once. A child's unit changes in combat; its `OnAttributeChanged`
   hook calls `Engine.SetUnit` and the child's `onUnitChanged` (lower case on purpose: a
   capitalised field on a widget collides with the widget-method namespace). The container
