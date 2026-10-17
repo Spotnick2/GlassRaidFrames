@@ -85,7 +85,7 @@ including when the selected binding is being edited as a draft copy.
 The click-casting-only hybrid material separates the moderately smoked shell
 from two continuous, darker reading panes extending through the preview/footer.
 The shell adds a static feathered pearl reflection and directional silver/cool
-rim using LibGlass's existing textures and gradient conventions. Controls have
+rim through LibGlass's `Glass.Reflect` (r9, header 125 px, above the content at 138). Controls have
 quieter rims and wash; selected/focused/hovered/recording states keep accents.
 Text/icon opacity and the layout are unchanged. No shared instance settings,
 library defaults, other addon surfaces, captured scenery or continuous effects

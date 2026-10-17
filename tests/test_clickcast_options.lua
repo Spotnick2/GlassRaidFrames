@@ -283,7 +283,7 @@ check(u.macroText:HasFocus(), "material switch retains text focus")
 check(not material.panes[1]:IsShown(), "baseline removes new content backing")
 local shellGlass = T.shell().glass
 eq(shellGlass.rim:GetAlpha(), shellGlass.editorBase.rim, "baseline restores original rim")
-check(not shellGlass.editorLayers[1]:IsShown(), "baseline hides added reflections")
+check(not shellGlass.reflect.rim:IsShown(), "baseline hides added reflections")
 u.macroText:ClearFocus(); click(u.record)
 check(T.recording(), "recording before comparison")
 check(CCO.SetMaterialPreview("hybrid"), "hybrid comparison available")
@@ -293,20 +293,27 @@ check(E.Equal(T.state().draft, draft), "comparison preserves changed draft")
 check(E.Equal(GlassRaidFramesCharDB, savedMaterial), "comparison never writes SavedVariables")
 eq(u.table:GetVerticalScroll(), 52, "material switch retains table scroll")
 eq(u.browser:GetVerticalScroll(), 34, "material switch retains browser scroll")
-check(material.panes[1]:IsShown() and shellGlass.editorLayers[1]:IsShown(), "hybrid restores panes and directional rim")
+check(material.panes[1]:IsShown() and shellGlass.reflect.rim:IsShown(), "hybrid restores panes and directional rim")
 local acceptedTint = E.Copy(shellGlass.tint._color)
 local acceptedBacking = E.Copy(material.panes[1]._color)
 local acceptedControl = E.Copy(u.add.glass.tint._color)
-local acceptedTop = shellGlass.editorLayers[2]._gradient[2].a
-local acceptedBottom = shellGlass.editorLayers[1]._gradient[2].a
+local acceptedTop = shellGlass.reflect.top._gradient[2].a
+local acceptedBottom = shellGlass.reflect.rim._gradient[2].a
 check(CCO.SetMaterialPreview("reflective"), "outer reflection comparison available")
 check(E.Equal(shellGlass.tint._color, acceptedTint), "reflection refinement preserves accepted shell fill")
 check(E.Equal(material.panes[1]._color, acceptedBacking), "reflection refinement preserves content backing")
 check(E.Equal(u.add.glass.tint._color, acceptedControl), "reflection refinement preserves control state")
-eq(shellGlass.editorLayers[1]._gradient[2].a, acceptedBottom, "reflection refinement preserves quiet bottom edge")
-check(shellGlass.editorLayers[2]._gradient[2].a > acceptedTop, "upper-left highlight strengthens")
+eq(shellGlass.reflect.rim._gradient[2].a, acceptedBottom, "reflection refinement preserves quiet bottom edge")
+check(shellGlass.reflect.top._gradient[2].a > acceptedTop, "upper-left highlight strengthens")
+-- The accepted treatment is LibGlass's Reflect, repainted unchanged after hybrid.
+for _, k in ipairs({ "rim", "top", "header" }) do
+    local r = shellGlass.reflect[k]
+    check(r._gradient[2].a == r.glassStops[2][4] and r._gradient[3].a == r.glassStops[3][4],
+        "reflective paints Reflect's own " .. k .. " gradient")
+end
+eq(shellGlass.reflect.header:GetHeight(), 125, "header reflection ends above the content at 138")
 check(T.recording() and E.Equal(T.state().draft, draft), "reflection comparison preserves recording and draft")
-local acceptedReflection = E.Copy(shellGlass.editorLayers[3]._gradient)
+local acceptedReflection = E.Copy(shellGlass.reflect.header._gradient)
 check(CCO.SetMaterialPreview("altstable"), "AltStable comparison available")
 check(E.Equal(shellGlass.tint._color, { 0.13, 0.16, 0.22, 0.24 }), "clear shell uses AltStable tint independently of content")
 check(not shellGlass.editorBacking:IsShown(), "clear shell has no stacked reading backing")
@@ -319,11 +326,11 @@ eq(material.panes[1]._color[4], 1, "reading surface stays opaque under clear she
 check(E.Equal(u.add.glass.tint._color, acceptedControl), "clear shell leaves controls unchanged")
 check(T.recording() and E.Equal(T.state().draft, draft), "clear comparison preserves draft and recording")
 CCO.SetMaterialPreview("reflective")
-check(E.Equal(shellGlass.editorLayers[3]._gradient, acceptedReflection), "accepted reflection restores exactly")
+check(E.Equal(shellGlass.reflect.header._gradient, acceptedReflection), "accepted reflection restores exactly")
 check(E.Equal(shellGlass.tint._color, acceptedTint) and E.Equal(material.panes[1]._color, acceptedBacking), "accepted shell and content fills restore exactly")
 check(shellGlass.editorBacking:IsShown() and not shellGlass.editorTitleBand:IsShown(), "accepted backing and title layers restore")
 CCO.SetMaterialPreview("hybrid")
-eq(shellGlass.editorLayers[2]._gradient[2].a, acceptedTop, "accepted upper highlight restores exactly")
+eq(shellGlass.reflect.top._gradient[2].a, acceptedTop, "accepted upper highlight restores exactly")
 check(E.Equal(GRF.Glass.STYLE, sharedStyle), "comparison leaves GRF shared material settings unchanged")
 check(E.Equal(foreign.tint._color, foreignTint) and foreign.rim:GetAlpha() == foreignRim, "other GRF surfaces unchanged")
 check(E.Equal(other.tint._color, otherTint) and other.rim:GetAlpha() == otherRim, "separate library consumer unchanged")

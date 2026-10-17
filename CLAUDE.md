@@ -188,7 +188,10 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     and uses gradient alpha (not `SetAlpha` on gradients). Temporary developer
     `SetMaterialPreview("baseline"|"hybrid"|"reflective"|"altstable")` changes decoration only, preserving
     drafts/input state. Retain the comparison modes for clear-theme follow-up #52;
-    `reflective` is the accepted default.
+    `reflective` is the accepted default. The shell's lit rim, top highlight and
+    header reflection are LibGlass's `Glass.Reflect(g, f, { header = 125 })` (r9);
+    `hybrid` paints its softer values over them, and a disable/enable pair puts
+    Reflect's gradients back.
 - **Incoming heals** (GlassUnitFrames' recipe, `API.NewHealCalculator` / `API.IncomingHeals`
   from its Compat):
   - a translucent bar with the health bar's **full** width, anchored at the health fill's moving
