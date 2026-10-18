@@ -493,3 +493,6 @@ Each press logs `InCombatLockdown()`. Rev 1's fight ended before the presses, an
   `autoSelfCast` sent to the player. That's the expected fallback (step 5 of run #178 hovered
   with the wrong target).
 - Not measured: `UnitPlayerOrPetInRaid` in a raid (party only), or a group pet.
+- **Then dropped (owner, 2026-10-18):** Cell and EllesmereUI cast on whoever a frame shows,
+  strangers included, and so does GlassRaidFrames now. The measurement stays for anyone who
+  wants a group-only frame.

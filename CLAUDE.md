@@ -134,11 +134,12 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     is hovered**: a secure `OnEnter` wrap on each child, group and pet (`SecureHandlerWrapScript`,
     header `GlassRaidFramesKeyHeader`) runs `control:RunFor(self, <grf-hoverkeys>)`, whose
     lines are `self:SetBindingClick(true, key, button)` (the tile owns the binding); `OnLeave`
-    and `OnHide` run `self:ClearBindings()`. Cell's and Clique's design. Our tiles only show
-    group members, so **a stranger under the cursor never gets the spell**, in combat too (the
-    owner's rule). A `[party]`/`[raid]` macro check **can't** do it: both read false in combat,
-    for a member (measured on 70425). Off a tile the key does its usual action. Pets take the
-    keys like players (owner, 2026-10-18). The macro is `/cast [@mouseover,help,nodead] <spell>`, then `/click` of the key's
+    and `OnHide` run `self:ClearBindings()`. Cell's and Clique's design. Bound only on a frame,
+    so **a character out in the world under the cursor never gets the spell** (the owner's
+    rule, #48: a permanent `@mouseover` key did). Whoever a hovered frame shows does, a
+    stranger or a pet included, as in Cell and EllesmereUI (owner, 2026-10-18). A
+    `[party]`/`[raid]` macro check reads false in combat (measured on 70425). Off a frame the
+    key does its usual action. The macro is `/cast [@mouseover,help,nodead] <spell>`, then `/click` of the key's
     own action button on the **exact complement** (`[noexists][nohelp][dead]`). Rez spells
     (`ClickCast.REZ`, by ID) swap dead/nodead. The fallback button comes from
     `GetBindingAction(key)` (the base binding) matched to the bars' `.commandName`; a key bound
@@ -160,16 +161,11 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     - Hover keys: every frame takes the same wraps, switched by a per-frame `grf-hover`
       attribute. Frames are **never unwrapped**: `SecureHandlerUnwrapScript` pops the
       outermost wrap, which may be another addon's.
-    - The `OnEnter` snippet binds only for you, a group member, or a pet of either (owner:
-      pets heal like players, on every frame): `player`/`pet`/`partyN`/`partypetN`/`raidN`/
-      `raidpetN` by name, any other token through the restricted
-      `UnitPlayerOrPetInParty/InRaid`, which **keep answering in combat**, unlike `[party]`
-      (measured on 70450 for a member, yourself and a stranger: `docs/FOREVER-PROBE.md` item 12;
-      the raid variant is unmeasured in a raid). The restricted
-      environment can't tell a player from a pet (no `UnitIsPlayer`/`UnitIsUnit`).
-      Through `target`/`focus`, you and your own pet pass only while you're grouped.
-    - Known limit: a target that changes to a stranger while the cursor stays on the target
-      frame keeps the keys until the cursor leaves.
+    - **No group check** (owner, 2026-10-18): whoever the hovered frame shows gets the spell,
+      as in Cell (its Spotlight frames) and EllesmereUI (its "all frames"), which filter only
+      friend/enemy. A group-only gate was built and measured, then dropped: the restricted
+      `UnitPlayerOrPetInParty` keeps answering in combat, unlike `[party]` (70450,
+      `docs/FOREVER-PROBE.md` item 12), if one is ever wanted.
   - **One reconciliation** (`ClickCast.Apply`): desired vs installed, changing only what
     differs, so our own bindings can't loop through `UPDATE_BINDINGS`. `ClickCast.Request()`
     queues it through the combat queue (the installed bindings stay until combat ends:

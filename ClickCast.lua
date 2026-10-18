@@ -36,13 +36,11 @@
 --   own value of an attribute we take is saved and put back when the row or
 --   the frame goes. Hover keys get the same wraps, gated per frame by a
 --   grf-hover attribute (never unwrapped: SecureHandlerUnwrapScript pops the
---   outermost wrap, which may be another addon's). A target or focus frame
---   can show a stranger, so the snippet binds only for you, a group member
---   or a pet of either (owner: pets heal like players, on every frame):
---   player/pet/partyN/partypetN/raidN/raidpetN by name, any other token
---   through the restricted UnitPlayerOrPetInParty/InRaid, which unlike
---   [party] keep answering in combat (measured on 70450, /fp steps raid
---   ufgate). Neither tells a player from a pet, so pets can't be told apart.
+--   outermost wrap, which may be another addon's). Any friendly unit a frame
+--   shows gets the spell, a stranger on the target frame or a pet included,
+--   as in Cell and EllesmereUI (owner, 2026-10-18): binding only while a
+--   frame is hovered already keeps a character out in the world from
+--   getting it, and [help] sends anything hostile to the key's own action.
 -- - Everything protected happens out of combat, through the addon's one combat
 --   queue, in ONE reconciliation that only changes what differs, so our own
 --   binding changes (UPDATE_BINDINGS) can't loop.
@@ -309,17 +307,12 @@ local original = setmetatable({}, weak)   -- frame -> { attr = its own value, or
 local hovering = setmetatable({}, weak)   -- frames whose grf-hover is on
 local NONE, EMPTY = {}, {}
 
--- What a hovered frame runs (as itself): if it shows you or a group member,
--- bind every key to its button. The unit is read at OnEnter, in combat too.
+-- What a hovered frame runs (as itself) while its grf-hover is on: bind
+-- every key to its button.
 ClickCast.KEYS_ATTR = "grf-hoverkeys"
 ClickCast.HOVER_ATTR = "grf-hover"
 local ENTER = [[
-    if not self:GetAttribute("]] .. ClickCast.HOVER_ATTR .. [[") then return end
-    local u = self:GetAttribute("unit")
-    if type(u) ~= "string" then return end
-    if u == "player" or u == "pet" or strmatch(u, "^party%d+$") or strmatch(u, "^raid%d+$")
-        or strmatch(u, "^partypet%d+$") or strmatch(u, "^raidpet%d+$")
-        or UnitPlayerOrPetInParty(u) or UnitPlayerOrPetInRaid(u) then
+    if self:GetAttribute("]] .. ClickCast.HOVER_ATTR .. [[") then
         control:RunFor(self, control:GetAttribute("]] .. ClickCast.KEYS_ATTR .. [["))
     end
 ]]
@@ -339,9 +332,8 @@ local function usable(f)
     return ok and not forbidden
 end
 
--- Every frame the rows and hover keys reach (the snippet decides per hover
--- who gets the keys): our group and pet tiles, then Blizzard's and
--- registered frames.
+-- Every frame the rows and hover keys reach: our group and pet tiles, then
+-- Blizzard's and registered frames.
 function ClickCast.Targets()
     local list, seen = {}, {}
     local function add(f)

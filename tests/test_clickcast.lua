@@ -56,8 +56,6 @@ local function run(body, env)
     setfenv(f, env)
     f()
 end
--- Who the restricted UnitPlayerOrPetInParty/InRaid call a group member.
-local inGroup = {}
 local function hoverBinds(child)
     child = child or GRF.Header.children[1]
     local bound = {}
@@ -79,13 +77,7 @@ local function hoverBinds(child)
             run(body, { self = other })
         end,
     }
-    -- The restricted environment's functions the snippet uses
-    -- (RestrictedEnvironment.lua: strmatch, rawtype... and the macro
-    -- conditionals UnitPlayerOrPetInParty/InRaid). `type` is the managed
-    -- environment's own.
-    run(w.pre, { self = handle, control = control, type = type, strmatch = string.match,
-                 UnitPlayerOrPetInParty = function(u) return inGroup[u] == "party" end,
-                 UnitPlayerOrPetInRaid = function(u) return inGroup[u] == "raid" end })
+    run(w.pre, { self = handle, control = control })
     return bound, handle
 end
 
@@ -125,8 +117,8 @@ eq(c:GetAttribute("ctrl-spell1"), 10963, "pinned: the rank's own spell ID (measu
 eq(GRF.Header.children[40]:GetAttribute("ctrl-spell1"), 10963, "on every child")
 eq(c:GetAttribute("*type1"), "target", "the plain click still targets")
 
--- Key rows: one secure button each, bound only while a GROUP tile is hovered
--- ([party]/[raid] read false in combat, measured: they can't keep strangers out).
+-- Key rows: one secure button each, bound only while a tile is hovered (a
+-- permanent [@mouseover] key would reach characters out in the world).
 local kb = CC._test.keyButtons
 check(kb["1"] and kb["1"]._template == "SecureActionButtonTemplate", "key 1 has its own secure button")
 eq(permanent, 0, "no key is bound permanently: off a tile it keeps its normal job")
@@ -137,8 +129,6 @@ tile:ClearBindings()
 eq(GRF.Header.children[1]._wraps.OnLeave.pre, "self:ClearBindings()", "leaving the tile clears them")
 eq(GRF.Header.children[1]._wraps.OnHide.pre, "self:ClearBindings()", "so does a tile hidden under the cursor")
 eq(hoverBinds(childFor("party2"))["1"], kb["1"]:GetName(), "every group tile")
-eq(GRF.Header.children[40]:GetAttribute(CC.HOVER_ATTR), true, "an empty tile is switched on too")
-eq(next((hoverBinds(GRF.Header.children[40]))), nil, "but binds nothing until it shows someone")
 check(GRF.Header.petChildren[1]._wraps, "pet tiles too (owner: pets heal like players)")
 eq(CC._test.keyHeader()._template, "SecureHandlerBaseTemplate", "the wraps run against a secure handler")
 local m1 = kb["1"]:GetAttribute("macrotext")
@@ -328,27 +318,14 @@ eq(tf:GetAttribute("shift-type1"), nil, "Blizzard's frame too")
 CC.Set("shift-1", true, 2061); flush()
 eq(other:GetAttribute("shift-type1"), "spell", "re-added")
 
--- Hover keys there: for you, a group member, or a pet of either (owner:
--- pets heal like players, on every frame).
+-- Hover keys there: whoever the frame shows, a stranger or a pet included,
+-- as in Cell and EllesmereUI (owner, 2026-10-18). [help] in the macro sends
+-- anything hostile to the key's own action.
 eq(hoverBinds(pf)["1"], kb["1"]:GetName(), "the player frame binds the keys")
-eq(next((hoverBinds(tf))), nil, "a target frame showing a stranger binds nothing")
-inGroup.target = "party"
-eq(hoverBinds(tf)["1"], kb["1"]:GetName(), "a party member on the target frame: bound")
-inGroup.target = "raid"
-eq(hoverBinds(tf)["1"], kb["1"]:GetName(), "a raid member: bound")
-inGroup.focus = "party"
-eq(hoverBinds(other)["SHIFT-R"], kb["SHIFT-R"]:GetName(), "a registered frame showing a member: bound")
-eq(hoverBinds(petf)["1"], kb["1"]:GetName(), "your pet frame binds, solo too (by name)")
-local petTile = GRF.Header.petChildren[1]
-petTile:SetAttribute("unit", "partypet2")
-eq(hoverBinds(petTile)["1"], kb["1"]:GetName(), "a party pet's tile binds (by name)")
-petTile:SetAttribute("unit", "raidpet12")
-eq(hoverBinds(petTile)["1"], kb["1"]:GetName(), "a raid pet's too")
-petTile:SetAttribute("unit", nil)
-inGroup.target = nil
-eq(next((hoverBinds(tf))), nil, "a stranger's pet on the target frame: nothing (UnitPlayerOrPetInParty false)")
-inGroup.target = "party"   -- a group pet as target: UnitPlayerOrPetInParty counts it
-eq(hoverBinds(tf)["1"], kb["1"]:GetName(), "a group pet on the target frame: bound")
+eq(hoverBinds(tf)["1"], kb["1"]:GetName(), "the target frame, whoever it shows")
+eq(hoverBinds(other)["SHIFT-R"], kb["SHIFT-R"]:GetName(), "a registered frame")
+eq(hoverBinds(petf)["1"], kb["1"]:GetName(), "the pet frame")
+eq(hoverBinds(GRF.Header.petChildren[1])["1"], kb["1"]:GetName(), "a pet tile")
 check(tf._wraps.OnLeave and tf._wraps.OnHide, "leaving or hiding a frame clears its keys")
 
 -- Off: every other frame gets its own clicks back, our tiles keep theirs.
