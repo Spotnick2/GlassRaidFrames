@@ -166,6 +166,20 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
       friend/enemy. A group-only gate was built and measured, then dropped: the restricted
       `UnitPlayerOrPetInParty` keeps answering in combat, unlike `[party]` (70450,
       `docs/FOREVER-PROBE.md` item 12), if one is ever wanted.
+  - **Keys anywhere, per role (#63)**: `ClickCast.Anywhere(role)` (`db.profiles[role].keysAnywhere`,
+    the default unsaved: `ClickCast.AnywhereDefault`).
+    - **Healer: frames only** (owner: "I want to heal myself and not the person at my mouse
+      cursor that passed in front of me"). **Caster, melee, tank: anywhere**, so a DPS key hits
+      the enemy hovered in the world.
+    - Anywhere: each key is bound for good to its button (`SetOverrideBindingClick` on
+      `GlassRaidFramesKeyOwner`, out of combat), and the hover wraps' key list is empty.
+      Switching mode or role in combat waits, `pending`.
+    - Both modes: **the spell's reaction picks the macro's target** (`API.SpellReaction`:
+      `C_Spell.IsSpellHarmful` and not `IsSpellHelpful` → `harm`, else `help`; a rez is always
+      `help`). The fallback `/click` takes the exact complement (`[noharm]` for a harmful
+      spell).
+    - `/grf keys frames|anywhere`, the main page's per-role checkbox
+      (`GRF.Settings.SetKeysAnywhere`). Measured with `/fp steps raid worldkey`.
   - **One reconciliation** (`ClickCast.Apply`): desired vs installed, changing only what
     differs, so our own bindings can't loop through `UPDATE_BINDINGS`. `ClickCast.Request()`
     queues it through the combat queue (the installed bindings stay until combat ends:

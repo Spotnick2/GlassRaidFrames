@@ -495,7 +495,8 @@ refresh = function()
     ui.banner:SetText(combat and "Editing paused in combat · Drafts and staged bindings are kept"
         or state.quick and "Quick Bind active · Hover a spell, then press a key or click it · Esc stops capture"
         or #state.staged > 0 and "Quick Bind stopped · Apply or discard staged changes"
-        or ("Mouse and hover keys: GRF frames" .. (CC.Everywhere() and " and other unit frames" or "")
+        or ("Mouse: GRF frames" .. (CC.Everywhere() and " and other unit frames" or "")
+            .. " · Keys: " .. (CC.Anywhere(state.role) and "anywhere under the cursor" or "hovered frames only")
             .. " · Cast on whoever the hovered frame shows"))
     ui.quick.text:SetText(state.quick and "Stop Quick Bind" or "Quick Bind"); enable(ui.quick, not combat)
     for role, b in pairs(ui.roles) do
@@ -778,7 +779,9 @@ local function build(parent)
     ui.warning = button(root, "Binding help", function()
         modal(ui.warningText ~= "" and ui.warningText or ("Mouse bindings and hover keys apply to GRF group and pet frames"
             .. (CC.Everywhere() and ", Blizzard's unit frames and other addons' registered frames" or "")
-            .. ". They cast on whoever the hovered frame shows, strangers and pets included; over an enemy, a key does its normal action."
+            .. ". They cast on whoever the hovered frame shows, strangers and pets included: a heal on a friend, a harmful spell on an enemy; otherwise a key does its normal action."
+            .. (CC.Anywhere(state.role) and " This role's keys also work on anything under the cursor in the world."
+                or " This role's keys work only on a hovered frame.")
             .. " Default target/menu clicks also apply with modifiers unless overridden."), {
             { "Close", function() ui.modal:Hide(); refresh() end },
             { "Mouseover Cast off", function()

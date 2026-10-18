@@ -126,6 +126,19 @@ function API.SpellTextID(text)
     local ok, info = pcall(C_Spell.GetSpellInfo, text)
     if ok and type(info) == "table" and not API.IsSecret(info.spellID) then return info.spellID end
 end
+-- "harm" for a spell that only hurts (C_Spell.IsSpellHarmful and not
+-- IsSpellHelpful), else "help": a heal, a buff, a spell for either side
+-- (Dispel Magic), or no answer (#63; /fp steps raid worldkey).
+function API.SpellReaction(id)
+    local S = rawget(_G, "C_Spell")
+    local function ask(fn)
+        if not (S and S[fn]) then return nil end
+        local ok, v = pcall(S[fn], id)
+        if ok and not API.IsSecret(v) then return v end
+    end
+    if ask("IsSpellHarmful") == true and ask("IsSpellHelpful") ~= true then return "harm" end
+    return "help"
+end
 function API.SpellTexture(id)
     local ok, tex = pcall(C_Spell.GetSpellTexture, id)
     if ok and not API.IsSecret(tex) then return tex end

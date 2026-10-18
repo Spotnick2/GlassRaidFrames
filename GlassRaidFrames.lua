@@ -160,6 +160,17 @@ function Settings.SetClickCastOthers(on)
     GRF.ClickCast.Request()
 end
 
+-- The current role's hover keys anywhere under the cursor, or only on a
+-- hovered frame (#63). The role's default isn't saved.
+function Settings.SetKeysAnywhere(on)
+    local prof = GRF.Profile()
+    if not prof then return false end
+    on = on == true
+    if on == GRF.ClickCast.AnywhereDefault(GRF.role) then prof.keysAnywhere = nil else prof.keysAnywhere = on end
+    GRF.ClickCast.Request()
+    return true
+end
+
 -- The glass look (#37) and body (#38): saved now, built after /reload
 -- (LibGlass builds them into each surface). The defaults aren't saved.
 function Settings.SetLook(look)
@@ -524,6 +535,11 @@ local function slash(msg)
         say(arg == "all" and "click-casting: every unit frame" or "click-casting: Glass Raid Frames' tiles only")
     elseif cmd == "clickcast" then
         GRF.ClickCastOptions.Toggle()
+    elseif cmd == "keys" then
+        if arg == "anywhere" or arg == "frames" then Settings.SetKeysAnywhere(arg == "anywhere") end
+        say("hover keys for " .. tostring(GRF.role):lower() .. ": "
+            .. (GRF.ClickCast.Anywhere() and "anywhere under the cursor" or "on frames only")
+            .. "  (/grf keys frames|anywhere)")
     elseif cmd == "ind" or cmd == "indicators" then
         indicatorsCommand((msg or ""):match("^%s*%S+%s*(.-)%s*$") or "")
     elseif cmd == "failures" then
@@ -533,6 +549,7 @@ local function slash(msg)
     else
         say("/grf options - the settings (Options > AddOns)")
         say("/grf clickcast - the click-casting editor; /grf clickcast all|ours - on every unit frame, or our tiles only")
+        say("/grf keys frames|anywhere - this role's hover keys: on frames only, or the world too")
         say("/grf role [auto|healer|caster|melee|tank] - settings follow your role; " .. roleLine())
         say("/grf unlock | lock - move the group frames for this role (out of combat)")
         say("/grf reset - this role's default position")
