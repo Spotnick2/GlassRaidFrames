@@ -3,11 +3,11 @@
 Milestone 0 of the plan. Nothing here has been measured yet. The design of milestones 1–3
 waits on these answers, and each item names the decision it gates.
 
-Addon-agnostic results also go into `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`.
+Addon-agnostic results also go into `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`.
 
 ## How to run it
 
-RaidProbe is a **ForeverProbe module** (#44; `C:\Projects\WoW\References\PROBES.md`, and
+RaidProbe is a **ForeverProbe module** (#44; `C:\Projects\WoW\References\Docs\PROBES.md`, and
 ForeverProbe's `docs/GUIDE.md`). Its commands were `/rprobe <command>` until then; the results
 below keep the commands as they're now typed.
 

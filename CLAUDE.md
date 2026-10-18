@@ -337,7 +337,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   hand-edit it.
 - **`Tools/RaidProbe/`**: the throwaway measurement addon, a **ForeverProbe module** (#44): `/fp raid
   <command>` (`/fp raid` lists them), its lines in the `/fp` console, never in chat. Build and change
-  it by `..\ForeverProbe\docs\GUIDE.md` (the index is `C:\Projects\WoW\References\PROBES.md`);
+  it by `..\ForeverProbe\docs\GUIDE.md` (the index is `C:\Projects\WoW\References\Docs\PROBES.md`);
   never edit ForeverProbe from here (an issue on `Spotnick2/ForeverProbe` instead).
   - It logs every line to `RaidProbeDB.log` (bound with `Probe:UseLog`); after a `/reload` the session is
     on disk at `WTF\Account\<account>\SavedVariables\RaidProbe.lua`, and the host's
@@ -380,10 +380,10 @@ texture names only grow; instances; upgrade rules).
 
 ## References: read these before touching an unfamiliar API
 
-- `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md` holds the canonical addon-agnostic field
+- `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md` holds the canonical addon-agnostic field
   notes, measured on the live client. Treat them as fact; don't re-derive them. Other sessions
   edit this file, so write new addon-agnostic findings there, not into a copy in this repo.
-- `C:\Projects\WoW\References\forever-api-1.60.1.70338.md` is the full API dump for the current
+- `C:\Projects\WoW\References\Forever\api\forever-api-1.60.1.70338.md` is the full API dump for the current
   build. It lists documented functions and events, enums, **widget methods** (the only list of
   those) and the `_G` walk. It proves a name exists, not that it works. **Presence is not a
   contract.**
@@ -401,11 +401,11 @@ texture names only grow; instances; upgrade rules).
 
 ## Reference addons
 
-These live in `C:\Projects\WoW\References`. They show what works on this client *in practice*,
+These live in `C:\Projects\WoW\References\Addons` (its `INDEX.md` lists versions). They show what works on this client *in practice*,
 which the dump can't tell you. Reason about what they do rather than copying it, and **write
 our own code**.
 
-- **`Cell-r274-release\Cell` is the design reference** for *what* group frames and
+- **`UnitFrames\Cell\Cell` is the design reference** for *what* group frames and
   click-casting do.
   - It is not Forever-aware. Almost all its secure machinery depends on restricted snippets,
     which threw on early builds (they run on 70425; only the hover keys use one here):
@@ -419,7 +419,7 @@ our own code**.
       `ClearClickCastings` (plain `SetAttribute`), and the list-pane editing UI;
     - `Indicators\Built-in.lua`;
     - `Defaults\ClickCasting_DefaultSpells_Vanilla.lua`.
-- **`Decursive-2.9.0-RC2-19-gfbc816f-forever\Decursive` is the dispel reference.** It is ported
+- **`BuffsDebuffs\Decursive-Forever\Decursive` is the dispel reference.** It is ported
   to Forever (`DC.FOREVER`, `DC.RESTRICTED_AURAS`):
   - `Dcr_DebuffsFrame.lua` ~1124–1256: one `AuraContainer` per micro unit frame, with one
     `AddAuraSlot("HARMFUL", {candidateFilters={includeDispelTypes=…}})` per cure priority. Each
@@ -431,11 +431,11 @@ our own code**.
   - `Dcr_12_1_Sounds.lua`: `C_UnitAuras.AddAuraSound`, keyed on exact spell IDs.
   - `DCR_init.lua` ~522–641: the Classic cure spell table.
   - It gates aura reads on `C_RestrictedActions` and guards values with `canaccessvalue`.
-- **`DinoUnitFrames_Forever_Beta_v3.0` is the Forever reference for group buttons.** Its
+- **`UnitFrames\DinoUnitFrames-Forever` is the Forever reference for group buttons.** Its
   `modules\units.lua` builds `party1-4`/`raid1-40` buttons by hand, because the header's
   initialisation failed here. See its changelog, v2.10–v2.34.
 
-- **`ForeverUI-0.4.42\ForeverUI` is a Forever-native UI suite** with group frames
+- **`UISuites\ForeverUI\ForeverUI` is a Forever-native UI suite** with group frames
   (`Modules\Frames\`). It confirms the design: per-group `SecureGroupHeaderTemplate` headers
   with no `initialConfigFunction` ("the error there aborts frame creation entirely"), and a
   secret-safe range fade. Its field notes:

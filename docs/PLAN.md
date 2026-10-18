@@ -49,7 +49,7 @@ The owner uses Cell today; this replaces it.
   5. **Secrecy** of `UnitHealth`/`UnitHealthMax`, `UnitIsDeadOrGhost`, `UnitIsConnected`, `UnitGroupRolesAssigned` and `GetRaidRosterInfo` subgroup for party and raid tokens. For `UnitInRange`, check both returns (`inRange`, `checkedRange`) and whether `UNIT_IN_RANGE_UPDATE` is delivered.
   6. **Hiding Blizzard's frames**: `CompactPartyFrame`, `CompactRaidFrameContainer` **and** `CompactRaidFrameManager`, by reparenting, across Edit Mode.
   7. **Scale**: 45 tiles × 2 containers (debuff row + dispel box) with 40 live units and aura churn. Measure frame time, and init time.
-- Record the results in `docs/FOREVER-PROBE.md`. Addon-agnostic findings go into `C:\Projects\References\PORTING-TBC-TO-FOREVER.md`.
+- Record the results in `docs/FOREVER-PROBE.md`. Addon-agnostic findings go into `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`.
 
 ### Milestone 1: glass party and raid frames (issue #2)
 Files, in TOC order: `Compat.lua` → `Glass.lua` → `Engine.lua` → `Roster.lua` → `Frames.lua` → `Auras.lua` → `Blizzard.lua` → `Movers.lua` → `GlassRaidFrames.lua` → `Options.lua`.
