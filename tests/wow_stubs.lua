@@ -509,6 +509,9 @@ function SecureHandlerWrapScript(frame, script, header, preBody, postBody)
     frame._wraps[script] = { header = header, pre = preBody, post = postBody }
 end
 
+-- In the dump's _G walk: drops every override binding `owner` holds.
+function ClearOverrideBindings(owner) end
+
 -- Post-hook a method, as the client does: the original runs first.
 function hooksecurefunc(t, name, fn)
     local orig = t[name]

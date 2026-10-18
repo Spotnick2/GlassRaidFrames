@@ -144,6 +144,26 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     `GetBindingAction(key)` (the base binding) matched to the bars' `.commandName`; a key bound
     to anything else isn't taken over. Macros stay ≤ 255 characters (an 848-character one never
     reached its end, measured).
+  - **Any unit frame (#61)**: unless `db.clickCastOthers == false` (account-wide; on is the
+    default and isn't saved; `GRF.Settings.SetClickCastOthers`, `/grf clickcast all|ours`, the
+    main page's checkbox), the rows also reach Blizzard's unit frames (`ClickCast.BLIZZARD`)
+    and every frame in **Clique's `ClickCastFrames` table**. GlassUnitFrames registers itself
+    there, and GRF never looks its frames up by name.
+    - `ClickCast.Targets()` is the one list.
+    - We create the registry as a plain table if absent and watch its new keys (one quiet
+      apply on the next frame). A registry with a metatable belongs to another click-caster
+      (Clique) and is left alone. Unregistering (`= false`) takes effect at the next
+      reconciliation.
+    - Before we overwrite one of a frame's attributes, its own value is saved, and it's put
+      back when the row or the frame goes.
+    - Hover keys: every frame takes the same wraps, switched by a per-frame `grf-hover`
+      attribute. Frames are **never unwrapped**: `SecureHandlerUnwrapScript` pops the
+      outermost wrap, which may be another addon's.
+    - The `OnEnter` snippet binds only for you or a group member: `player`/`partyN`/`raidN`
+      by name, any other token through the restricted `UnitPlayerOrPetInParty/InRaid`
+      (in combat: `/fp steps raid ufgate`), and never a pet token.
+    - Known limit: a target that changes to a stranger while the cursor stays on the target
+      frame keeps the keys until the cursor leaves.
   - **One reconciliation** (`ClickCast.Apply`): desired vs installed, changing only what
     differs, so our own bindings can't loop through `UPDATE_BINDINGS`. `ClickCast.Request()`
     queues it through the combat queue (the installed bindings stay until combat ends:
