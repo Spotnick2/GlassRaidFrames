@@ -354,5 +354,10 @@ check(u.banner:GetText():find("other unit frames", 1, true), "and other unit fra
 GRF.Settings.SetClickCastOthers(false); CCO.Open(dock)
 check(not u.banner:GetText():find("other unit frames", 1, true), "not when it's off")
 GRF.Settings.SetClickCastOthers(true); CCO.Open(dock)
+-- And the edited role's keys mode (#63): a healer's are frames only.
+check(u.banner:GetText():find("Keys: hovered frames only", 1, true), "the healer's keys: hovered frames only")
+GRF.Settings.SetKeysAnywhere(true); CCO.Open(dock)
+check(u.banner:GetText():find("Keys: anywhere under the cursor", 1, true), "switched: anywhere")
+GRF.Settings.SetKeysAnywhere(false); CCO.Open(dock)
 eq(next(GRF.paintFailures), nil, "no reported failures")
 done("test_clickcast_options")

@@ -511,6 +511,8 @@ end
 
 -- In the dump's _G walk: drops every override binding `owner` holds.
 function ClearOverrideBindings(owner) end
+-- In the dump's _G walk: binds `key` to click the named button for `owner`.
+function SetOverrideBindingClick(owner, isPriority, key, buttonName, mouseClick) end
 
 -- Post-hook a method, as the client does: the original runs first.
 function hooksecurefunc(t, name, fn)
