@@ -1214,9 +1214,12 @@ local function gateSetup()
     -- Key 7 clicks the box with "LeftButton": *type1 targets your own
     -- target again, which is harmless. PostClick counts it.
     b:HookScript("PostClick", function(_, mouse)
+        local fighting = InCombatLockdown()
         P.gateClicks = (P.gateClicks or 0) + 1
-        say(string.format("key %s reached the box (%s): party=%s raid=%s seen=%s", GATE_KEY, show(mouse),
-            show(b:GetAttribute("rp-party")), show(b:GetAttribute("rp-raid")), show(b:GetAttribute("rp-seen"))))
+        if fighting then P.gateCombatClicks = (P.gateCombatClicks or 0) + 1 end
+        say(string.format("key %s reached the box (%s): party=%s raid=%s seen=%s combat=%s", GATE_KEY, show(mouse),
+            show(b:GetAttribute("rp-party")), show(b:GetAttribute("rp-raid")), show(b:GetAttribute("rp-seen")),
+            show(fighting)))
     end)
     local okW, errW = pcall(SecureHandlerWrapScript, b, "OnEnter", h, GATE_SNIPPET)
     say("WrapScript OnEnter: " .. (okW and "ok" or tostring(errW)))
@@ -1227,23 +1230,26 @@ local function gateSetup()
 end
 
 -- What the last hover saw. want = "yes" / "no" (nil: just record it).
-local function gateCheck(want)
+-- inCombat: the step only counts if a press came under lockdown (rev 1 let
+-- a 4 s fight end before the presses and still passed).
+local function gateCheck(want, inCombat)
     return function()
         local b = P.gateBox
         local party, raid = b and b:GetAttribute("rp-party"), b and b:GetAttribute("rp-raid")
-        local clicks = P.gateClicks or 0
-        P.gateClicks = 0
+        local clicks, combatClicks = P.gateClicks or 0, P.gateCombatClicks or 0
+        P.gateClicks, P.gateCombatClicks = 0, 0
         local member = (party == "yes" or raid == "yes") and "yes" or "no"
-        local name = try("target name", GetUnitName, "target", false)
+        local _, name = try("target name", GetUnitName, "target", false)
         local pass = party ~= "threw" and raid ~= "threw" and party ~= nil
             and (want == nil or member == want) and ((member == "yes") == (clicks > 0))
+            and (not inCombat or combatClicks > 0)
         return pass, "party=" .. show(party), "raid=" .. show(raid), "clicks=" .. clicks,
-            "target=" .. show(name)
+            "in combat=" .. combatClicks, "target=" .. show(name)
     end
 end
 
 Probe:Steps("ufgate", {
-    rev = 1,
+    rev = 2,
     title = "Hover keys on a target frame: is the unit in my group?",
     { text = "Out of combat, in a party. Setting up a green box bound to your target.",
       auto = true, run = gateSetup, check = function() return P.gateBox ~= nil, "box built" end },
@@ -1251,9 +1257,9 @@ Probe:Steps("ufgate", {
     { text = "Target YOURSELF. Hover the green box, press 7 once, then Next.", check = gateCheck(nil) },
     { text = "Target a friendly player NOT in your group, or a friendly NPC. Hover the box, press 7, then Next.",
       check = gateCheck("no") },
-    { text = "Pull a mob. In combat, target the PARTY MEMBER, hover the box, press 7 once, then Next.",
-      check = gateCheck("yes") },
-    { text = "Still in combat, target YOURSELF, hover the box, press 7 once, then Next.", check = gateCheck(nil) },
+    { text = "Pull a mob that lives a while (don't attack it). While it hits you, target the PARTY MEMBER, hover the box, press 7 once, then Next.",
+      check = gateCheck("yes", true) },
+    { text = "Still in combat, target YOURSELF, hover the box, press 7 once, then Next.", check = gateCheck(nil, true) },
     { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
 })
 
