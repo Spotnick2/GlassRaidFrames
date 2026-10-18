@@ -324,10 +324,19 @@ local function build()
 
     -- The glass (#37, #38): saved now, built after /reload.
     header("Look")
+    -- Following Glass UI (#67): said here, and the radios are off for the
+    -- session (the decision is made once, at load).
+    local suiteStatus = GRF.SuiteStatus()
+    if suiteStatus then controls.suiteNote = note(suiteStatus) end
     controls.look = radioRow("Glass", { { "clean", "Clean" }, { "classic", "Classic" } },
         function() return GRF.db.look or GRF.DEFAULT_LOOK end, S.SetLook)
     controls.body = radioRow("Body", { { "clear", "Clear" }, { "smoked", "Smoked" } },
         function() return GRF.db.glassBody or "clear" end, S.SetBody)
+    if GRF.following then
+        for _, group in ipairs({ controls.look, controls.body }) do
+            for _, rb in ipairs(group) do rb:SetEnabled(false) end
+        end
+    end
     note("The look takes effect after /reload.")
 
     -- Names (#18): one style for everyone, a nickname per person (by GUID);

@@ -45,6 +45,63 @@ function GRF.UseLook(look, body)
 end
 GRF.UseLook(GRF.DEFAULT_LOOK)
 
+-- The suite theme (#67, Glass UI's docs/SUITE.md, API 1). When the player
+-- turns Follow on in Glass UI, its Theme answer says "pearl" and this addon
+-- builds LibGlass's Pearl preset instead of its own look; the look and body
+-- are then suspended (refused, never written) but stay saved. Decided once,
+-- at ADDON_LOADED, before anything is built (GlassUnitFrames' #129).
+GRF.following = nil      -- "pearl" while this session built the suite theme
+GRF.suiteFailure = nil   -- why Pearl was asked for and not built
+GRF.PEARL_MINOR = 11     -- LibGlass r11 brought preset = "pearl"
+
+-- Glass UI's Suite table, or nil: anything but API 1 exactly counts as absent
+-- (the released Glass UI has no Suite at all).
+local function suite()
+    local G = rawget(_G, "GlassUI")
+    if type(G) ~= "table" then return nil end
+    local S = rawget(G, "Suite")
+    if type(S) ~= "table" or rawget(S, "API") ~= 1 then return nil end
+    if type(rawget(S, "Theme")) ~= "function" or type(rawget(S, "Report")) ~= "function" then return nil end
+    return S
+end
+
+-- The answer's preset, read under pcall: a junk answer can't throw at us.
+local function presetOf(answer)
+    if type(answer) ~= "table" then return nil end
+    local ok, preset = pcall(function() return answer.preset end)
+    return ok and preset == "pearl" and preset or nil
+end
+
+-- Ask Glass UI and, when told Pearl, build it. Returns the Suite table (nil
+-- when Glass UI doesn't speak the API) and LibGlass's MINOR at the attempt.
+-- Afterwards GRF.following or GRF.suiteFailure says what happened.
+function GRF.UseSuite(addon)
+    local S = suite()
+    if not S then return nil end
+    local ok, answer = pcall(S.Theme, addon)
+    local preset = ok and presetOf(answer) or nil
+    local _, minor = LibStub:GetLibrary("LibGlass-1.0", true)
+    if not preset then return S, minor end
+    if type(minor) ~= "number" or minor < GRF.PEARL_MINOR then
+        GRF.suiteFailure = "library-too-old"
+        return S, minor
+    end
+    local built, inst = pcall(lib.New, lib, { preset = preset })
+    if not built then
+        GRF.suiteFailure = "build-failed"
+        return S, minor
+    end
+    current = inst
+    GRF.following = preset
+    return S, minor
+end
+
+-- What the player reads while the suite theme owns the look, or after it failed.
+function GRF.SuiteStatus()
+    if GRF.following then return "Look: following Glass UI (Pearl), set in Glass UI" end
+    if GRF.suiteFailure then return "own look: " .. GRF.suiteFailure end
+end
+
 GRF.Glass = setmetatable({}, {
     __index = function(_, k) return current[k] end,
     __newindex = function(_, k, v) current[k] = v end,

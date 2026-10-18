@@ -135,6 +135,9 @@ function loadAddon(opts)
         end
     end
     if opts.db then GlassRaidFramesDB = opts.db end
+    -- After the files, before ADDON_LOADED: what loaded first (Glass UI, a
+    -- newer LibGlass) is in place by then.
+    if opts.beforeLoaded then opts.beforeLoaded() end
     WoW.fire("ADDON_LOADED", "GlassRaidFrames")
     WoW.fire("PLAYER_LOGIN")
     WoW.fire("PLAYER_ENTERING_WORLD", opts.initialLogin ~= false, false)

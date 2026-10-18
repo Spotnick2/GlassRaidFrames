@@ -132,6 +132,22 @@ end
 local Settings = {}
 GRF.Settings = Settings
 
+-- Glass UI's suite (#67): its Suite table when it speaks API 1 (set at
+-- ADDON_LOADED), and LibGlass's MINOR at the build attempt.
+local suite, suiteMinor
+
+-- What this session built, for Glass UI's page: plain values only, under
+-- pcall. Sent after the instance is built, and again whenever the click-cast
+-- setting changes (`others` is the setting, not proof of coverage).
+local function reportSuite()
+    if not suite then return end
+    pcall(suite.Report, ADDON, {
+        api = 1, built = GRF.following, reason = GRF.suiteFailure, minor = suiteMinor,
+        options = function() return GRF.Options and GRF.Options.Open() end,
+        clickCast = { open = function() GRF.ClickCastOptions.Open() end, others = GRF.ClickCast.Everywhere() },
+    })
+end
+
 -- "auto" or a role; false for anything else.
 function Settings.SetRole(pick)
     pick = type(pick) == "string" and pick:upper() or ""
@@ -158,6 +174,7 @@ end
 function Settings.SetClickCastOthers(on)
     if on == false then GRF.db.clickCastOthers = false else GRF.db.clickCastOthers = nil end
     GRF.ClickCast.Request()
+    reportSuite()   -- Glass UI's page shows this setting (#67)
 end
 
 -- The current role's hover keys anywhere under the cursor, or only on a
@@ -173,14 +190,16 @@ end
 
 -- The glass look (#37) and body (#38): saved now, built after /reload
 -- (LibGlass builds them into each surface). The defaults aren't saved.
+-- While following Glass UI (#67) they're set there: both refuse and write
+-- nothing.
 function Settings.SetLook(look)
-    if not GRF.LOOKS[look] then return false end
+    if GRF.following or not GRF.LOOKS[look] then return false end
     GRF.db.look = look ~= GRF.DEFAULT_LOOK and look or nil
     return true
 end
 
 function Settings.SetBody(body)
-    if not GRF.BODIES[body] then return false end
+    if GRF.following or not GRF.BODIES[body] then return false end
     GRF.db.glassBody = body == "smoked" and "smoked" or nil
     return true
 end
@@ -516,11 +535,14 @@ local function slash(msg)
         say("names: " .. (GRF.db.nameStyle or "first"))
     elseif cmd == "nick" then
         nickCommand((msg or ""):match("^%s*%S+%s*(.-)%s*$") or "")
+    elseif GRF.following and (cmd == "look" or cmd == "body") then
+        say(GRF.SuiteStatus())   -- set in Glass UI (#67)
     elseif cmd == "look" then
         if Settings.SetLook(arg) then
             say("look " .. arg .. ": takes effect after /reload")
         else
-            say("look classic|clean (now " .. GRF.look .. ")")
+            local failed = GRF.SuiteStatus()
+            say("look classic|clean (now " .. GRF.look .. (failed and "; " .. failed or "") .. ")")
         end
     elseif cmd == "body" then
         if Settings.SetBody(arg) then
@@ -559,8 +581,12 @@ local function slash(msg)
         say("/grf ind - buff and debuff indicators (per class); /grf ind <n> on|off, /grf ind reset")
         say("/grf names first|initial|full - how names show (all your characters)")
         say("/grf nick <nickname> | clear - your target's nickname; /grf nick lists, /grf nick remove <n>")
-        say("/grf look classic|clean - the glass (after /reload); now " .. GRF.look)
-        say("/grf body clear|smoked - the glass body (after /reload); now " .. GRF.body)
+        if GRF.following then
+            say("/grf look, /grf body - " .. GRF.SuiteStatus())
+        else
+            say("/grf look classic|clean - the glass (after /reload); now " .. GRF.look)
+            say("/grf body clear|smoked - the glass body (after /reload); now " .. GRF.body)
+        end
         say("/grf blizzard - toggle hiding Blizzard's party/raid frames")
         say("/grf failures - what failed to build or register")
         say("/grf version - client build vs the measured one")
@@ -576,7 +602,10 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         if arg1 ~= ADDON then return end
         GRF.db, GRF.char = ensureDefaults()
         -- The look first: every surface belongs to its instance (#37, #38).
-        GRF.UseLook(GRF.db.look, GRF.db.glassBody)
+        -- Glass UI's suite theme when following it (#67), else our own.
+        suite, suiteMinor = GRF.UseSuite(ADDON)
+        if not GRF.following then GRF.UseLook(GRF.db.look, GRF.db.glassBody) end
+        reportSuite()
         evaluateRole(true)
         -- A position saved before roles existed: every role without one gets
         -- it (the talents aren't read yet, so which role is yours isn't known).
