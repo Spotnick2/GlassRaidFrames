@@ -5,6 +5,7 @@
 ## Version: @project-version@
 ## SavedVariables: GlassRaidFramesDB
 ## SavedVariablesPerCharacter: GlassRaidFramesCharDB
+## OptionalDeps: GlassUI
 
 Libs\LibGlass-1.0\LibGlass-1.0.xml
 Compat.lua

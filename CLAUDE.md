@@ -62,13 +62,37 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     readable at ADDON_LOADED, after every file has taken `local Glass = GRF.Glass`.
     `GRF.UseLook(look, body)` builds the instance at ADDON_LOADED, before anything is built.
     So never keep an instance field (`STYLE`, `TUNABLES`, ...) in a file-load local.
-  - **The look:** `clean` (LibGlass's preset) **by default**, `classic` = r5's look
-    (`db.look = "classic"`). **The body:** clear (LibGlass's tint alpha) or smoked
-    (`db.glassBody = "smoked"`, `bodyAlpha = GRF.SMOKED` 0.65). Defaults aren't saved.
-    Switching takes `/reload` (`GRF.Settings.SetLook/SetBody`, `/grf look|body`, the main
-    page's Look rows).
-  - A clean instance builds `Apply(…, "small")` as `thin_small`: anything copying the tile's
-    rim reads `Glass.SIZES[g.size]` (the hover and target rims).
+  - **The look:** **Pearl** (LibGlass r11's suite preset) **by default** (owner, #67),
+    `clean` (r6's preset, `db.look = "clean"`) or `classic` = r5's look (`db.look =
+    "classic"`, built with no preset: r6-r10 refuse `"classic"`). No migration: a profile that
+    never chose a look moved from clean to Pearl. A winning LibGlass older than r11, or a Pearl
+    `New` that throws, builds clean and says `GRF.PEARL_FALLBACK` (at load, on the page and on
+    the `/grf look` line), with `GRF.lookFallback` set. **The body:** clear (LibGlass's tint
+    alpha) or smoked (`db.glassBody = "smoked"`, `bodyAlpha = GRF.SMOKED` 0.65). Defaults
+    aren't saved. Switching takes `/reload` (`GRF.Settings.SetLook/SetBody`,
+    `/grf look|body`, the main page's Look rows).
+  - Clean and Pearl instances build `Apply(…, "small")` as `thin_small`: anything copying the
+    tile's rim reads `Glass.SIZES[g.size]` (the hover and target rims).
+  - **Follow Glass UI (#67)**: the contract is Glass UI's `docs/SUITE.md` (API 1), done as in
+    GlassUnitFrames' #129. `## OptionalDeps: GlassUI`.
+    - At ADDON_LOADED, `GRF.UseSuite(ADDON)` runs before `UseLook`. It asks
+      `GlassUI.Suite.Theme` only when `Suite.API == 1` exactly and both functions exist.
+    - On `preset = "pearl"`:
+      - a winning LibGlass with MINOR < `GRF.PEARL_MINOR` (11) → `suiteFailure = "library-too-old"`,
+        and `New` isn't called;
+      - `New({ preset = "pearl" })` throwing → `"build-failed"`;
+      - else `GRF.following = "pearl"`, and the local look isn't built.
+    - Decided once per session: a newer LibGlass arriving later changes nothing.
+    - While following, `Settings.SetLook/SetBody`, `/grf look|body` and the radios refuse, and
+      the saved keys are kept. `GRF.SuiteStatus()` gives the text.
+    - `reportSuite()` sends `Report` (plain values, `clickCast = { open, others }`, where `others`
+      is `ClickCast.Everywhere()`) after the build, and again from `SetClickCastOthers`.
+    - The Look section's "Glass UI settings" button shows only when the Suite has the optional
+      `Open` (Glass UI bcbd20f, still API 1), following or not. `GRF.GlassUIOpener()` calls it
+      under `pcall`.
+    - Glass UI's SkinProbe reads `GRF.Glass.preset`/`STYLE` and `db.look`/`glassBody`: keep
+      those names. Tests: `test_suite.lua`. The real Pearl is built on r11+. An older
+      LibGlass is modelled by lowering the MINOR, and a failed build by a throwing `New`.
 - **`Header.lua`**: the layout. **Eight `SecureGroupHeaderTemplate` headers**, one per raid
   group (`groupFilter` 1..8), side by side in one protected container, as in EllesmereUI's
   separated mode. Header 1 also has `showParty`/`showPlayer`, so **the client switches between
@@ -403,7 +427,7 @@ texture names only grow; instances; upgrade rules).
   path: `MEDIA` is derived from it), and the TOC loads its XML first. `Libs/` is gitignored; a dev
   copy comes from the LibGlass checkout through its own `Tools\deploy.ps1`, which
   `Tools\deploy.ps1` here calls first. The tests load the same checkout.
-- **The pin:** `.pkgmeta` pins a tag (`tag: r10`), **never `tag: latest`**. Bump it only in a
+- **The pin:** `.pkgmeta` pins a tag (`tag: r11`), **never `tag: latest`**. Bump it only in a
   release made anyway: players get library fixes earlier through whichever glass addon ships the
   newest copy (LibStub runs that one). CI reads the pin from `.pkgmeta`
   (`tests/fetch_libglass.sh`), tests against it, and asserts the zip's `Libs/LibGlass-1.0/` is

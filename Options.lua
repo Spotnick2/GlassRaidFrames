@@ -158,7 +158,7 @@ local function radios(options, get, set)
     return group
 end
 
--- Radios across one line, after a title: "Glass  (o) Classic  (o) Clean".
+-- Radios across one line, after a title: "Glass  (o) Pearl  (o) Clean  (o) Classic".
 -- `step` is the room per choice (100 by default).
 local function radioRow(title, options, get, set, step)
     place(label(title), 0, 8)
@@ -324,11 +324,33 @@ local function build()
 
     -- The glass (#37, #38): saved now, built after /reload.
     header("Look")
-    controls.look = radioRow("Glass", { { "clean", "Clean" }, { "classic", "Classic" } },
+    -- Following Glass UI (#67): said here, and the radios are off for the
+    -- session (the decision is made once, at load).
+    local suiteStatus = GRF.SuiteStatus()
+    if suiteStatus then controls.suiteNote = note(suiteStatus) end
+    controls.look = radioRow("Glass", { { "pearl", "Pearl" }, { "clean", "Clean" }, { "classic", "Classic" } },
         function() return GRF.db.look or GRF.DEFAULT_LOOK end, S.SetLook)
     controls.body = radioRow("Body", { { "clear", "Clear" }, { "smoked", "Smoked" } },
         function() return GRF.db.glassBody or "clear" end, S.SetBody)
+    if GRF.following then
+        for _, group in ipairs({ controls.look, controls.body }) do
+            -- Disabled, and seen to be: the label is our own FontString and
+            -- the radio art has no disabled look (measured: both stayed bright).
+            for _, rb in ipairs(group) do
+                rb:SetEnabled(false)
+                rb:SetAlpha(0.5)
+                rb.label:SetTextColor(0.5, 0.5, 0.5)
+            end
+        end
+    end
     note("The look takes effect after /reload.")
+    -- Where the suite look is set (and Follow turned on or off), when Glass UI
+    -- can open it.
+    local openGlassUI = GRF.GlassUIOpener()
+    if openGlassUI then
+        controls.glassUI = button("Glass UI settings", 160, openGlassUI)
+        place(controls.glassUI, 30, 4)
+    end
 
     -- Names (#18): one style for everyone, a nickname per person (by GUID);
     -- account-wide. Last on the page: the nickname list grows downwards.
