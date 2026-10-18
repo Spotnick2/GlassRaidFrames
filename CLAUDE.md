@@ -62,13 +62,17 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     readable at ADDON_LOADED, after every file has taken `local Glass = GRF.Glass`.
     `GRF.UseLook(look, body)` builds the instance at ADDON_LOADED, before anything is built.
     So never keep an instance field (`STYLE`, `TUNABLES`, ...) in a file-load local.
-  - **The look:** `clean` (LibGlass's preset) **by default**, `classic` = r5's look
-    (`db.look = "classic"`). **The body:** clear (LibGlass's tint alpha) or smoked
-    (`db.glassBody = "smoked"`, `bodyAlpha = GRF.SMOKED` 0.65). Defaults aren't saved.
-    Switching takes `/reload` (`GRF.Settings.SetLook/SetBody`, `/grf look|body`, the main
-    page's Look rows).
-  - A clean instance builds `Apply(…, "small")` as `thin_small`: anything copying the tile's
-    rim reads `Glass.SIZES[g.size]` (the hover and target rims).
+  - **The look:** **Pearl** (LibGlass r11's suite preset) **by default** (owner, #67),
+    `clean` (r6's preset, `db.look = "clean"`) or `classic` = r5's look (`db.look =
+    "classic"`, built with no preset: r6-r10 refuse `"classic"`). No migration: a profile that
+    never chose a look moved from clean to Pearl. A winning LibGlass older than r11, or a Pearl
+    `New` that throws, builds clean and says `GRF.PEARL_FALLBACK` (at load, on the page and on
+    the `/grf look` line), with `GRF.lookFallback` set. **The body:** clear (LibGlass's tint
+    alpha) or smoked (`db.glassBody = "smoked"`, `bodyAlpha = GRF.SMOKED` 0.65). Defaults
+    aren't saved. Switching takes `/reload` (`GRF.Settings.SetLook/SetBody`,
+    `/grf look|body`, the main page's Look rows).
+  - Clean and Pearl instances build `Apply(…, "small")` as `thin_small`: anything copying the
+    tile's rim reads `Glass.SIZES[g.size]` (the hover and target rims).
   - **Follow Glass UI (#67)**: the contract is Glass UI's `docs/SUITE.md` (API 1), done as in
     GlassUnitFrames' #129. `## OptionalDeps: GlassUI`.
     - At ADDON_LOADED, `GRF.UseSuite(ADDON)` runs before `UseLook`. It asks

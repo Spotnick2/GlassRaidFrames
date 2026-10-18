@@ -158,7 +158,7 @@ local function radios(options, get, set)
     return group
 end
 
--- Radios across one line, after a title: "Glass  (o) Classic  (o) Clean".
+-- Radios across one line, after a title: "Glass  (o) Pearl  (o) Clean  (o) Classic".
 -- `step` is the room per choice (100 by default).
 local function radioRow(title, options, get, set, step)
     place(label(title), 0, 8)
@@ -328,7 +328,7 @@ local function build()
     -- session (the decision is made once, at load).
     local suiteStatus = GRF.SuiteStatus()
     if suiteStatus then controls.suiteNote = note(suiteStatus) end
-    controls.look = radioRow("Glass", { { "clean", "Clean" }, { "classic", "Classic" } },
+    controls.look = radioRow("Glass", { { "pearl", "Pearl" }, { "clean", "Clean" }, { "classic", "Classic" } },
         function() return GRF.db.look or GRF.DEFAULT_LOOK end, S.SetLook)
     controls.body = radioRow("Body", { { "clear", "Clear" }, { "smoked", "Smoked" } },
         function() return GRF.db.glassBody or "clear" end, S.SetBody)

@@ -542,7 +542,7 @@ local function slash(msg)
             say("look " .. arg .. ": takes effect after /reload")
         else
             local failed = GRF.SuiteStatus()
-            say("look classic|clean (now " .. GRF.look .. (failed and "; " .. failed or "") .. ")")
+            say("look pearl|clean|classic (now " .. GRF.look .. (failed and "; " .. failed or "") .. ")")
         end
     elseif cmd == "body" then
         if Settings.SetBody(arg) then
@@ -584,7 +584,7 @@ local function slash(msg)
         if GRF.following then
             say("/grf look, /grf body - " .. GRF.SuiteStatus())
         else
-            say("/grf look classic|clean - the glass (after /reload); now " .. GRF.look)
+            say("/grf look pearl|clean|classic - the glass (after /reload); now " .. GRF.look)
             say("/grf body clear|smoked - the glass body (after /reload); now " .. GRF.body)
         end
         say("/grf blizzard - toggle hiding Blizzard's party/raid frames")
@@ -605,6 +605,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         -- Glass UI's suite theme when following it (#67), else our own.
         suite, suiteMinor = GRF.UseSuite(ADDON)
         if not GRF.following then GRF.UseLook(GRF.db.look, GRF.db.glassBody) end
+        if GRF.lookFallback then say("look: " .. GRF.PEARL_FALLBACK) end
         reportSuite()
         evaluateRole(true)
         -- A position saved before roles existed: every role without one gets
