@@ -344,6 +344,13 @@ local function build()
         end
     end
     note("The look takes effect after /reload.")
+    -- Where the suite look is set (and Follow turned on or off), when Glass UI
+    -- can open it.
+    local openGlassUI = GRF.GlassUIOpener()
+    if openGlassUI then
+        controls.glassUI = button("Glass UI settings", 160, openGlassUI)
+        place(controls.glassUI, 30, 4)
+    end
 
     -- Names (#18): one style for everyone, a nickname per person (by GUID);
     -- account-wide. Last on the page: the nickname list grows downwards.

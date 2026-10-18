@@ -72,7 +72,7 @@ local function boot(ui, db, minor, newFails)
     dofile("tests/wow_stubs.lua")
     party(1)
     reports, themeCalls, pearlBuilt = {}, {}, 0
-    if ui ~= nil then rawset(_G, "GlassUI", ui) end
+    rawset(_G, "GlassUI", ui)   -- nil: no Glass UI this boot
     return loadAddon({ db = db, beforeLoaded = libGlass(minor, newFails) })
 end
 
@@ -206,6 +206,7 @@ for _, group in ipairs({ O.controls.look, O.controls.body }) do
     end
 end
 eq(O.controls.names[1]._alpha, nil, "the Names radios stay bright")
+eq(O.controls.glassUI, nil, "no Glass UI button: this Suite can't open its settings")
 O.controls.look[1]._scripts.OnClick(O.controls.look[1])
 eq(GRF.db.look, "classic", "a click on a radio writes nothing")
 -- The click-cast setting changes: reported again, with the new value.
@@ -229,5 +230,36 @@ eq(O.controls.look[1]._alpha, nil, "and bright")
 eq(O.controls.look[1].label._textColor, nil, "their labels too")
 O.controls.look[1]._scripts.OnClick(O.controls.look[1])
 eq(GRF.db.look, nil, "and still save")
+
+-- Glass UI's settings, one click away, when its Suite has the optional Open
+-- (following or not: it's also where Follow is turned on).
+for _, following in ipairs({ true, false }) do
+    local ui = glassUI(following and pearl() or function() return nil, "not-following" end)
+    local openCalls = 0
+    ui.Suite.Open = function(...) openCalls = openCalls + 1; eq(select("#", ...), 0, "Open takes no arguments") end
+    GRF = boot(ui, saved(), 11)
+    O = GRF.Options._test
+    O.panel._scripts.OnShow(O.panel)
+    local b = O.controls.glassUI
+    local what = following and "following" or "not following"
+    check(b ~= nil, what .. ": a Glass UI settings button")
+    eq(b and b:GetText(), "Glass UI settings", what .. ": named so")
+    if b then b._scripts.OnClick(b) end
+    eq(openCalls, 1, what .. ": the click opens Glass UI's settings")
+end
+local ui = glassUI(pearl())
+ui.Suite.Open = function() error("boom") end
+GRF = boot(ui, saved(), 11)
+O = GRF.Options._test
+O.panel._scripts.OnShow(O.panel)
+check(pcall(O.controls.glassUI._scripts.OnClick, O.controls.glassUI), "an Open that throws stays Glass UI's problem")
+GRF = boot(nil, saved(), 11)
+O = GRF.Options._test
+O.panel._scripts.OnShow(O.panel)
+eq(O.controls.glassUI, nil, "no Glass UI: no button")
+GRF = boot({ Suite = { API = 2, Theme = pearl, Report = function() end, Open = function() end } }, saved(), 11)
+O = GRF.Options._test
+O.panel._scripts.OnShow(O.panel)
+eq(O.controls.glassUI, nil, "a Suite that isn't API 1: no button")
 
 done("test_suite")

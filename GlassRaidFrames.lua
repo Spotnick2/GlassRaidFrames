@@ -148,6 +148,14 @@ local function reportSuite()
     })
 end
 
+-- Opens Glass UI's settings, when its Suite offers that (an optional
+-- `Suite.Open`, still API 1): a function for the Look section's button, or nil.
+function GRF.GlassUIOpener()
+    if suite and type(rawget(suite, "Open")) == "function" then
+        return function() pcall(suite.Open) end
+    end
+end
+
 -- "auto" or a role; false for anything else.
 function Settings.SetRole(pick)
     pick = type(pick) == "string" and pick:upper() or ""

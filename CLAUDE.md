@@ -87,6 +87,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
       the saved keys are kept. `GRF.SuiteStatus()` gives the text.
     - `reportSuite()` sends `Report` (plain values, `clickCast = { open, others }`, where `others`
       is `ClickCast.Everywhere()`) after the build, and again from `SetClickCastOthers`.
+    - The Look section's "Glass UI settings" button shows only when the Suite has the optional
+      `Open` (Glass UI bcbd20f, still API 1), following or not. `GRF.GlassUIOpener()` calls it
+      under `pcall`.
     - Glass UI's SkinProbe reads `GRF.Glass.preset`/`STYLE` and `db.look`/`glassBody`: keep
       those names. Tests: `test_suite.lua`. The real Pearl is built on r11+. An older
       LibGlass is modelled by lowering the MINOR, and a failed build by a throwing `New`.
