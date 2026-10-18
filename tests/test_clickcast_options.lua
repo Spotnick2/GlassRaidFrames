@@ -348,5 +348,11 @@ check(u.delete.glass.wash._gradient[3].a < u.add.glass.wash._gradient[3].a, "dis
 CCO.Open(dock)
 eq(material.panes[1]:GetHeight(), 450, "backing resizes with hosted editor")
 eq(material.panes[1]:GetObjectType(), "Texture", "backing cannot intercept input")
+-- The idle banner says where bindings apply, and to whom (Codex P2 on #62).
+check(u.banner:GetText():find("whoever the hovered frame shows", 1, true), "the banner: whoever a hovered frame shows")
+check(u.banner:GetText():find("other unit frames", 1, true), "and other unit frames while that's on")
+GRF.Settings.SetClickCastOthers(false); CCO.Open(dock)
+check(not u.banner:GetText():find("other unit frames", 1, true), "not when it's off")
+GRF.Settings.SetClickCastOthers(true); CCO.Open(dock)
 eq(next(GRF.paintFailures), nil, "no reported failures")
 done("test_clickcast_options")
