@@ -130,20 +130,42 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     measured); unpinned uses the bare localized name (the highest rank). Blizzard's Click Cast
     Bindings act first on the same click (Forever's `SecureUnitButton_OnClick`).
   - **Key rows**: one hidden `SecureActionButtonTemplate` per key (a modifier held on a key
-    binding does **not** select modified attributes, measured), bound **only while a group tile
-    is hovered**: a secure `OnEnter` wrap on each group child (`SecureHandlerWrapScript`,
+    binding does **not** select modified attributes, measured), bound **only while a tile
+    is hovered**: a secure `OnEnter` wrap on each child, group and pet (`SecureHandlerWrapScript`,
     header `GlassRaidFramesKeyHeader`) runs `control:RunFor(self, <grf-hoverkeys>)`, whose
     lines are `self:SetBindingClick(true, key, button)` (the tile owns the binding); `OnLeave`
-    and `OnHide` run `self:ClearBindings()`. Cell's and Clique's design. Our tiles only show
-    group members, so **a stranger under the cursor never gets the spell**, in combat too (the
-    owner's rule). A `[party]`/`[raid]` macro check **can't** do it: both read false in combat,
-    for a member (measured on 70425). Off a tile the key does its usual action. Pets aren't
-    wrapped. The macro is `/cast [@mouseover,help,nodead] <spell>`, then `/click` of the key's
+    and `OnHide` run `self:ClearBindings()`. Cell's and Clique's design. Bound only on a frame,
+    so **a character out in the world under the cursor never gets the spell** (the owner's
+    rule, #48: a permanent `@mouseover` key did). Whoever a hovered frame shows does, a
+    stranger or a pet included, as in Cell and EllesmereUI (owner, 2026-10-18). A
+    `[party]`/`[raid]` macro check reads false in combat (measured on 70425). Off a frame the
+    key does its usual action. The macro is `/cast [@mouseover,help,nodead] <spell>`, then `/click` of the key's
     own action button on the **exact complement** (`[noexists][nohelp][dead]`). Rez spells
     (`ClickCast.REZ`, by ID) swap dead/nodead. The fallback button comes from
     `GetBindingAction(key)` (the base binding) matched to the bars' `.commandName`; a key bound
     to anything else isn't taken over. Macros stay ≤ 255 characters (an 848-character one never
     reached its end, measured).
+  - **Any unit frame (#61)**: unless `db.clickCastOthers == false` (account-wide; on is the
+    default and isn't saved; `GRF.Settings.SetClickCastOthers`, `/grf clickcast all|ours`, the
+    main page's checkbox), the rows also reach Blizzard's unit frames (`ClickCast.BLIZZARD`)
+    and every frame in **Clique's `ClickCastFrames` table**. GlassUnitFrames registers itself
+    there, and GRF never looks its frames up by name.
+    - `ClickCast.Targets()` is the one list.
+    - We create the registry if absent. Its entries live **behind** the public table
+      (`__index`/`__newindex`, Clique's design): Lua calls `__newindex` only for an absent key,
+      so raw entries would hide `false` → `true`. Entries made before we loaded move behind
+      it. Every assignment queues one quiet apply on the next frame. A registry with a
+      metatable belongs to another click-caster (Clique) and is left alone.
+    - Before we overwrite one of a frame's attributes, its own value is saved, and it's put
+      back when the row or the frame goes.
+    - Hover keys: every frame takes the same wraps, switched by a per-frame `grf-hover`
+      attribute. Frames are **never unwrapped**: `SecureHandlerUnwrapScript` pops the
+      outermost wrap, which may be another addon's.
+    - **No group check** (owner, 2026-10-18): whoever the hovered frame shows gets the spell,
+      as in Cell (its Spotlight frames) and EllesmereUI (its "all frames"), which filter only
+      friend/enemy. A group-only gate was built and measured, then dropped: the restricted
+      `UnitPlayerOrPetInParty` keeps answering in combat, unlike `[party]` (70450,
+      `docs/FOREVER-PROBE.md` item 12), if one is ever wanted.
   - **One reconciliation** (`ClickCast.Apply`): desired vs installed, changing only what
     differs, so our own bindings can't loop through `UPDATE_BINDINGS`. `ClickCast.Request()`
     queues it through the combat queue (the installed bindings stay until combat ends:
@@ -234,8 +256,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - When hidden, its children release their units, and they re-sync when shown.
   - Pets get a fixed colour (`Frames.PET`).
   - The announced rectangle covers the pets when they're shown.
-  - Mouse bindings reach pet tiles (`Header.AllChildren`). Hover keys don't target pets: only
-    the group tiles (`Header.children`) get the `OnEnter` wrap that binds them.
+  - Mouse bindings and hover keys reach pet tiles (`Header.AllChildren`): pets heal like
+    players (owner, 2026-10-18; Codex P2 on #62).
 - **Tile size per role** (`profiles[role].size`, `/grf size`, width and height sliders on the
   main page). The default is **82×58** (Cell's look, measured side by side), and
   `GlassRaidFrames.xml` must match `Header.DEFAULT_W/H` (`test_toc`).
@@ -337,7 +359,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   hand-edit it.
 - **`Tools/RaidProbe/`**: the throwaway measurement addon, a **ForeverProbe module** (#44): `/fp raid
   <command>` (`/fp raid` lists them), its lines in the `/fp` console, never in chat. Build and change
-  it by `..\ForeverProbe\docs\GUIDE.md` (the index is `C:\Projects\WoW\References\PROBES.md`);
+  it by `..\ForeverProbe\docs\GUIDE.md` (the index is `C:\Projects\WoW\References\Docs\PROBES.md`);
   never edit ForeverProbe from here (an issue on `Spotnick2/ForeverProbe` instead).
   - It logs every line to `RaidProbeDB.log` (bound with `Probe:UseLog`); after a `/reload` the session is
     on disk at `WTF\Account\<account>\SavedVariables\RaidProbe.lua`, and the host's
@@ -365,7 +387,7 @@ texture names only grow; instances; upgrade rules).
   path: `MEDIA` is derived from it), and the TOC loads its XML first. `Libs/` is gitignored; a dev
   copy comes from the LibGlass checkout through its own `Tools\deploy.ps1`, which
   `Tools\deploy.ps1` here calls first. The tests load the same checkout.
-- **The pin:** `.pkgmeta` pins a tag (`tag: r9`), **never `tag: latest`**. Bump it only in a
+- **The pin:** `.pkgmeta` pins a tag (`tag: r10`), **never `tag: latest`**. Bump it only in a
   release made anyway: players get library fixes earlier through whichever glass addon ships the
   newest copy (LibStub runs that one). CI reads the pin from `.pkgmeta`
   (`tests/fetch_libglass.sh`), tests against it, and asserts the zip's `Libs/LibGlass-1.0/` is
@@ -380,10 +402,10 @@ texture names only grow; instances; upgrade rules).
 
 ## References: read these before touching an unfamiliar API
 
-- `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md` holds the canonical addon-agnostic field
+- `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md` holds the canonical addon-agnostic field
   notes, measured on the live client. Treat them as fact; don't re-derive them. Other sessions
   edit this file, so write new addon-agnostic findings there, not into a copy in this repo.
-- `C:\Projects\WoW\References\forever-api-1.60.1.70338.md` is the full API dump for the current
+- `C:\Projects\WoW\References\Forever\api\forever-api-1.60.1.70338.md` is the full API dump for the current
   build. It lists documented functions and events, enums, **widget methods** (the only list of
   those) and the `_G` walk. It proves a name exists, not that it works. **Presence is not a
   contract.**
@@ -401,11 +423,11 @@ texture names only grow; instances; upgrade rules).
 
 ## Reference addons
 
-These live in `C:\Projects\WoW\References`. They show what works on this client *in practice*,
+These live in `C:\Projects\WoW\References\Addons` (its `INDEX.md` lists versions). They show what works on this client *in practice*,
 which the dump can't tell you. Reason about what they do rather than copying it, and **write
 our own code**.
 
-- **`Cell-r274-release\Cell` is the design reference** for *what* group frames and
+- **`UnitFrames\Cell\Cell` is the design reference** for *what* group frames and
   click-casting do.
   - It is not Forever-aware. Almost all its secure machinery depends on restricted snippets,
     which threw on early builds (they run on 70425; only the hover keys use one here):
@@ -419,7 +441,7 @@ our own code**.
       `ClearClickCastings` (plain `SetAttribute`), and the list-pane editing UI;
     - `Indicators\Built-in.lua`;
     - `Defaults\ClickCasting_DefaultSpells_Vanilla.lua`.
-- **`Decursive-2.9.0-RC2-19-gfbc816f-forever\Decursive` is the dispel reference.** It is ported
+- **`BuffsDebuffs\Decursive-Forever\Decursive` is the dispel reference.** It is ported
   to Forever (`DC.FOREVER`, `DC.RESTRICTED_AURAS`):
   - `Dcr_DebuffsFrame.lua` ~1124–1256: one `AuraContainer` per micro unit frame, with one
     `AddAuraSlot("HARMFUL", {candidateFilters={includeDispelTypes=…}})` per cure priority. Each
@@ -431,11 +453,11 @@ our own code**.
   - `Dcr_12_1_Sounds.lua`: `C_UnitAuras.AddAuraSound`, keyed on exact spell IDs.
   - `DCR_init.lua` ~522–641: the Classic cure spell table.
   - It gates aura reads on `C_RestrictedActions` and guards values with `canaccessvalue`.
-- **`DinoUnitFrames_Forever_Beta_v3.0` is the Forever reference for group buttons.** Its
+- **`UnitFrames\DinoUnitFrames-Forever` is the Forever reference for group buttons.** Its
   `modules\units.lua` builds `party1-4`/`raid1-40` buttons by hand, because the header's
   initialisation failed here. See its changelog, v2.10–v2.34.
 
-- **`ForeverUI-0.4.42\ForeverUI` is a Forever-native UI suite** with group frames
+- **`UISuites\ForeverUI\ForeverUI` is a Forever-native UI suite** with group frames
   (`Modules\Frames\`). It confirms the design: per-group `SecureGroupHeaderTemplate` headers
   with no `initialConfigFunction` ("the error there aborts frame creation entirely"), and a
   secret-safe range fade. Its field notes:

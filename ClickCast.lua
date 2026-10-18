@@ -30,6 +30,17 @@
 --   Macros stay under 255 characters (an 848-character one never reached its
 --   end: measured).
 -- - Resurrection spells (by ID) aim at DEAD members instead.
+-- - ANY UNIT FRAME (#61): unless db.clickCastOthers is false, the same rows
+--   reach Blizzard's unit frames and every frame registered in Clique's
+--   ClickCastFrames table (GlassUnitFrames, DinoUF, SUF, oUF...). A frame's
+--   own value of an attribute we take is saved and put back when the row or
+--   the frame goes. Hover keys get the same wraps, gated per frame by a
+--   grf-hover attribute (never unwrapped: SecureHandlerUnwrapScript pops the
+--   outermost wrap, which may be another addon's). Any friendly unit a frame
+--   shows gets the spell, a stranger on the target frame or a pet included,
+--   as in Cell and EllesmereUI (owner, 2026-10-18): binding only while a
+--   frame is hovered already keeps a character out in the world from
+--   getting it, and [help] sends anything hostile to the key's own action.
 -- - Everything protected happens out of combat, through the addon's one combat
 --   queue, in ONE reconciliation that only changes what differs, so our own
 --   binding changes (UPDATE_BINDINGS) can't loop.
@@ -57,6 +68,42 @@ end
 -- each button's own commandName (Blizzard_ActionBar/Shared/ActionBar.lua:37).
 ClickCast.BARS = { "MainActionBar", "MultiBarBottomLeft", "MultiBarBottomRight", "MultiBarRight",
                    "MultiBarLeft", "MultiBar5", "MultiBar6", "MultiBar7" }
+
+-- Blizzard's unit frames (SecureUnitButtonTemplate, Blizzard_UnitFrame). Its
+-- party frames aren't here: Blizzard.lua hides them for our tiles.
+ClickCast.BLIZZARD = { "PlayerFrame", "PetFrame", "TargetFrame", "TargetFrameToT", "FocusFrame", "FocusFrameToT" }
+
+-- Clique's registry: other addons set ClickCastFrames[frame] = true (false or
+-- nil = leave it). The entries live behind the public table (Clique's own
+-- design), so every assignment reaches __newindex: Lua calls it only for an
+-- absent key, and false -> true would go unseen (Codex P2 on #62). Entries
+-- made before we loaded move behind it. A table that already has a
+-- metatable belongs to another click-caster: left alone.
+local registry = {}   -- frame -> true
+local public = rawget(_G, "ClickCastFrames")
+if public == nil then
+    public = {}
+    rawset(_G, "ClickCastFrames", public)
+end
+if type(public) == "table" and getmetatable(public) == nil then
+    local early = {}
+    for frame, on in pairs(public) do early[frame] = on end
+    for frame, on in pairs(early) do
+        rawset(public, frame, nil)   -- false ones too: a raw key never reaches __newindex
+        registry[frame] = on and true or nil
+    end
+    local queued = false
+    setmetatable(public, { __index = registry, __newindex = function(_, frame, on)
+        registry[frame] = on and true or nil
+        -- Addons register frames in bursts: one quiet reconciliation next frame.
+        if queued then return end
+        queued = true
+        C_Timer.After(0, function()
+            queued = false
+            if GRF.WhenOutOfCombat then GRF.WhenOutOfCombat("clickcast", ClickCast.Apply, false) end
+        end)
+    end })
+end
 
 --------------------------------------------------------------------------------
 -- Pure helpers
@@ -253,12 +300,79 @@ end
 local installedAttrs, installedKeys = {}, {}
 local keyButtons = {}   -- KEY -> hidden secure button
 local keyHeader          -- the secure handler whose snippets bind the keys on hover
-local wrapped = setmetatable({}, { __mode = "k" })   -- group children already wrapped
+local weak = { __mode = "k" }
+local wrapped = setmetatable({}, weak)    -- frames already wrapped (never unwrapped)
+local applied = setmetatable({}, weak)    -- frame -> the attribute set it carries
+local original = setmetatable({}, weak)   -- frame -> { attr = its own value, or NONE }
+local hovering = setmetatable({}, weak)   -- frames whose grf-hover is on
+local NONE, EMPTY = {}, {}
 
--- What a hovered tile runs (as itself): bind every key to its button.
+-- What a hovered frame runs (as itself) while its grf-hover is on: bind
+-- every key to its button.
 ClickCast.KEYS_ATTR = "grf-hoverkeys"
-local ENTER = "control:RunFor(self, control:GetAttribute(\"" .. ClickCast.KEYS_ATTR .. "\"))"
+ClickCast.HOVER_ATTR = "grf-hover"
+local ENTER = [[
+    if self:GetAttribute("]] .. ClickCast.HOVER_ATTR .. [[") then
+        control:RunFor(self, control:GetAttribute("]] .. ClickCast.KEYS_ATTR .. [["))
+    end
+]]
 local LEAVE = "self:ClearBindings()"
+
+-- Whether the rows reach other addons' and Blizzard's frames (#61), account-wide.
+function ClickCast.Everywhere()
+    return not (GRF.db and GRF.db.clickCastOthers == false)
+end
+
+-- A frame we may set attributes on: a live, unforbidden widget.
+local function usable(f)
+    if type(f) ~= "table" or type(f.SetAttribute) ~= "function" or type(f.GetAttribute) ~= "function" then
+        return false
+    end
+    local ok, forbidden = pcall(function() return f.IsForbidden and f:IsForbidden() end)
+    return ok and not forbidden
+end
+
+-- Every frame the rows and hover keys reach: our group and pet tiles, then
+-- Blizzard's and registered frames.
+function ClickCast.Targets()
+    local list, seen = {}, {}
+    local function add(f)
+        if seen[f] or not usable(f) then return end
+        seen[f] = true
+        list[#list + 1] = f
+    end
+    for _, c in ipairs(GRF.Header and GRF.Header.AllChildren() or {}) do add(c) end
+    if ClickCast.Everywhere() then
+        for _, name in ipairs(ClickCast.BLIZZARD) do add(rawget(_G, name)) end
+        for f in pairs(registry) do add(f) end
+    end
+    return list
+end
+
+-- Give a frame the attribute set `want`, keeping its own values to put back.
+local function carry(f, want)
+    local had = applied[f] or EMPTY
+    if had == want then return end
+    local own = original[f] or {}
+    original[f] = own
+    for attr in pairs(had) do
+        if want[attr] == nil then
+            local v = own[attr]
+            own[attr] = nil
+            if v == NONE then v = nil end
+            f:SetAttribute(attr, v)
+        end
+    end
+    for attr, value in pairs(want) do
+        if own[attr] == nil then
+            local v = f:GetAttribute(attr)
+            if v == nil then v = NONE end
+            own[attr] = v
+        end
+        f:SetAttribute(attr, value)
+    end
+    applied[f] = want ~= EMPTY and want or nil
+end
 ClickCast.problems = {}
 ClickCast.notes = {}     -- [row] = a non-blocking remark for the options
 ClickCast.pending = false
@@ -297,40 +411,53 @@ function ClickCast.Apply()
     ClickCast.notes = {}
     local attrs, keys, problems = ClickCast.Desired(ClickCast.Rows())
     ClickCast.problems = problems
-    -- Group and pet tiles alike: mouse bindings work on a pet's tile too.
-    local children = GRF.Header and GRF.Header.AllChildren() or {}
+    if not same(attrs, installedAttrs) then installedAttrs = attrs end
+    local frames = ClickCast.Targets()
+    local inSet = {}
+    for _, f in ipairs(frames) do inSet[f] = true end
 
-    -- No children yet (the grid isn't built): nothing to record as installed,
-    -- or the attributes would never reach them. The build applies again.
-    if #children > 0 and not same(attrs, installedAttrs) then
-        for _, child in ipairs(children) do
-            for attr in pairs(installedAttrs) do
-                if attrs[attr] == nil then child:SetAttribute(attr, nil) end
-            end
-            for attr, value in pairs(attrs) do child:SetAttribute(attr, value) end
+    -- Mouse rows: every frame carries the installed set (a frame registered
+    -- since gets it now); a frame that left the set gets its own values back.
+    -- One frame's failure (another addon's widget) never costs the rest.
+    for f in pairs(applied) do
+        if not inSet[f] then
+            local ok, err = pcall(carry, f, EMPTY)
+            if not ok then API.Fail("clickcast frame", err) end
         end
-        installedAttrs = attrs
+    end
+    for _, f in ipairs(frames) do
+        local ok, err = pcall(carry, f, installedAttrs)
+        if not ok then API.Fail("clickcast frame", err) end
     end
 
-    -- Hover keys: the group tiles (not pets: keys aim at members) get the
-    -- wraps once; the key list lives in one header attribute the wraps read.
-    local tiles = GRF.Header and GRF.Header.children or {}
-    if #tiles > 0 then
-        if not keyHeader then
-            keyHeader = CreateFrame("Frame", "GlassRaidFramesKeyHeader", UIParent, "SecureHandlerBaseTemplate")
-            -- RunFor refuses a non-string body: with no key rows (a mouse-only
-            -- profile) a hover must still find one (Codex P2 on #49).
-            keyHeader:SetAttribute(ClickCast.KEYS_ATTR, "")
+    -- Hover keys: each frame is wrapped once and switched on by its
+    -- grf-hover attribute; the key list lives in one header attribute the
+    -- wraps read.
+    if not keyHeader and #frames > 0 then
+        keyHeader = CreateFrame("Frame", "GlassRaidFramesKeyHeader", UIParent, "SecureHandlerBaseTemplate")
+        -- RunFor refuses a non-string body: with no key rows (a mouse-only
+        -- profile) a hover must still find one (Codex P2 on #49).
+        keyHeader:SetAttribute(ClickCast.KEYS_ATTR, "")
+    end
+    for f in pairs(hovering) do
+        if not inSet[f] then
+            pcall(f.SetAttribute, f, ClickCast.HOVER_ATTR, nil)
+            pcall(ClearOverrideBindings, f)
+            hovering[f] = nil
         end
-        for _, child in ipairs(tiles) do
-            if not wrapped[child] then
-                local ok, err = pcall(function()
-                    SecureHandlerWrapScript(child, "OnEnter", keyHeader, ENTER)
-                    SecureHandlerWrapScript(child, "OnLeave", keyHeader, LEAVE)
-                    SecureHandlerWrapScript(child, "OnHide", keyHeader, LEAVE)
-                end)
-                if ok then wrapped[child] = true else API.Fail("hover keys", err) end
-            end
+    end
+    for _, f in ipairs(frames) do
+        if not hovering[f] then
+            local ok, err = pcall(function()
+                if not wrapped[f] then
+                    SecureHandlerWrapScript(f, "OnEnter", keyHeader, ENTER)
+                    SecureHandlerWrapScript(f, "OnLeave", keyHeader, LEAVE)
+                    SecureHandlerWrapScript(f, "OnHide", keyHeader, LEAVE)
+                    wrapped[f] = true
+                end
+                f:SetAttribute(ClickCast.HOVER_ATTR, true)
+            end)
+            if ok then hovering[f] = true else API.Fail("hover keys", err) end
         end
     end
     if keyHeader and not same(keys, installedKeys) then
@@ -344,9 +471,9 @@ function ClickCast.Apply()
         end
         table.sort(lines)
         keyHeader:SetAttribute(ClickCast.KEYS_ATTR, table.concat(lines, "\n"))
-        -- A tile hovered right now still holds the old keys: drop them (the
+        -- A frame hovered right now still holds the old keys: drop them (the
         -- next OnEnter binds the new ones).
-        for _, child in ipairs(tiles) do ClearOverrideBindings(child) end
+        for f in pairs(hovering) do pcall(ClearOverrideBindings, f) end
         installedKeys = keys
     end
     if ClickCast.onApplied then pcall(ClickCast.onApplied) end
@@ -431,4 +558,5 @@ function ClickCast.Warnings(row)
 end
 
 ClickCast._test = { installed = function() return installedAttrs, installedKeys end, keyButtons = keyButtons,
+                    registry = function() return registry end, ENTER = ENTER,
                     keyHeader = function() return keyHeader end, watcher = watcher }

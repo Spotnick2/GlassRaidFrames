@@ -256,6 +256,9 @@ local function build()
     end)
     place(casting, 36, 4)
     controls.clickcast = casting
+    controls.clickcastOthers = checkbox("Click-cast on other unit frames too (Blizzard's and other addons')",
+        function() return GRF.ClickCast.Everywhere() end, S.SetClickCastOthers)
+    note("Clicks and hover keys cast on whoever a hovered frame shows, strangers and pets included. Over an enemy, a key does its normal action.")
 
     header("Role")
     note("Every setting below the role is kept per role: the healer layout and the damage layouts don't move each other.")

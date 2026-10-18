@@ -15,7 +15,7 @@
 --   so test_methods.lua can check each against the dump's widget methods.
 
 WoW = {}
-local DUMP = os.getenv("GLASSRF_API_DUMP") or "C:/Projects/WoW/References/forever-api-1.60.1.70338.md"
+local DUMP = os.getenv("GLASSRF_API_DUMP") or "C:/Projects/WoW/References/Forever/api/forever-api-1.60.1.70338.md"
 
 --------------------------------------------------------------------------------
 -- Secrets
@@ -508,6 +508,9 @@ function SecureHandlerWrapScript(frame, script, header, preBody, postBody)
     frame._wraps = frame._wraps or {}
     frame._wraps[script] = { header = header, pre = preBody, post = postBody }
 end
+
+-- In the dump's _G walk: drops every override binding `owner` holds.
+function ClearOverrideBindings(owner) end
 
 -- Post-hook a method, as the client does: the original runs first.
 function hooksecurefunc(t, name, fn)

@@ -37,6 +37,13 @@ end
 rawset(_G, "MainActionBar", bar)
 
 party(2)
+-- Frames another addon registered in ClickCastFrames before we loaded (#61),
+-- one of them switched off.
+local earlyOn = CreateFrame("Button", "EarlyUF_player", UIParent, "SecureUnitButtonTemplate")
+earlyOn:SetAttribute("unit", "player")
+local earlyOff = CreateFrame("Button", "EarlyUF_party1", UIParent, "SecureUnitButtonTemplate")
+earlyOff:SetAttribute("unit", "party1")
+rawset(_G, "ClickCastFrames", { [earlyOn] = true, [earlyOff] = false })
 GlassRaidFramesCharDB = { role = "HEALER" }
 local GRF = loadAddon()
 local CC = GRF.ClickCast
@@ -55,6 +62,7 @@ local function hoverBinds(child)
     local w = child._wraps and child._wraps.OnEnter
     if not w then return bound end
     local handle = {
+        GetAttribute = function(_, k) return child:GetAttribute(k) end,
         SetBindingClick = function(_, priority, key, name)
             check(priority == true, "a hover key binds with priority")
             bound[key] = name
@@ -109,8 +117,8 @@ eq(c:GetAttribute("ctrl-spell1"), 10963, "pinned: the rank's own spell ID (measu
 eq(GRF.Header.children[40]:GetAttribute("ctrl-spell1"), 10963, "on every child")
 eq(c:GetAttribute("*type1"), "target", "the plain click still targets")
 
--- Key rows: one secure button each, bound only while a GROUP tile is hovered
--- ([party]/[raid] read false in combat, measured: they can't keep strangers out).
+-- Key rows: one secure button each, bound only while a tile is hovered (a
+-- permanent [@mouseover] key would reach characters out in the world).
 local kb = CC._test.keyButtons
 check(kb["1"] and kb["1"]._template == "SecureActionButtonTemplate", "key 1 has its own secure button")
 eq(permanent, 0, "no key is bound permanently: off a tile it keeps its normal job")
@@ -120,8 +128,8 @@ eq(overrides["SHIFT-R"], kb["SHIFT-R"]:GetName(), "and every other key")
 tile:ClearBindings()
 eq(GRF.Header.children[1]._wraps.OnLeave.pre, "self:ClearBindings()", "leaving the tile clears them")
 eq(GRF.Header.children[1]._wraps.OnHide.pre, "self:ClearBindings()", "so does a tile hidden under the cursor")
-eq(hoverBinds(GRF.Header.children[40])["1"], kb["1"]:GetName(), "every group tile")
-eq(GRF.Header.petChildren[1]._wraps, nil, "not pets: hover keys aim at members")
+eq(hoverBinds(childFor("party2"))["1"], kb["1"]:GetName(), "every group tile")
+check(GRF.Header.petChildren[1]._wraps, "pet tiles too (owner: pets heal like players)")
 eq(CC._test.keyHeader()._template, "SecureHandlerBaseTemplate", "the wraps run against a secure handler")
 local m1 = kb["1"]:GetAttribute("macrotext")
 check(m1:find("/cast [@mouseover,help,nodead] Power Word: Shield", 1, true),
@@ -278,6 +286,84 @@ WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
 eq(hoverBinds()["1"], nil, "switched when combat ends")
 GRF.Settings.SetRole("healer"); flush()
+
+-- Any unit frame (#61): Blizzard's, and every frame in Clique's
+-- ClickCastFrames table, get the same rows.
+local pf, tf, petf = PlayerFrame, TargetFrame, PetFrame
+eq(tf:GetAttribute("shift-spell1"), "Flash Heal", "Blizzard's target frame: shift-click casts")
+eq(pf:GetAttribute("ctrl-spell1"), 10963, "the player frame: the pinned rank")
+eq(petf:GetAttribute("shift-type1"), "spell", "the pet frame: mouse rows too")
+eq(type(ClickCastFrames), "table", "a ClickCastFrames table exists for other addons")
+eq(earlyOn:GetAttribute("shift-type1"), "spell", "a frame registered before we loaded carries the rows")
+eq(earlyOff:GetAttribute("shift-type1"), nil, "one registered as false doesn't")
+eq(rawget(ClickCastFrames, earlyOff), nil, "its entry moved behind the table, false included")
+ClickCastFrames[earlyOff] = true
+WoW.flushTimers()
+eq(earlyOff:GetAttribute("shift-type1"), "spell", "false -> true is seen (Codex P2 on #62)")
+-- Another addon's frame, with its own shift-click, registered after load.
+local other = CreateFrame("Button", "OtherUF_focus", UIParent, "SecureUnitButtonTemplate")
+other:SetAttribute("unit", "focus")
+other:SetAttribute("shift-type1", "focus")
+ClickCastFrames[other] = true
+eq(other:GetAttribute("shift-type1"), "focus", "nothing changes in the registering call")
+WoW.flushTimers()
+eq(other:GetAttribute("shift-type1"), "spell", "the next frame, it carries the rows")
+eq(other:GetAttribute("shift-spell1"), "Flash Heal", "with the spell")
+local shiftRow
+for _, r in ipairs(CC.Rows()) do if r.mouse == "shift-1" then shiftRow = r end end
+CC.Remove(shiftRow); flush()
+eq(other:GetAttribute("shift-type1"), "focus", "a removed row gives the frame its own click back")
+eq(other:GetAttribute("shift-spell1"), nil, "and leaves nothing of ours")
+eq(tf:GetAttribute("shift-type1"), nil, "Blizzard's frame too")
+CC.Set("shift-1", true, 2061); flush()
+eq(other:GetAttribute("shift-type1"), "spell", "re-added")
+
+-- Hover keys there: whoever the frame shows, a stranger or a pet included,
+-- as in Cell and EllesmereUI (owner, 2026-10-18). [help] in the macro sends
+-- anything hostile to the key's own action.
+eq(hoverBinds(pf)["1"], kb["1"]:GetName(), "the player frame binds the keys")
+eq(hoverBinds(tf)["1"], kb["1"]:GetName(), "the target frame, whoever it shows")
+eq(hoverBinds(other)["SHIFT-R"], kb["SHIFT-R"]:GetName(), "a registered frame")
+eq(hoverBinds(petf)["1"], kb["1"]:GetName(), "the pet frame")
+eq(hoverBinds(GRF.Header.petChildren[1])["1"], kb["1"]:GetName(), "a pet tile")
+check(tf._wraps.OnLeave and tf._wraps.OnHide, "leaving or hiding a frame clears its keys")
+
+-- Off: every other frame gets its own clicks back, our tiles keep theirs.
+local beforeOff = clears
+GRF.Settings.SetClickCastOthers(false); flush()
+eq(GRF.db.clickCastOthers, false, "off is saved, account-wide")
+eq(tf:GetAttribute("shift-type1"), nil, "Blizzard's frame: back to its own")
+eq(other:GetAttribute("shift-type1"), "focus", "the other addon's: its own shift-click back")
+eq(tf:GetAttribute(CC.HOVER_ATTR), nil, "hover keys switched off there (still wrapped: never unwrapped)")
+eq(next((hoverBinds(tf))), nil, "so a hover binds nothing")
+check(clears > beforeOff, "and a frame hovered right now drops its keys")
+eq(childFor("party1"):GetAttribute("shift-type1"), "spell", "our tiles keep the rows")
+eq(hoverBinds(childFor("party1"))["1"], kb["1"]:GetName(), "and the keys")
+GRF.Settings.SetClickCastOthers(true); flush()
+eq(GRF.db.clickCastOthers, nil, "on is the default: not saved")
+eq(tf:GetAttribute("shift-type1"), "spell", "back on")
+eq(hoverBinds(tf)["1"], kb["1"]:GetName(), "with the keys")
+
+-- A frame registered in combat waits for combat to end, touching nothing.
+local late = CreateFrame("Button", "OtherUF_target", UIParent, "SecureUnitButtonTemplate")
+late:SetAttribute("unit", "target")
+WoW.combat = true
+ClickCastFrames[late] = true
+WoW.flushTimers()
+eq(late:GetAttribute("shift-type1"), nil, "in combat: not yet")
+eq(#WoW.blocked, 0, "and nothing protected was touched")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+eq(late:GetAttribute("shift-type1"), "spell", "when combat ends, it carries the rows")
+-- Unregistering: the frame gets its own clicks back on the next frame.
+ClickCastFrames[late] = false
+eq(ClickCastFrames[late], nil, "read back: unregistered")
+WoW.flushTimers()
+eq(late:GetAttribute("shift-type1"), nil, "unregistered: back to its own")
+ClickCastFrames[late] = true
+WoW.flushTimers()
+eq(late:GetAttribute("shift-type1"), "spell", "and true again is seen, with no other event")
+check(ClickCastFrames[late], "read back through the table")
 
 eq(next(GRF.paintFailures), nil, "no failures")
 done("test_clickcast")

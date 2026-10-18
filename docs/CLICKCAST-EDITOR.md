@@ -92,7 +92,7 @@ library defaults, other addon surfaces, captured scenery or continuous effects
 are involved. Pane dimensions follow the window, never the filtered rows.
 
 For other addons adapting this material, the shared recipe and layering values
-are in `../References/LIBGLASS-WINDOW-STYLING.md` (relative to the repository root).
+are in `../References/Docs/LIBGLASS-WINDOW-STYLING.md` (relative to the repository root).
 It distinguishes the outer shell from reading panels and documents the PetStable
 adaptation findings without changing shared-library defaults.
 

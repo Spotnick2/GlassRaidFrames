@@ -85,15 +85,15 @@ For GlassRaidFrames, good things to hand Codex:
 - any plan that grows scope back toward full Cell or Decursive.
 
 **Always hand it `CLAUDE.md` alongside the diff or plan**, plus
-`C:/Projects/WoW/References/PORTING-TBC-TO-FOREVER.md` and any `docs/` probe results. Those findings
+`C:/Projects/WoW/References/Docs/PORTING-TBC-TO-FOREVER.md` and any `docs/` probe results. Those findings
 were measured on the live client. Without them, a cold reviewer argues from Classic-era or Retail
 behaviour that doesn't hold here: that auras throw for the whole group in combat, that secure
 snippets and state drivers are broken, that some unit numbers are secret.
-`C:/Projects/WoW/References/forever-api-1.60.1.70338.md` is the full API surface when a question
+`C:/Projects/WoW/References/Forever/api/forever-api-1.60.1.70338.md` is the full API surface when a question
 turns on whether something exists. The reference addons are
-`C:/Projects/WoW/References/Cell-r274-release/Cell` (the design reference, not Forever-aware),
-`C:/Projects/WoW/References/Decursive-2.9.0-RC2-19-gfbc816f-forever/Decursive` (dispel, ported to
-Forever) and `C:/Projects/WoW/References/DinoUnitFrames_Forever_Beta_v3.0` (manual party/raid
+`C:/Projects/WoW/References/Addons/UnitFrames/Cell/Cell` (the design reference, not Forever-aware),
+`C:/Projects/WoW/References/Addons/BuffsDebuffs/Decursive-Forever/Decursive` (dispel, ported to
+Forever) and `C:/Projects/WoW/References/Addons/UnitFrames/DinoUnitFrames-Forever` (manual party/raid
 buttons on Forever, `modules/units.lua`).
 
 Say what you have already established and ask it not to repeat that work. A clean "no defect found"

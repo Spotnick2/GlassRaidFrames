@@ -153,6 +153,13 @@ function Settings.SetHideBlizzard(on)
     if on then whenOutOfCombat("blizzard", function() if GRF.db.hideBlizzard then GRF.Blizzard.HideAll() end end) end
 end
 
+-- Click-casting on other addons' and Blizzard's unit frames (#61): on by
+-- default (not saved); off puts their own click actions back.
+function Settings.SetClickCastOthers(on)
+    if on == false then GRF.db.clickCastOthers = false else GRF.db.clickCastOthers = nil end
+    GRF.ClickCast.Request()
+end
+
 -- The glass look (#37) and body (#38): saved now, built after /reload
 -- (LibGlass builds them into each surface). The defaults aren't saved.
 function Settings.SetLook(look)
@@ -512,6 +519,9 @@ local function slash(msg)
         end
     elseif cmd == "options" or cmd == "config" then
         if not (GRF.Options and GRF.Options.Open()) then say("Game Menu > Options > AddOns > Glass Raid Frames") end
+    elseif cmd == "clickcast" and (arg == "all" or arg == "ours") then
+        Settings.SetClickCastOthers(arg == "all")
+        say(arg == "all" and "click-casting: every unit frame" or "click-casting: Glass Raid Frames' tiles only")
     elseif cmd == "clickcast" then
         GRF.ClickCastOptions.Toggle()
     elseif cmd == "ind" or cmd == "indicators" then
@@ -522,7 +532,7 @@ local function slash(msg)
         say("client " .. API.ClientBuild() .. ", measured on " .. GRF.MEASURED_ON_BUILD)
     else
         say("/grf options - the settings (Options > AddOns)")
-        say("/grf clickcast - the click-casting editor")
+        say("/grf clickcast - the click-casting editor; /grf clickcast all|ours - on every unit frame, or our tiles only")
         say("/grf role [auto|healer|caster|melee|tank] - settings follow your role; " .. roleLine())
         say("/grf unlock | lock - move the group frames for this role (out of combat)")
         say("/grf reset - this role's default position")
