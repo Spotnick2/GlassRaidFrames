@@ -334,7 +334,13 @@ local function build()
         function() return GRF.db.glassBody or "clear" end, S.SetBody)
     if GRF.following then
         for _, group in ipairs({ controls.look, controls.body }) do
-            for _, rb in ipairs(group) do rb:SetEnabled(false) end
+            -- Disabled, and seen to be: the label is our own FontString and
+            -- the radio art has no disabled look (measured: both stayed bright).
+            for _, rb in ipairs(group) do
+                rb:SetEnabled(false)
+                rb:SetAlpha(0.5)
+                rb.label:SetTextColor(0.5, 0.5, 0.5)
+            end
         end
     end
     note("The look takes effect after /reload.")

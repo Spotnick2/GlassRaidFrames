@@ -197,8 +197,15 @@ check(chatHas("/grf look, /grf body %- Look: following Glass UI"), "help says so
 local O = GRF.Options._test
 O.panel._scripts.OnShow(O.panel)
 eq(O.controls.suiteNote and O.controls.suiteNote:GetText(), "Look: following Glass UI (Pearl), set in Glass UI", "the options page says so")
-for _, rb in ipairs(O.controls.look) do eq(rb._enabled, false, "look radio " .. rb.value .. " off") end
-for _, rb in ipairs(O.controls.body) do eq(rb._enabled, false, "body radio " .. rb.value .. " off") end
+-- Off, and seen to be off (in game the label and the radio art stayed bright).
+for _, group in ipairs({ O.controls.look, O.controls.body }) do
+    for _, rb in ipairs(group) do
+        eq(rb._enabled, false, "radio " .. rb.value .. " off")
+        eq(rb._alpha, 0.5, "radio " .. rb.value .. " dimmed")
+        eq(rb.label._textColor and rb.label._textColor[1], 0.5, "radio " .. rb.value .. "'s label grey")
+    end
+end
+eq(O.controls.names[1]._alpha, nil, "the Names radios stay bright")
 O.controls.look[1]._scripts.OnClick(O.controls.look[1])
 eq(GRF.db.look, "classic", "a click on a radio writes nothing")
 -- The click-cast setting changes: reported again, with the new value.
@@ -218,6 +225,8 @@ O = GRF.Options._test
 O.panel._scripts.OnShow(O.panel)
 eq(O.controls.suiteNote and O.controls.suiteNote:GetText(), "own look: library-too-old", "the page says why")
 check(O.controls.look[1]._enabled ~= false, "the radios stay on")
+eq(O.controls.look[1]._alpha, nil, "and bright")
+eq(O.controls.look[1].label._textColor, nil, "their labels too")
 O.controls.look[1]._scripts.OnClick(O.controls.look[1])
 eq(GRF.db.look, nil, "and still save")
 
