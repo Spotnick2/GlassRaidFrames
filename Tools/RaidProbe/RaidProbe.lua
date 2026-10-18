@@ -15,6 +15,7 @@
 --   6. hiding Blizzard's compact frames                       /fp raid hide
 --   7. the cost of 45 tiles x 2 containers                    /fp raid fps
 --   later, #19: buff/debuff indicators                        /fp raid ind ...
+--   later, #61: the hover-key member gate on a target frame   /fp steps raid ufgate
 --
 -- Every client call that may be missing or throw goes through try(), so one
 -- refusal cannot stop the rest of the probe.
@@ -1167,6 +1168,92 @@ Probe:Steps("snippets", {
     { text = "Move the cursor OFF the box and press 7 once (it should do 7's usual action). Then Next.",
       check = function() local n = P.snipClicks or 0; P.snipClicks = 0 return n == 0, "clicks=" .. n end },
     { text = "Pull a mob. In combat, hover the blue box and press 7 once, then press Next.", check = snippetsCheck("in") },
+    { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
+})
+
+--------------------------------------------------------------------------------
+-- The member gate for hover keys on any unit frame (#61, /fp steps raid
+-- ufgate). A target or focus frame can show a stranger, so its OnEnter
+-- snippet must ask whether the unit is in the group before binding. The
+-- restricted environment has UnitPlayerOrPetInParty/InRaid, but [party]
+-- reads false in combat (measured above), and these may too. The box is
+-- bound to "target" (GlassUnitFrames hides Blizzard's target frame); the
+-- snippet records what it saw on the box, then binds key 7 only if the gate
+-- passed: the same rule GlassRaidFrames ships.
+--------------------------------------------------------------------------------
+
+local GATE_KEY = "7"
+local GATE_SNIPPET = ([[
+    local u = self:GetAttribute("unit")
+    self:SetAttribute("rp-seen", (self:GetAttribute("rp-seen") or 0) + 1)
+    self:SetAttribute("rp-party", "threw")
+    self:SetAttribute("rp-raid", "threw")
+    local party = u and UnitPlayerOrPetInParty(u)
+    self:SetAttribute("rp-party", party and "yes" or "no")
+    local raid = u and UnitPlayerOrPetInRaid(u)
+    self:SetAttribute("rp-raid", raid and "yes" or "no")
+    if party or raid then self:SetBindingClick(true, %q, self, "LeftButton") end
+]]):format(GATE_KEY)
+
+local function gateSetup()
+    if InCombatLockdown() then say("out of combat only") return false end
+    if P.gateBox then P.gateBox:Show() return true end
+    local h = CreateFrame("Frame", "RaidProbeGateHeader", UIParent, "SecureHandlerBaseTemplate")
+    local b = CreateFrame("Button", "RaidProbeGateBox", UIParent, "SecureUnitButtonTemplate")
+    b:SetSize(160, 44)
+    b:SetPoint("CENTER", UIParent, "CENTER", 0, 180)
+    b:SetAttribute("unit", "target")
+    b:SetAttribute("*type1", "target")
+    b:RegisterForClicks("AnyUp")
+    local bg = b:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.1, 0.6, 0.3, 0.7)
+    local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    fs:SetPoint("CENTER")
+    fs:SetText("your target: hover, press " .. GATE_KEY)
+    -- Key 7 clicks the box with "LeftButton": *type1 targets your own
+    -- target again, which is harmless. PostClick counts it.
+    b:HookScript("PostClick", function(_, mouse)
+        P.gateClicks = (P.gateClicks or 0) + 1
+        say(string.format("key %s reached the box (%s): party=%s raid=%s seen=%s", GATE_KEY, show(mouse),
+            show(b:GetAttribute("rp-party")), show(b:GetAttribute("rp-raid")), show(b:GetAttribute("rp-seen"))))
+    end)
+    local okW, errW = pcall(SecureHandlerWrapScript, b, "OnEnter", h, GATE_SNIPPET)
+    say("WrapScript OnEnter: " .. (okW and "ok" or tostring(errW)))
+    local okL, errL = pcall(SecureHandlerWrapScript, b, "OnLeave", h, "self:ClearBindings()")
+    say("WrapScript OnLeave: " .. (okL and "ok" or tostring(errL)))
+    P.gateBox = b
+    return okW and okL
+end
+
+-- What the last hover saw. want = "yes" / "no" (nil: just record it).
+local function gateCheck(want)
+    return function()
+        local b = P.gateBox
+        local party, raid = b and b:GetAttribute("rp-party"), b and b:GetAttribute("rp-raid")
+        local clicks = P.gateClicks or 0
+        P.gateClicks = 0
+        local member = (party == "yes" or raid == "yes") and "yes" or "no"
+        local name = try("target name", GetUnitName, "target", false)
+        local pass = party ~= "threw" and raid ~= "threw" and party ~= nil
+            and (want == nil or member == want) and ((member == "yes") == (clicks > 0))
+        return pass, "party=" .. show(party), "raid=" .. show(raid), "clicks=" .. clicks,
+            "target=" .. show(name)
+    end
+end
+
+Probe:Steps("ufgate", {
+    rev = 1,
+    title = "Hover keys on a target frame: is the unit in my group?",
+    { text = "Out of combat, in a party. Setting up a green box bound to your target.",
+      auto = true, run = gateSetup, check = function() return P.gateBox ~= nil, "box built" end },
+    { text = "Target a PARTY MEMBER. Hover the green box, press 7 once, then Next.", check = gateCheck("yes") },
+    { text = "Target YOURSELF. Hover the green box, press 7 once, then Next.", check = gateCheck(nil) },
+    { text = "Target a friendly player NOT in your group, or a friendly NPC. Hover the box, press 7, then Next.",
+      check = gateCheck("no") },
+    { text = "Pull a mob. In combat, target the PARTY MEMBER, hover the box, press 7 once, then Next.",
+      check = gateCheck("yes") },
+    { text = "Still in combat, target YOURSELF, hover the box, press 7 once, then Next.", check = gateCheck(nil) },
     { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
 })
 
