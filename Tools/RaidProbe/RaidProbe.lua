@@ -16,6 +16,7 @@
 --   7. the cost of 45 tiles x 2 containers                    /fp raid fps
 --   later, #19: buff/debuff indicators                        /fp raid ind ...
 --   later, #61: the hover-key member gate on a target frame   /fp steps raid ufgate
+--   later, #63: a spell's reaction, always-bound keys on the world  /fp steps raid worldkey
 --
 -- Every client call that may be missing or throw goes through try(), so one
 -- refusal cannot stop the rest of the probe.
@@ -1264,6 +1265,114 @@ Probe:Steps("ufgate", {
 })
 
 --------------------------------------------------------------------------------
+-- Keys anywhere under the cursor (#63, /fp steps raid worldkey). A DPS role
+-- keeps its keys bound all the time, so an enemy hovered in the world takes
+-- the spell; the spell's own reaction picks [harm] or [help]. Measures:
+-- C_Spell.IsSpellHarmful/IsSpellHelpful on Vanilla rank IDs (the dump lists
+-- them; presence is not a contract), and [@mouseover,harm] on a world enemy,
+-- in and out of combat. Item B (tests A-D) already showed a key's @mouseover
+-- conditions applying to units in the world.
+--------------------------------------------------------------------------------
+
+-- First ranks across classes; Dispel Magic and Purge hit friend or foe.
+local REACTION_IDS = { 589, 585, 8092, 14914, 139, 2061, 2050, 17, 2006, 527, 586,   -- priest
+                       686, 172, 5782,                                                -- warlock
+                       8921, 5176, 5185, 774, 1126,                                   -- druid
+                       116, 133, 1459,                                                -- mage
+                       635, 19750, 853, 19740,                                        -- paladin
+                       403, 331, 370,                                                 -- shaman
+                       3044, 1752, 78 }                                               -- hunter, rogue, warrior
+local WORLD_KEYS = { harm = "7", help = "8" }
+
+-- true/false, or "threw".
+local function reaction(id)
+    local okH, harmful = pcall(C_Spell.IsSpellHarmful, id)
+    local okP, helpful = pcall(C_Spell.IsSpellHelpful, id)
+    if not okH then harmful = "threw" end
+    if not okP then helpful = "threw" end
+    return harmful, helpful
+end
+
+local function worldSetup()
+    if InCombatLockdown() then say("out of combat only") return false end
+    local threw = 0
+    P.worldHarm, P.worldHelp = nil, nil
+    for _, id in ipairs(REACTION_IDS) do
+        local harmful, helpful = reaction(id)
+        local learned = known(id)
+        say(string.format("reaction %d %s: harmful=%s helpful=%s known=%s", id, show(spellName(id)),
+            show(harmful), show(helpful), show(learned)))
+        if harmful == "threw" or helpful == "threw" then threw = threw + 1 end
+        if learned and harmful == true and helpful ~= true and not P.worldHarm then P.worldHarm = id end
+        if learned and helpful == true and harmful ~= true and not P.worldHelp then P.worldHelp = id end
+    end
+    if not (P.worldHarm and P.worldHelp) then
+        say("no learned harmful-only and helpful-only spell from the list on this character")
+        return false
+    end
+    P.worldKeys = P.worldKeys or {}
+    for kind, key in pairs(WORLD_KEYS) do
+        local id = kind == "harm" and P.worldHarm or P.worldHelp
+        local b = P.worldKeys[kind]
+        if not b then
+            b = CreateFrame("Button", "RaidProbeWorldKey" .. kind, UIParent, "SecureActionButtonTemplate")
+            b:RegisterForClicks("AnyUp", "AnyDown")   -- both edges: the template acts on one (measured)
+            b:SetAttribute("type", "macro")
+            P.worldKeys[kind] = b
+        end
+        -- The shape GlassRaidFrames ships: the spell on the matching
+        -- mouseover, else the key's own bar button on the exact complement.
+        local text = string.format("/cast [@mouseover,%s,nodead] %s\n/click [@mouseover,noexists][@mouseover,no%s][@mouseover,dead] ActionButton%s",
+            kind, spellName(id), kind, key)
+        b:SetAttribute("macrotext", text)
+        local ok, err = pcall(SetOverrideBindingClick, b, true, key, b:GetName())
+        say(string.format("key %s always bound (%s): %s", key, ok and "ok" or tostring(err), (text:gsub("\n", " | "))))
+    end
+    P.lastSent = nil
+    return threw == 0, "threw=" .. threw, "harm=" .. show(spellName(P.worldHarm)), "help=" .. show(spellName(P.worldHelp))
+end
+
+local function worldRelease()
+    if InCombatLockdown() then say("out of combat only") return false end
+    for _, b in pairs(P.worldKeys or {}) do ClearOverrideBindings(b) end
+    say("keys " .. WORLD_KEYS.harm .. " and " .. WORLD_KEYS.help .. " released")
+    return true
+end
+
+-- The last cast. want = "spell": the key's own spell; "other": the bar's
+-- action, or nothing. inCombat: the cast must have been sent under lockdown.
+local function worldCheck(kind, want, inCombat)
+    return function()
+        local sent = P.lastSent
+        P.lastSent = nil
+        local id = kind == "harm" and P.worldHarm or P.worldHelp
+        local spell = sent and sent.spell
+        local pass = (want == "spell") == (spell == id)
+        if inCombat then pass = pass and (want == "other" and sent == nil or (sent ~= nil and sent.combat == true)) end
+        return pass, "sent=" .. show(spell), "target=" .. show(sent and sent.target), "combat=" .. show(sent and sent.combat)
+    end
+end
+
+Probe:Steps("worldkey", {
+    rev = 1,
+    title = "Keys anywhere: the spell's reaction, an enemy hovered in the world",
+    { text = "Out of combat. Logging each spell's reaction, then binding 7 (a harmful spell) and 8 (a helpful one) all the time.",
+      auto = true, run = worldSetup, check = function() return P.worldHarm ~= nil and P.worldHelp ~= nil, "keys bound" end },
+    { text = "Hover an ENEMY in the world (don't target it) and press 7 once. Then Next.",
+      check = worldCheck("harm", "spell") },
+    { text = "Hover a FRIENDLY character in the world and press 7 once (expect your bar's 7, or nothing). Then Next.",
+      check = worldCheck("harm", "other") },
+    { text = "Hover a FRIENDLY character in the world and press 8 once. Then Next.",
+      check = worldCheck("help", "spell") },
+    { text = "Pull a mob that lives a while. In combat, hover an enemy and press 7 once. Then Next.",
+      check = worldCheck("harm", "spell", true) },
+    { text = "Still in combat, hover NOTHING (empty ground) and press 7 once (expect your bar's 7). Then Next.",
+      check = worldCheck("harm", "other", true) },
+    { text = "Out of combat now. Releasing keys 7 and 8.", auto = true, run = worldRelease },
+    { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
+})
+
+--------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
 
@@ -1318,6 +1427,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
         local t = tiles[a1]
         if t then paint(t) end
     elseif event == "UNIT_SPELLCAST_SENT" then
+        P.lastSent = { target = a2, spell = a4, combat = InCombatLockdown() }
         say(string.format("cast sent: target=%s spell=%s", show(a2), show(a4)))
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         say("cast succeeded: spell=" .. show(a3))
