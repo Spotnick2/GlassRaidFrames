@@ -473,3 +473,23 @@ with `/fp steps raid hoverkey`, `hoverkeycombat`, `snippets` and `hoverkeyfix`:
   4 and 7 with the partner's tile hovered: Renew on her, out of combat and in combat. Off the
   frames: the action-bar action, in and out of combat. Unhovered, `GetBindingAction(key, true)`
   is the base binding: nothing is bound permanently.
+
+### 12. The hover-key member gate on a target frame (1.60.1.70450, 2026-10-18, priest, party of 2)
+For #61 (click-casting on any unit frame): a target or focus frame can show a stranger, so its
+`OnEnter` snippet asks the restricted `UnitPlayerOrPetInParty` / `UnitPlayerOrPetInRaid` before
+binding. `[party]` reads false in combat (item 11), so these were measured with
+`/fp steps raid ufgate` (rev 2): a box bound to `target`, wrapped against a
+`SecureHandlerBaseTemplate` header, recording the answers on itself and binding 7 only on a yes.
+Each press logs `InCombatLockdown()`. Rev 1's fight ended before the presses, and rev 2 checks for that.
+- **In combat** (lockdown held for the whole run, every press `combat=true`):
+  - party member (Kaleid): `UnitPlayerOrPetInParty("target")` **yes**, so 7 was bound and
+    reached the box;
+  - yourself, grouped: **yes**;
+  - a stranger (Mye Zugga): **no**, so 7 kept its action-bar action (Renew on the target).
+- **Out of combat** (run #175): the same three answers.
+- Unlike `[party]`, the restricted function keeps answering in combat. No error, and no secret
+  (a secret would have thrown on the truth test and left the attribute at `threw`).
+- With the boar targeted, the gate read no and 7 fell back to the bar's Renew, which
+  `autoSelfCast` sent to the player. That's the expected fallback (step 5 of run #178 hovered
+  with the wrong target).
+- Not measured: `UnitPlayerOrPetInRaid` in a raid (party only), or a group pet.

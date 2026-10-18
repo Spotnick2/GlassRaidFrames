@@ -40,7 +40,8 @@
 --   can show a stranger, so the snippet binds only for you, a group member
 --   or a pet of either (owner: pets heal like players, on every frame):
 --   player/pet/partyN/partypetN/raidN/raidpetN by name, any other token
---   through the restricted UnitPlayerOrPetInParty/InRaid (/fp steps raid
+--   through the restricted UnitPlayerOrPetInParty/InRaid, which unlike
+--   [party] keep answering in combat (measured on 70450, /fp steps raid
 --   ufgate). Neither tells a player from a pet, so pets can't be told apart.
 -- - Everything protected happens out of combat, through the addon's one combat
 --   queue, in ONE reconciliation that only changes what differs, so our own

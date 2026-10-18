@@ -163,7 +163,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     - The `OnEnter` snippet binds only for you, a group member, or a pet of either (owner:
       pets heal like players, on every frame): `player`/`pet`/`partyN`/`partypetN`/`raidN`/
       `raidpetN` by name, any other token through the restricted
-      `UnitPlayerOrPetInParty/InRaid` (in combat: `/fp steps raid ufgate`). The restricted
+      `UnitPlayerOrPetInParty/InRaid`, which **keep answering in combat**, unlike `[party]`
+      (measured on 70450 for a member, yourself and a stranger: `docs/FOREVER-PROBE.md` item 12;
+      the raid variant is unmeasured in a raid). The restricted
       environment can't tell a player from a pet (no `UnitIsPlayer`/`UnitIsUnit`).
       Through `target`/`focus`, you and your own pet pass only while you're grouped.
     - Known limit: a target that changes to a stranger while the cursor stays on the target
