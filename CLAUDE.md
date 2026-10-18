@@ -130,15 +130,15 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     measured); unpinned uses the bare localized name (the highest rank). Blizzard's Click Cast
     Bindings act first on the same click (Forever's `SecureUnitButton_OnClick`).
   - **Key rows**: one hidden `SecureActionButtonTemplate` per key (a modifier held on a key
-    binding does **not** select modified attributes, measured), bound **only while a group tile
-    is hovered**: a secure `OnEnter` wrap on each group child (`SecureHandlerWrapScript`,
+    binding does **not** select modified attributes, measured), bound **only while a tile
+    is hovered**: a secure `OnEnter` wrap on each child, group and pet (`SecureHandlerWrapScript`,
     header `GlassRaidFramesKeyHeader`) runs `control:RunFor(self, <grf-hoverkeys>)`, whose
     lines are `self:SetBindingClick(true, key, button)` (the tile owns the binding); `OnLeave`
     and `OnHide` run `self:ClearBindings()`. Cell's and Clique's design. Our tiles only show
     group members, so **a stranger under the cursor never gets the spell**, in combat too (the
     owner's rule). A `[party]`/`[raid]` macro check **can't** do it: both read false in combat,
-    for a member (measured on 70425). Off a tile the key does its usual action. Pets aren't
-    wrapped. The macro is `/cast [@mouseover,help,nodead] <spell>`, then `/click` of the key's
+    for a member (measured on 70425). Off a tile the key does its usual action. Pets take the
+    keys like players (owner, 2026-10-18). The macro is `/cast [@mouseover,help,nodead] <spell>`, then `/click` of the key's
     own action button on the **exact complement** (`[noexists][nohelp][dead]`). Rez spells
     (`ClickCast.REZ`, by ID) swap dead/nodead. The fallback button comes from
     `GetBindingAction(key)` (the base binding) matched to the bars' `.commandName`; a key bound
@@ -150,18 +150,22 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     and every frame in **Clique's `ClickCastFrames` table**. GlassUnitFrames registers itself
     there, and GRF never looks its frames up by name.
     - `ClickCast.Targets()` is the one list.
-    - We create the registry as a plain table if absent and watch its new keys (one quiet
-      apply on the next frame). A registry with a metatable belongs to another click-caster
-      (Clique) and is left alone. Unregistering (`= false`) takes effect at the next
-      reconciliation.
+    - We create the registry if absent. Its entries live **behind** the public table
+      (`__index`/`__newindex`, Clique's design): Lua calls `__newindex` only for an absent key,
+      so raw entries would hide `false` → `true`. Entries made before we loaded move behind
+      it. Every assignment queues one quiet apply on the next frame. A registry with a
+      metatable belongs to another click-caster (Clique) and is left alone.
     - Before we overwrite one of a frame's attributes, its own value is saved, and it's put
       back when the row or the frame goes.
     - Hover keys: every frame takes the same wraps, switched by a per-frame `grf-hover`
       attribute. Frames are **never unwrapped**: `SecureHandlerUnwrapScript` pops the
       outermost wrap, which may be another addon's.
-    - The `OnEnter` snippet binds only for you or a group member: `player`/`partyN`/`raidN`
-      by name, any other token through the restricted `UnitPlayerOrPetInParty/InRaid`
-      (in combat: `/fp steps raid ufgate`), and never a pet token.
+    - The `OnEnter` snippet binds only for you, a group member, or a pet of either (owner:
+      pets heal like players, on every frame): `player`/`pet`/`partyN`/`partypetN`/`raidN`/
+      `raidpetN` by name, any other token through the restricted
+      `UnitPlayerOrPetInParty/InRaid` (in combat: `/fp steps raid ufgate`). The restricted
+      environment can't tell a player from a pet (no `UnitIsPlayer`/`UnitIsUnit`).
+      Through `target`/`focus`, you and your own pet pass only while you're grouped.
     - Known limit: a target that changes to a stranger while the cursor stays on the target
       frame keeps the keys until the cursor leaves.
   - **One reconciliation** (`ClickCast.Apply`): desired vs installed, changing only what
@@ -254,8 +258,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - When hidden, its children release their units, and they re-sync when shown.
   - Pets get a fixed colour (`Frames.PET`).
   - The announced rectangle covers the pets when they're shown.
-  - Mouse bindings reach pet tiles (`Header.AllChildren`). Hover keys don't target pets: only
-    the group tiles (`Header.children`) get the `OnEnter` wrap that binds them.
+  - Mouse bindings and hover keys reach pet tiles (`Header.AllChildren`): pets heal like
+    players (owner, 2026-10-18; Codex P2 on #62).
 - **Tile size per role** (`profiles[role].size`, `/grf size`, width and height sliders on the
   main page). The default is **82×58** (Cell's look, measured side by side), and
   `GlassRaidFrames.xml` must match `Header.DEFAULT_W/H` (`test_toc`).

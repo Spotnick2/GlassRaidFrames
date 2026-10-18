@@ -76,7 +76,7 @@ eq(pets._height, H.PetHeight(), "the pet header is one tile tall")
 -- The default pet column follows a width change (Codex: it stayed at the old offset).
 eq(petAnchor()[4], 1 * (100 + H.GAP), "a resize re-places the default pet column")
 
--- Mouse bindings reach pet tiles; hover keys don't target pets ([party]).
+-- Mouse bindings and hover keys reach pet tiles (owner: pets heal like players).
 rawset(_G, "C_Spell", { GetSpellName = function() return "Renew" end, GetSpellSubtext = function() return "Rank 1" end })
 rawset(_G, "C_SpellBook", { IsSpellKnown = function() return true end })
 Enum.SpellBookSpellBank = { Player = 0 }
@@ -87,6 +87,7 @@ rawset(_G, "GetModifiedClick", function() return "ALT" end)
 GRF.ClickCast.Set("shift-1", true, 139)
 flush()
 eq(wolf:GetAttribute("shift-spell1"), "Renew", "a mouse binding works on a pet's tile")
+check(wolf._wraps and wolf._wraps.OnEnter, "and a pet's tile takes the hover keys")
 
 -- Per role: the caster role doesn't show pets unless asked.
 GRF.Settings.SetRole("caster")
