@@ -41,6 +41,10 @@
 --   as in Cell and EllesmereUI (owner, 2026-10-18): binding only while a
 --   frame is hovered already keeps a character out in the world from
 --   getting it, and [help] sends anything hostile to the key's own action.
+-- - ANYWHERE (#63), per role: a DPS role's keys stay bound all the time, so an
+--   enemy hovered in the world takes the spell; a healer's default stays
+--   frames only. Either way the spell's own reaction picks the macro's
+--   [harm] or [help] (C_Spell.IsSpellHarmful/IsSpellHelpful, by ID).
 -- - Everything protected happens out of combat, through the addon's one combat
 --   queue, in ONE reconciliation that only changes what differs, so our own
 --   binding changes (UPDATE_BINDINGS) can't loop.
@@ -220,13 +224,15 @@ function ClickCast.KeyMacro(row, buttons)
     if not cast then return nil, castError or "spell unknown" end
     local rez = ClickCast.REZ[row.spell]
     local alive, notAlive = rez and "dead" or "nodead", rez and "nodead" or "dead"
-    -- Bound only while a group tile is hovered, so no [party]/[raid] check.
-    local text = "/cast [@mouseover,help," .. alive .. "] " .. cast
+    -- The spell's own reaction (#63): a harmful one aims at an enemy, the
+    -- rest at a friend. A rez is always help.
+    local reaction = rez and "help" or API.SpellReaction(row.spell)
+    local text = "/cast [@mouseover," .. reaction .. "," .. alive .. "] " .. cast
     local fallback, command, lostPlain = ClickCast.Fallback(row.key, buttons)
     if fallback == false then return nil, "key is bound to " .. command .. ", not an action button" end
     if lostPlain then ClickCast.notes[row] = "on a frame it no longer does " .. lostPlain end
     if fallback then
-        text = text .. "\n/click [@mouseover,noexists][@mouseover,nohelp][@mouseover," .. notAlive .. "] " .. fallback
+        text = text .. "\n/click [@mouseover,noexists][@mouseover,no" .. reaction .. "][@mouseover," .. notAlive .. "] " .. fallback
     end
     if #text > ClickCast.MAX_MACRO then return nil, "too long for a macro (" .. #text .. " characters)" end
     return text
@@ -298,6 +304,8 @@ function ClickCast.Desired(rows)
 end
 
 local installedAttrs, installedKeys = {}, {}
+local installedAnywhere = false
+local keyOwner           -- owns the keys' permanent bindings in "anywhere" mode (#63)
 local keyButtons = {}   -- KEY -> hidden secure button
 local keyHeader          -- the secure handler whose snippets bind the keys on hover
 local weak = { __mode = "k" }
@@ -321,6 +329,21 @@ local LEAVE = "self:ClearBindings()"
 -- Whether the rows reach other addons' and Blizzard's frames (#61), account-wide.
 function ClickCast.Everywhere()
     return not (GRF.db and GRF.db.clickCastOthers == false)
+end
+
+-- Whether a role's keys work anywhere under the cursor, the world included
+-- (#63), or only on a hovered frame. Per role (db.profiles[role].keysAnywhere):
+-- a healer's default is frames only (owner: a character walking under the
+-- cursor must never take the heal meant for you); the other roles' is
+-- anywhere, so a DPS key hits the enemy it hovers.
+function ClickCast.AnywhereDefault(role)
+    return role ~= nil and role ~= "HEALER"
+end
+function ClickCast.Anywhere(role)
+    role = role or GRF.role
+    local prof = GRF.db and role and GRF.db.profiles[role]
+    if prof and prof.keysAnywhere ~= nil then return prof.keysAnywhere end
+    return ClickCast.AnywhereDefault(role)
 end
 
 -- A frame we may set attributes on: a live, unforbidden widget.
@@ -460,7 +483,8 @@ function ClickCast.Apply()
             if ok then hovering[f] = true else API.Fail("hover keys", err) end
         end
     end
-    if keyHeader and not same(keys, installedKeys) then
+    local anywhere = ClickCast.Anywhere()
+    if keyHeader and (not same(keys, installedKeys) or anywhere ~= installedAnywhere) then
         local lines = {}
         for key, text in pairs(keys) do
             local b = keyButton(key)
@@ -470,11 +494,18 @@ function ClickCast.Apply()
             lines[#lines + 1] = string.format("self:SetBindingClick(true, %q, %q)", key, b:GetName())
         end
         table.sort(lines)
-        keyHeader:SetAttribute(ClickCast.KEYS_ATTR, table.concat(lines, "\n"))
+        -- Anywhere (#63): the keys stay bound, frames and the world alike, so
+        -- the hover wraps bind nothing. Frames only: the wraps bind them.
+        keyHeader:SetAttribute(ClickCast.KEYS_ATTR, anywhere and "" or table.concat(lines, "\n"))
         -- A frame hovered right now still holds the old keys: drop them (the
         -- next OnEnter binds the new ones).
         for f in pairs(hovering) do pcall(ClearOverrideBindings, f) end
-        installedKeys = keys
+        if not keyOwner then keyOwner = CreateFrame("Frame", "GlassRaidFramesKeyOwner", UIParent) end
+        ClearOverrideBindings(keyOwner)
+        if anywhere then
+            for key in pairs(keys) do SetOverrideBindingClick(keyOwner, true, key, keyButtons[key]:GetName()) end
+        end
+        installedKeys, installedAnywhere = keys, anywhere
     end
     if ClickCast.onApplied then pcall(ClickCast.onApplied) end
     return true

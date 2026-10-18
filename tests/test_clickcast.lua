@@ -8,13 +8,19 @@ local SPELLS = {
     [2061] = { "Flash Heal", "Rank 1" }, [2060] = { "Greater Heal", "Rank 1" },
     [10963] = { "Greater Heal", "Rank 2" }, [139] = { "Renew", "Rank 1" },
     [2006] = { "Resurrection", "Rank 1" }, [17] = { "Power Word: Shield", "Rank 1" },
+    [589] = { "Shadow Word: Pain", "Rank 1" }, [527] = { "Dispel Magic", "Rank 1" },
 }
 rawset(_G, "C_Spell", {
     GetSpellName = function(id) return SPELLS[id] and SPELLS[id][1] end,
     GetSpellSubtext = function(id) return SPELLS[id] and SPELLS[id][2] end,
+    -- C_Spell.IsSpellHarmful/IsSpellHelpful (dump 70450): SW:P hurts, Dispel
+    -- Magic works on either side, the rest help.
+    IsSpellHarmful = function(id) return id == 589 or id == 527 end,
+    IsSpellHelpful = function(id) return id ~= 589 end,
 })
 -- Learned spells (C_SpellBook.IsSpellKnown). A name alone proves nothing.
-local LEARNED = { [2061] = true, [2060] = true, [10963] = true, [139] = true, [2006] = true, [17] = true }
+local LEARNED = { [2061] = true, [2060] = true, [10963] = true, [139] = true, [2006] = true, [17] = true,
+                  [589] = true, [527] = true }
 rawset(_G, "C_SpellBook", { IsSpellKnown = function(id) return LEARNED[id] == true end })
 Enum.SpellBookSpellBank = { Player = 0 }
 -- Base key bindings (what the player bound) and our overrides.
@@ -22,9 +28,18 @@ local BASE = { ["1"] = "ACTIONBUTTON1", ["3"] = "ACTIONBUTTON3", ["SHIFT-R"] = n
 rawset(_G, "GetBindingAction", function(key, checkOverride) return BASE[key] end)
 -- Keys are never bound permanently any more: only a hovered tile binds them.
 local permanent = 0
-rawset(_G, "SetOverrideBindingClick", function() permanent = permanent + 1 end)
+local permKeys = {}   -- key -> button name, while bound for good (#63)
+rawset(_G, "SetOverrideBindingClick", function(owner, priority, key, name)
+    permanent = permanent + 1
+    permKeys[key] = name
+end)
 local clears = 0
-rawset(_G, "ClearOverrideBindings", function() clears = clears + 1 end)
+rawset(_G, "ClearOverrideBindings", function(owner)
+    clears = clears + 1
+    if owner and owner:GetName() == "GlassRaidFramesKeyOwner" then
+        for k in pairs(permKeys) do permKeys[k] = nil end
+    end
+end)
 local selfCast = "ALT"
 rawset(_G, "GetModifiedClick", function(what) return what == "SELFCAST" and selfCast or nil end)
 -- The main action bar's buttons, as Blizzard's ActionBar.lua builds them.
@@ -364,6 +379,49 @@ ClickCastFrames[late] = true
 WoW.flushTimers()
 eq(late:GetAttribute("shift-type1"), "spell", "and true again is seen, with no other event")
 check(ClickCastFrames[late], "read back through the table")
+
+-- The spell decides the macro's target (#63): SW:P hurts, so it aims at an
+-- enemy and falls back on the exact complement; Dispel Magic, either side: help.
+BASE["4"] = "ACTIONBUTTON4"
+local swp = CC.Set("4", false, 589)
+local dm = CC.Set("5", false, 527)
+flush()
+local m4 = kb["4"]:GetAttribute("macrotext")
+check(m4:find("/cast [@mouseover,harm,nodead] Shadow Word: Pain", 1, true), "a harmful spell aims at an enemy")
+check(m4:find("/click [@mouseover,noexists][@mouseover,noharm][@mouseover,dead] ActionButton4", 1, true),
+    "and anything else gets the key's own button")
+check(kb["5"]:GetAttribute("macrotext"):find("[@mouseover,help,nodead] Dispel Magic", 1, true),
+    "a spell for either side: help")
+check(kb["SHIFT-R"]:GetAttribute("macrotext"):find("[@mouseover,help,dead]", 1, true), "a rez stays help")
+
+-- Per role: a healer's keys work on frames only (owner: nobody walking under
+-- the cursor takes the heal); the other roles' anywhere under the cursor.
+eq(CC.Anywhere("HEALER"), false, "healer: frames only by default")
+eq(CC.Anywhere("CASTER"), true, "caster: anywhere by default")
+eq(CC.Anywhere("MELEE"), true, "melee too")
+eq(next(permKeys), nil, "the healer binds nothing for good")
+GRF.Settings.SetKeysAnywhere(true); flush()
+eq(GRF.Profile().keysAnywhere, true, "anywhere is saved for this role")
+eq(permKeys["4"], kb["4"]:GetName(), "every key is bound for good, the world included")
+eq(permKeys["SHIFT-R"], kb["SHIFT-R"]:GetName(), "the rez key too")
+eq(next((hoverBinds(childFor("party1")))), nil, "the hover wraps bind nothing on top")
+GRF.Settings.SetKeysAnywhere(false); flush()
+eq(GRF.Profile().keysAnywhere, nil, "back to the healer's default: not saved")
+eq(next(permKeys), nil, "no key bound for good")
+eq(hoverBinds(childFor("party1"))["4"], kb["4"]:GetName(), "the hover wraps bind them again")
+
+-- A role switch in combat waits for combat to end (bindings can't change).
+WoW.combat = true
+GRF.Settings.SetRole("caster")
+eq(next(permKeys), nil, "in combat: nothing bound yet")
+eq(#WoW.blocked, 0, "and nothing protected touched")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+CC.Set("4", false, 589); flush()
+eq(permKeys["4"], kb["4"]:GetName(), "the caster's key is bound for good once combat ends")
+GRF.Settings.SetRole("healer"); flush()
+eq(next(permKeys), nil, "back to the healer: frames only")
+CC.Remove(swp); CC.Remove(dm); flush()
 
 eq(next(GRF.paintFailures), nil, "no failures")
 done("test_clickcast")
