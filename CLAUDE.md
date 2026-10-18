@@ -179,7 +179,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
       `help`). The fallback `/click` takes the exact complement (`[noharm]` for a harmful
       spell).
     - `/grf keys frames|anywhere`, the main page's per-role checkbox
-      (`GRF.Settings.SetKeysAnywhere`). Measured with `/fp steps raid worldkey`.
+      (`GRF.Settings.SetKeysAnywhere`). Measured on 70450 (`/fp steps raid worldkey`,
+      `docs/FOREVER-PROBE.md` item 13): a key bound for good casts on a world enemy in combat, and
+      Resurrection and Dispel Magic read neither harmful nor helpful (so `help`).
   - **One reconciliation** (`ClickCast.Apply`): desired vs installed, changing only what
     differs, so our own bindings can't loop through `UPDATE_BINDINGS`. `ClickCast.Request()`
     queues it through the combat queue (the installed bindings stay until combat ends:

@@ -496,3 +496,29 @@ Each press logs `InCombatLockdown()`. Rev 1's fight ended before the presses, an
 - **Then dropped (owner, 2026-10-18):** Cell and EllesmereUI cast on whoever a frame shows,
   strangers included, and so does GlassRaidFrames now. The measurement stays for anyone who
   wants a group-only frame.
+
+### 13. Keys anywhere: a spell's reaction, a world enemy (1.60.1.70450, 2026-10-18, priest Karuzo, run #188)
+For #63 (hover keys anywhere for caster, melee and tank). Measured with `/fp steps raid worldkey`
+(rev 2). Key 7 was bound for good (`SetOverrideBindingClick`) to Shadow Word: Pain in the shipped
+shape (`/cast [@mouseover,harm,nodead] …` then `/click … ActionButton7` on the exact complement),
+and key 8 likewise to Renew with `help`. The bar's 7 held Renew.
+- **`C_Spell.IsSpellHarmful` / `IsSpellHelpful` answer plainly** for 32 first ranks across eight
+  classes, learned or not, with no error and no secret. Damage, debuffs and crowd control
+  (589, 585, 8092, 686, 172, 5782, 853, 370, …) read harmful only. Heals and buffs (139, 2050,
+  17, 1126, 586 Fade, …) read helpful only. **Both read false** for Resurrection (2006) and for
+  Dispel Magic (527, unlearned on Karuzo), so `API.SpellReaction` gives them `help`, as intended.
+- **An enemy in the world, in combat:** 7 over the Elder Mottled Boar cast Shadow Word: Pain on
+  it (`UNIT_SPELLCAST_SENT` target = the boar, under lockdown). The two presses before that
+  failed with only `UNIT_SPELLCAST_FAILED` for 594 and no `SENT` (most likely out of range): the
+  macro still picked the spell.
+- **An enemy in the world, out of combat:** one press, again `FAILED` for 594 with no `SENT`. The
+  macro picked the spell, but no cast landed out of combat in this run.
+- **Fallbacks:** 7 over a friendly character, and 7 over nothing in combat, both cast the bar's
+  Renew on the player (`autoSelfCast`, as in item 11), never Shadow Word: Pain. 8 over a friendly
+  character in the world (Awlie Doombow) cast Renew on her.
+- **The bare name casts the highest rank:** 594 (rank 2), not the first rank 589.
+- **Rev 2's checks failed falsely** on the two enemy steps. They compared the cast with the first
+  rank's ID and read only the step's last cast, which was the owner's own Lesser Heal. Rev 3
+  counts any cast of the step, at any rank (by the client's name), sent or failed.
+- The release step ran while still in combat and was refused ("out of combat only"). The
+  `/reload` dropped the override bindings.

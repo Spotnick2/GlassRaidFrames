@@ -1336,7 +1336,7 @@ local function worldSetup()
         local ok, err = pcall(SetOverrideBindingClick, b, true, key, b:GetName())
         say(string.format("key %s always bound (%s): %s", key, ok and "ok" or tostring(err), (text:gsub("\n", " | "))))
     end
-    P.lastSent = nil
+    P.worldCasts = {}
     P.worldPresses = { harm = { n = 0, combat = 0 }, help = { n = 0, combat = 0 } }
     return threw == 0, "threw=" .. threw, "harm=" .. show(spellName(P.worldHarm)), "help=" .. show(spellName(P.worldHelp))
 end
@@ -1348,28 +1348,33 @@ local function worldRelease()
     return true
 end
 
--- The step's presses and last cast. The key must have reached its button
+-- The step's presses and casts. The key must have reached its button
 -- (under lockdown when inCombat) before anything counts: no press, or a
 -- press out of combat, never passes (Codex P2 on #64). want = "spell": the
--- key's own spell was sent (in combat when inCombat); "other": it wasn't
--- (the bar's action, or nothing).
+-- macro chose the key's own spell (in combat when inCombat); "other": it
+-- didn't (the bar's action, or nothing). Rev 3 (run #188): any cast of the
+-- step counts, not the last (the owner's own casts came after), at any rank
+-- (the bare name casts the highest), and a failed one too (out of range:
+-- the macro still chose the spell).
 local function worldCheck(kind, want, inCombat)
     return function()
-        local sent = P.lastSent
+        local casts = P.worldCasts or {}
         local presses = P.worldPresses and P.worldPresses[kind] or { n = 0, combat = 0 }
-        P.lastSent = nil
+        P.worldCasts = {}
         if P.worldPresses then P.worldPresses[kind] = { n = 0, combat = 0 } end
-        local id = kind == "harm" and P.worldHarm or P.worldHelp
-        local spell = sent and sent.spell
-        local pass = (inCombat and presses.combat or presses.n) > 0 and (want == "spell") == (spell == id)
-        if inCombat and want == "spell" then pass = pass and sent.combat == true end
-        return pass, "presses=" .. presses.n, "in combat=" .. presses.combat, "sent=" .. show(spell),
-            "target=" .. show(sent and sent.target)
+        local name = spellName(kind == "harm" and P.worldHarm or P.worldHelp)
+        local chose, seen = false, {}
+        for _, c in ipairs(casts) do
+            if name and spellName(c.spell) == name and (c.combat or not inCombat) then chose = true end
+            seen[#seen + 1] = string.format("%s%s@%s", show(c.spell), c.failed and "(failed)" or "", show(c.target))
+        end
+        local pass = (inCombat and presses.combat or presses.n) > 0 and (want == "spell") == chose
+        return pass, "presses=" .. presses.n, "in combat=" .. presses.combat, "casts=" .. table.concat(seen, " ")
     end
 end
 
 Probe:Steps("worldkey", {
-    rev = 2,
+    rev = 3,
     title = "Keys anywhere: the spell's reaction, an enemy hovered in the world",
     { text = "Out of combat. Logging each spell's reaction, then binding 7 (a harmful spell) and 8 (a helpful one) all the time.",
       auto = true, run = worldSetup, check = function() return P.worldHarm ~= nil and P.worldHelp ~= nil, "keys bound" end },
@@ -1443,10 +1448,12 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
         if t then paint(t) end
     elseif event == "UNIT_SPELLCAST_SENT" then
         P.lastSent = { target = a2, spell = a4, combat = InCombatLockdown() }
+        if P.worldCasts then table.insert(P.worldCasts, P.lastSent) end
         say(string.format("cast sent: target=%s spell=%s", show(a2), show(a4)))
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         say("cast succeeded: spell=" .. show(a3))
     elseif event == "UNIT_SPELLCAST_FAILED" then
+        if P.worldCasts then table.insert(P.worldCasts, { spell = a3, failed = true, combat = InCombatLockdown() }) end
         say("cast failed: spell=" .. show(a3))
     elseif event == "UNIT_AURA" then
         if P.watch and tiles[a1] then
