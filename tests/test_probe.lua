@@ -166,4 +166,28 @@ eq(#log, 1, "and empties it in place, then logs the clear")
 check(logHas("log cleared") and consoleHas("log cleared"), "the line after a clear is in both")
 check(#WoW.chat == 0, "nothing reached chat")
 
+-- worldkey (#63): a check passes only on a press that reached the key's
+-- button, under lockdown for the combat steps (Codex P2 on #64: no press,
+-- or none in combat, used to pass the fallback step).
+C_Spell.IsSpellHarmful = function(id) return id == 589 end
+C_Spell.IsSpellHelpful = function(id) return id == 2050 end
+local realName = C_Spell.GetSpellName
+C_Spell.GetSpellName = function(id) return id == 589 and "Shadow Word: Pain" or realName(id) end
+rawset(_G, "C_SpellBook", { IsSpellKnown = function(id) return id == 589 or id == 2050 end })
+check(T.worldSetup(), "worldkey binds a harmful and a helpful key")
+local fallback = T.worldCheck("harm", "other", true)
+check(not fallback(), "no press: the in-combat fallback step fails")
+local harmKey = _G["RaidProbeWorldKeyharm"]
+harmKey:GetScript("PostClick")(harmKey, "LeftButton", false)
+check(not fallback(), "a press out of combat: still fails")
+WoW.combat = true
+harmKey:GetScript("PostClick")(harmKey, "LeftButton", false)
+check(fallback(), "a press in combat with nothing cast: passes")
+check(not fallback(), "and the next step starts from zero presses")
+local cast = T.worldCheck("harm", "spell", true)
+harmKey:GetScript("PostClick")(harmKey, "LeftButton", false)
+T.P.lastSent = { target = "Boar", spell = 589, combat = true }
+check(cast(), "a press in combat that sent the key's spell: passes")
+WoW.combat = false
+
 done("test_probe")

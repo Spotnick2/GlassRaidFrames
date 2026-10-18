@@ -1318,6 +1318,14 @@ local function worldSetup()
             b = CreateFrame("Button", "RaidProbeWorldKey" .. kind, UIParent, "SecureActionButtonTemplate")
             b:RegisterForClicks("AnyUp", "AnyDown")   -- both edges: the template acts on one (measured)
             b:SetAttribute("type", "macro")
+            -- The key really reached the button, and in combat or not: a
+            -- check can't pass on a press that never happened (Codex P2 on #64).
+            b:HookScript("PostClick", function(_, _, down)
+                local p, fighting = P.worldPresses[kind], InCombatLockdown()
+                p.n = p.n + 1
+                if fighting then p.combat = p.combat + 1 end
+                say(string.format("key %s reached its button (%s), combat=%s", WORLD_KEYS[kind], down and "down" or "up", show(fighting)))
+            end)
             P.worldKeys[kind] = b
         end
         -- The shape GlassRaidFrames ships: the spell on the matching
@@ -1329,6 +1337,7 @@ local function worldSetup()
         say(string.format("key %s always bound (%s): %s", key, ok and "ok" or tostring(err), (text:gsub("\n", " | "))))
     end
     P.lastSent = nil
+    P.worldPresses = { harm = { n = 0, combat = 0 }, help = { n = 0, combat = 0 } }
     return threw == 0, "threw=" .. threw, "harm=" .. show(spellName(P.worldHarm)), "help=" .. show(spellName(P.worldHelp))
 end
 
@@ -1339,22 +1348,28 @@ local function worldRelease()
     return true
 end
 
--- The last cast. want = "spell": the key's own spell; "other": the bar's
--- action, or nothing. inCombat: the cast must have been sent under lockdown.
+-- The step's presses and last cast. The key must have reached its button
+-- (under lockdown when inCombat) before anything counts: no press, or a
+-- press out of combat, never passes (Codex P2 on #64). want = "spell": the
+-- key's own spell was sent (in combat when inCombat); "other": it wasn't
+-- (the bar's action, or nothing).
 local function worldCheck(kind, want, inCombat)
     return function()
         local sent = P.lastSent
+        local presses = P.worldPresses and P.worldPresses[kind] or { n = 0, combat = 0 }
         P.lastSent = nil
+        if P.worldPresses then P.worldPresses[kind] = { n = 0, combat = 0 } end
         local id = kind == "harm" and P.worldHarm or P.worldHelp
         local spell = sent and sent.spell
-        local pass = (want == "spell") == (spell == id)
-        if inCombat then pass = pass and (want == "other" and sent == nil or (sent ~= nil and sent.combat == true)) end
-        return pass, "sent=" .. show(spell), "target=" .. show(sent and sent.target), "combat=" .. show(sent and sent.combat)
+        local pass = (inCombat and presses.combat or presses.n) > 0 and (want == "spell") == (spell == id)
+        if inCombat and want == "spell" then pass = pass and sent.combat == true end
+        return pass, "presses=" .. presses.n, "in combat=" .. presses.combat, "sent=" .. show(spell),
+            "target=" .. show(sent and sent.target)
     end
 end
 
 Probe:Steps("worldkey", {
-    rev = 1,
+    rev = 2,
     title = "Keys anywhere: the spell's reaction, an enemy hovered in the world",
     { text = "Out of combat. Logging each spell's reaction, then binding 7 (a harmful spell) and 8 (a helpful one) all the time.",
       auto = true, run = worldSetup, check = function() return P.worldHarm ~= nil and P.worldHelp ~= nil, "keys bound" end },
@@ -1892,4 +1907,5 @@ for _, c in ipairs(COMMANDS) do
 end
 
 -- Seam for tests/test_probe.lua: file-local state and the hover-key toggle.
-NS._test = { Probe = Probe, P = P, order = order, hoverKeys = hoverKeys, HOVER_KEY = HOVER_KEY, indButton = indButton }
+NS._test = { Probe = Probe, P = P, order = order, hoverKeys = hoverKeys, HOVER_KEY = HOVER_KEY, indButton = indButton,
+              worldSetup = worldSetup, worldCheck = worldCheck }
