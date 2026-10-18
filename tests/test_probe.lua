@@ -172,7 +172,7 @@ check(#WoW.chat == 0, "nothing reached chat")
 C_Spell.IsSpellHarmful = function(id) return id == 589 end
 C_Spell.IsSpellHelpful = function(id) return id == 2050 end
 local realName = C_Spell.GetSpellName
-C_Spell.GetSpellName = function(id) return id == 589 and "Shadow Word: Pain" or realName(id) end
+C_Spell.GetSpellName = function(id) return (id == 589 or id == 594) and "Shadow Word: Pain" or realName(id) end
 rawset(_G, "C_SpellBook", { IsSpellKnown = function(id) return id == 589 or id == 2050 end })
 check(T.worldSetup(), "worldkey binds a harmful and a helpful key")
 local fallback = T.worldCheck("harm", "other", true)
@@ -184,10 +184,34 @@ WoW.combat = true
 harmKey:GetScript("PostClick")(harmKey, "LeftButton", false)
 check(fallback(), "a press in combat with nothing cast: passes")
 check(not fallback(), "and the next step starts from zero presses")
+-- Run #188 (rev 2 failed both): the bare name casts the highest rank (594),
+-- and the owner's own heal came after it. Any cast of the step counts, at
+-- any rank, and a failed one too (out of range: the macro chose the spell).
 local cast = T.worldCheck("harm", "spell", true)
 harmKey:GetScript("PostClick")(harmKey, "LeftButton", false)
-T.P.lastSent = { target = "Boar", spell = 589, combat = true }
-check(cast(), "a press in combat that sent the key's spell: passes")
+WoW.fire("UNIT_SPELLCAST_SENT", "player", "Elder Mottled Boar", "guid-1", 594)
+WoW.fire("UNIT_SPELLCAST_SENT", "player", "Karuzo Mistwalker", "guid-2", 2050)
+check(cast(), "a press in combat that sent the key's spell at another rank, then a heal: passes")
+harmKey:GetScript("PostClick")(harmKey, "LeftButton", false)
+WoW.fire("UNIT_SPELLCAST_FAILED", "player", "guid-3", 594)
+check(cast(), "a failed cast of the key's spell: the macro still chose it")
+harmKey:GetScript("PostClick")(harmKey, "LeftButton", false)
+WoW.fire("UNIT_SPELLCAST_SENT", "player", "Karuzo Mistwalker", "guid-4", 2050)
+check(not cast(), "another spell only: the key's spell wasn't chosen")
+check(fallback() == false, "and an empty step still fails")
+WoW.combat = false
+local outside = T.worldCheck("harm", "spell")
+harmKey:GetScript("PostClick")(harmKey, "LeftButton", false)
+WoW.combat = true
+WoW.fire("UNIT_SPELLCAST_SENT", "player", "Elder Mottled Boar", "guid-5", 594)
+WoW.combat = false
+check(outside(), "an out-of-combat step accepts any cast")
+WoW.combat = true
+harmKey:GetScript("PostClick")(harmKey, "LeftButton", false)
+WoW.combat = false
+WoW.fire("UNIT_SPELLCAST_SENT", "player", "Elder Mottled Boar", "guid-6", 594)
+WoW.combat = true
+check(not cast(), "an in-combat step ignores a cast sent outside combat")
 WoW.combat = false
 
 done("test_probe")
