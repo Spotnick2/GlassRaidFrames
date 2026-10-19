@@ -217,6 +217,16 @@ function Settings.SetLayoutMode(mode)
     return true
 end
 
+-- The tier preview (#69): 10, 20 or 40 mock members in place of the grid,
+-- announced so GlassUnitFrames follows; nil ends it. Out of combat.
+function Settings.Preview(n)
+    if not (GRF.layoutOn and GRF.Header.container) then return false, "the group layout is off" end
+    if n == nil then return GRF.Layout.EndPreview() end
+    if InCombatLockdown() then return false, "not in combat" end
+    if not GRF.Layout.PREVIEWS[n] then return false, "a preview of 10, 20 or 40" end
+    return GRF.Layout.Preview(n)
+end
+
 function Settings.SetShowSolo(on)
     GRF.db.showSolo = on == true
     whenOutOfCombat("solo", function() GRF.Header.SetShowSolo(GRF.db.showSolo) end)
@@ -603,6 +613,15 @@ local function slash(msg)
             say("usage: /grf layout on|off|hud|side")
         end
         say(layoutLine())
+    elseif cmd == "preview" then
+        local ok, why = Settings.Preview(tonumber(arg))
+        if arg == "off" or arg == "" then
+            say("preview ended")
+        elseif ok then
+            say("preview: a raid of " .. arg .. " (/grf preview off, combat or a roster change ends it)")
+        else
+            say("preview: " .. tostring(why or "usage: /grf preview 10|20|40|off"))
+        end
     elseif cmd == "solo" then
         Settings.SetShowSolo(not GRF.db.showSolo)
         say("show frames when solo: " .. (GRF.db.showSolo and "on" or "off"))
@@ -657,6 +676,7 @@ local function slash(msg)
         say("/grf reset - this role's default position")
         say("/grf size <width> <height> | reset - this role's tile size")
         say("/grf layout on|off - one grid sized by the group (after /reload); hud|side - this role's place")
+        say("/grf preview 10|20|40|off - how a raid of that size would sit")
         say("/grf solo - show your own frame when not in a group")
         say("/grf pets - show or hide pets (this role)")
         say("/grf ind - buff and debuff indicators (per class); /grf ind <n> on|off, /grf ind reset")

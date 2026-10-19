@@ -115,9 +115,27 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - **Placed on a baseline** (`Layout.ModeOf(role)`, `profiles[role].layout`, unsaved default
     `hud` for the healer and `side` for the others): the HUD centres the grid and its pets on
     UIParent's middle, the baseline at 152/1080 of its height, and the row 68 raw units above
-    it. The side anchors the grid's bottom-left at (30, middle − 93), so it grows right. The
-    grid is anchored by its bottom: in combat it grows upward. The mover moves the baseline
+    it. The side anchors the grid's bottom-left at (30, middle − 93), so it grows right; 30
+    past GlassActionBars' left-edge bars when it reports them (`GlassActionBars.EdgeState().left`,
+    read defensively, and `GlassActionBars.EdgesChanged`; its #37). The grid is anchored by its
+    bottom: in combat it grows upward. The mover moves the baseline
     (`profiles[role].layoutPos[mode]`); Reset forgets it. `pos` and `petPos` stay set aside.
+  - **At login** UIParent is 1365x768 at `ADDON_LOADED` and has its real size by `PLAYER_LOGIN`
+    (item 16): `Layout.State()` is nil and nothing is announced until then. **Nothing glides
+    until a loading screen has lifted** (GlassUI#39): every placement before
+    `LOADING_SCREEN_DISABLED`, and the first after it, snaps, at login and on a zone change.
+  - **The glide** (GUF's zoom: 0.3 s, cubic ease-out): every out-of-combat `Layout.Apply` reads
+    each shown tile's insecure `b.body` on screen first (a roster event captures before the
+    header's own reflow), then offsets it back there and eases it to its tile. Hitboxes snap.
+    A screen-size or scale change, the session's first placement and the mover snap. Nothing
+    protected anchors to a body.
+  - **The tier preview** (`GRF.Settings.Preview(10|20|40|nil)`, `/grf preview`, the Layout
+    section's buttons): insecure glass cells at the tier's geometry, pets and the reserved
+    column included, with the real grid at alpha 0 (untouched), announced as the layout so
+    GlassUnitFrames follows. Out of combat; combat starting, a real roster change, a drag or
+    its button ends it, and the real state is announced again.
+  - Names are 15 at the 60 cell (`Frames.NAME_RATIO`); LibGlass's `Font` keeps them to one
+    line, so the client shortens a long one.
   - **Nothing of ours moves in combat**: `GROUP_ROSTER_UPDATE`, `UNIT_PET` and screen changes
     queue one `Layout.Refresh` (the combat queue, key `layout`), which applies and announces.
   - `Layout.Install()` puts its functions over `Header`'s at `ADDON_LOADED` (`GRF.layoutOn`,
@@ -450,7 +468,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     (`/fp steps raid layout`, `/fp raid layout [bars|swap|collapse|candidate]`),
     and `/fp steps raid raidunit`, the party pets' driver on a unit test (`[group:raid]` reads false in combat);
     `/fp steps raid grid` checks the shipped layout in game: party, small raid, a roster change in
-    combat, and `/grf layout off` and back.
+    combat, and `/grf layout off` and back; `/fp steps raid glide` the preview with GUF
+    following, the glide and names at 80; `/fp steps raid login` logs UIParent's size through a
+    login.
 
 Forever is **Vanilla content running on Blizzard's Retail (Mainline) codebase**: assume Vanilla
 content and the Retail API. `WOW_PROJECT_ID == WOW_PROJECT_MAINLINE`. Advice that cites a TBC or

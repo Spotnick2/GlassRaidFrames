@@ -97,6 +97,14 @@ local LO = GlassRaidFrames.Options._test
 LO.panel._scripts.OnShow(LO.panel)
 for _, key in ipairs({ "groupLayout", "layoutHud" }) do LO.controls[key]._scripts.OnClick(LO.controls[key]) end
 SlashCmdList.GLASSRAIDFRAMES("layout")
+-- The tier preview (every button) and a glide run to its end.
+for _, b in ipairs(LO.controls.preview) do b._scripts.OnClick(b) end
+GlassRaidFrames.Settings.Preview(40); GlassRaidFrames.Settings.Preview(nil)
+local L69 = GlassRaidFrames.Layout._test.L
+L69.cells[1]._center, L69.cells[1]._width, L69.cells[1]._height = { 500, 300 }, 96, 60
+L69.from = { [L69.cells[1]] = { 400, 270 } }
+GlassRaidFrames.Layout.Apply()
+WoW.tick(1)
 
 -- Methods the dump cannot list: Blizzard_AuraContainer is a load-on-demand
 -- Blizzard addon the dump did not capture. Evidence they exist on Forever:

@@ -148,6 +148,7 @@ function loadAddon(opts)
     WoW.fire("ADDON_LOADED", "GlassRaidFrames")
     WoW.fire("PLAYER_LOGIN")
     WoW.fire("PLAYER_ENTERING_WORLD", opts.initialLogin ~= false, false)
+    WoW.fire("LOADING_SCREEN_DISABLED")   -- the client's order at login (FOREVER-PROBE item 16)
     WoW.applyUnitWatch()
     WoW.tick()
     return GlassRaidFrames

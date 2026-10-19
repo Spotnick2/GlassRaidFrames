@@ -409,6 +409,7 @@ function Methods.SetFormattedText(fs, fmt, ...)
 end
 function Methods.SetFont(fs, file, size, flags) fs._font = { file, size, flags }; return true end
 function Methods.GetFont(fs) if fs._font then return fs._font[1], fs._font[2], fs._font[3] end end
+function Methods.SetWordWrap(fs, on) fs._wordWrap = on end
 
 -- StatusBar: takes values (secret or not) without inspecting them.
 function Methods.SetMinMaxValues(b, lo, hi, interp) b._min, b._max, b._minMaxInterp = lo, hi, interp end

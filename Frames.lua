@@ -186,9 +186,11 @@ function Frames.BarHeight(b)
 end
 
 -- The name grows with the tile, taking the room Cell's does (its glyphs span
--- about 30% of the frame's height): 16 at the default 58, 9 to 22.
+-- about 30% of the frame's height): 16 at the default 58, 9 to 22. The group
+-- layout's is 15 at its 60 (GROUP-LAYOUT.md: Layout.Install sets the ratio).
+Frames.NAME_RATIO = 0.28
 function Frames.NameSize(h)
-    return math.max(9, math.min(22, math.floor(h * 0.28 + 0.5)))
+    return math.max(9, math.min(22, math.floor(h * Frames.NAME_RATIO + 0.5)))
 end
 
 -- The name a tile shows: the first name, as Cell does ("Draku"). Forever's
