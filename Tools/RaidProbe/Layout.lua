@@ -25,6 +25,9 @@ local function show(v) return Probe.Show(v, true) end
 local LAYOUT = {
     W = 96, H = 60, PET_W = 64, PET_H = 28, PARTY_PET_H = 30, GAP = 6,
     BASE = 152 / 1080, PARTY_LIFT = 68, DRIVER = "[group:raid] hide; show",
+    -- [group:raid] reads false in combat (run #238); a unit test may not
+    -- (GlassUI#35): measured by the raidunit procedure.
+    CANDIDATE = "[@raid1,exists] hide; show",
     -- Half the widest HUD: 8 columns of 80 and 4 pet columns of 64, gaps of 6.
     HALF = (8 * 80 + 7 * 6 + 6 + 4 * 64 + 3 * 6) / 2,
 }
@@ -585,8 +588,82 @@ Probe:Steps("layout", {
       reload = true },
 })
 
+--------------------------------------------------------------------------------
+-- M4 again: a driver on a unit test instead of [group:raid]
+--------------------------------------------------------------------------------
+
+-- One plain frame behind the candidate driver, and both conditions as the
+-- client parses them now.
+local function candidateState()
+    local c = { raid = IsInRaid(), group = IsInGroup(), combat = InCombatLockdown() == true,
+        raid1 = UnitExists("raid1") == true, shown = LP.candidate ~= nil and LP.candidate:IsShown() }
+    local ok, v = pcall(SecureCmdOptionParse, LAYOUT.CANDIDATE)
+    c.parse = ok and v or "threw"
+    ok, v = pcall(SecureCmdOptionParse, LAYOUT.DRIVER)
+    c.groupParse = ok and v or "threw"
+    return c
+end
+
+local function candidateLine(c)
+    return string.format("group=%s raid=%s combat=%s raid1 exists=%s | %s: shown=%s parses %s | %s parses %s",
+        rosterOf(c), show(c.raid), show(c.combat), show(c.raid1), LAYOUT.CANDIDATE, show(c.shown), show(c.parse),
+        LAYOUT.DRIVER, show(c.groupParse))
+end
+
+local function buildCandidate()
+    if LP.candidate then return true end
+    if InCombatLockdown() then say("out of combat only") return false end
+    local f = CreateFrame("Frame", "RaidProbeLayoutCandidate", UIParent)
+    local ok, err = pcall(RegisterStateDriver, f, "visibility", LAYOUT.CANDIDATE)
+    LP.candidate = f
+    say("layout: candidate driver " .. LAYOUT.CANDIDATE .. (ok and " registered" or " threw: " .. tostring(err)))
+    return ok, candidateLine(candidateState())
+end
+
+-- Hidden exactly in a raid, by the frame and by the parse.
+local function candidateHolds(opts)
+    return function()
+        if not LP.candidate then return false, "not built: /fp raid layout candidate" end
+        local c = candidateState()
+        say("layout: " .. candidateLine(c))
+        local probs = {}
+        local function need(ok, why) if not ok then probs[#probs + 1] = why end end
+        if opts.combat ~= nil then need(c.combat == opts.combat, opts.combat and "not in combat" or "in combat") end
+        if opts.roster then
+            need(ROSTER[opts.roster](c), "the group is " .. rosterOf(c) .. ", the step wants " .. opts.roster)
+        end
+        need(c.shown == not c.raid, string.format("shown=%s in a raid=%s", show(c.shown), show(c.raid)))
+        need(c.parse == (c.raid and "hide" or "show"), "parses " .. show(c.parse))
+        return #probs == 0, table.concat(probs, "; "), candidateLine(c)
+    end
+end
+
+local function outOfCombat()
+    if InCombatLockdown() then return false, "still in combat" end
+    return true
+end
+
+Probe:Steps("raidunit", {
+    rev = 1,
+    title = "Party pets (#69, GlassUI#35): does [@raid1,exists] hide them in combat?",
+    { text = "Out of combat: registering a frame behind \"" .. LAYOUT.CANDIDATE .. "\".", auto = true,
+      run = buildCandidate },
+    { text = "Form a PARTY with one other player (not a raid), out of combat. Then Next.",
+      check = candidateHolds({ roster = "party", combat = false }) },
+    { text = "Start combat (a training dummy or a mob) and stay in it.", event = "PLAYER_REGEN_DISABLED" },
+    { text = "In combat: convert the party to a RAID. Next once converted (stay in combat).",
+      check = candidateHolds({ roster = "raid", combat = true }) },
+    { text = "Still in combat: the other player LEAVES (the raid ends). Next once they're gone. Can't stay in "
+        .. "combat that long? Skip.", check = candidateHolds({ roster = "solo", combat = true }) },
+    { text = "Leave combat and wait.", wait = outOfCombat, timeout = 180, check = candidateHolds({ combat = false }) },
+    { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
+})
+
 local ev = CreateFrame("Frame")
 ev:SetScript("OnEvent", function(_, event)
+    if LP.candidate then
+        C_Timer.After(0.3, function() say("layout " .. event .. ": " .. candidateLine(candidateState())) end)
+    end
     if not LP.grid then return end
     if event == "PLAYER_REGEN_DISABLED" then
         LP.before = state()   -- what the in-combat roster change is measured against
@@ -603,12 +680,18 @@ Probe:Command("layout", function(args)
     if args == "bars" then bars() return end
     if args == "swap" then swap() return end
     if args == "collapse" then collapse() return end
+    if args == "candidate" then
+        if not LP.candidate then buildCandidate() else say("layout: " .. candidateLine(candidateState())) end
+        return
+    end
     if not LP.grid then build() return end
     say("layout: " .. line(state()))
-end, "[bars|swap|collapse] #69's grid, raid-pet header and party pets (again: report); bars: the baseline (M3); "
-    .. "swap: the orientation batch without and with the anchor clear; collapse: two rows back to one, uncleared")
+end, "[bars|swap|collapse|candidate] #69's grid, raid-pet header and party pets (again: report); bars: the baseline (M3); "
+    .. "swap: the orientation batch without and with the anchor clear; collapse: two rows back to one, uncleared; "
+    .. "candidate: the [@raid1,exists] driver (again: report)")
 
 -- Seam for tests/test_probe.lua.
 NS._layout = { LAYOUT = LAYOUT, LP = LP, expectSize = expectSize, wantCells = wantCells, build = build,
     state = state, check = check, applySet = applySet, sync = sync, swap = swap, bars = bars, force = force,
-    released = released, precreate = precreate, collapse = collapse }
+    released = released, precreate = precreate, collapse = collapse, buildCandidate = buildCandidate,
+    candidateHolds = candidateHolds }

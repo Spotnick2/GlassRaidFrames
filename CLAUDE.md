@@ -409,7 +409,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     (private) and skips it with `FOREVERPROBE_OPTIONAL=1`, so run the tests locally before a probe PR.
   - New in-game experiments go in as guided procedures (`Probe:Steps`), not checklists in chat.
   - `Layout.lua` (#69) is the same module in a second file: the group layout's M1-M4
-    (`/fp steps raid layout`, `/fp raid layout [bars|swap|collapse]`).
+    (`/fp steps raid layout`, `/fp raid layout [bars|swap|collapse|candidate]`),
+    and `/fp steps raid raidunit`, the party pets' driver on a unit test (`[group:raid]` reads false in combat).
 
 Forever is **Vanilla content running on Blizzard's Retail (Mainline) codebase**: assume Vanilla
 content and the Retail API. `WOW_PROJECT_ID == WOW_PROJECT_MAINLINE`. Advice that cites a TBC or

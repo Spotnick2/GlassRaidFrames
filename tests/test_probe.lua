@@ -446,6 +446,33 @@ check(L.released(), "after combat: released")
 eq(LP.set, A.ROW, "and the row applies")
 eq(LP.force, nil, "the force is gone")
 WoW.raid = nil
+
+-- The candidate driver (GlassUI#35): a plain frame behind [@raid1,exists],
+-- judged by the frame and by the parse. The driver itself is the client's.
+rawset(_G, "SecureCmdOptionParse", function(v)
+    if v == A.CANDIDATE then return UnitExists("raid1") and "hide" or "show" end
+    return "show"
+end)
+check(L.buildCandidate(), "the candidate builds out of combat")
+eq(drivers[#drivers][1] == LP.candidate and drivers[#drivers][3], "[@raid1,exists] hide; show",
+    "its driver is the unit test")
+LP.candidate._shown = true
+ok, why = L.candidateHolds({ roster = "party", combat = false })()
+check(ok, "a party: shown holds: " .. tostring(why))
+WoW.raid = { player = { index = 1, subgroup = 1 } }
+WoW.units.raid1 = { name = "Me" }
+WoW.combat = true
+ok, why = L.candidateHolds({ roster = "raid", combat = true })()
+check(not ok and why:find("shown=true in a raid=true"), "a raid in combat, still shown, fails: " .. tostring(why))
+LP.candidate._shown = false
+ok, why = L.candidateHolds({ roster = "raid", combat = true })()
+check(ok, "hidden in a raid in combat holds: " .. tostring(why))
+ok, why = L.candidateHolds({ roster = "party", combat = true })()
+check(not ok and why:find("the step wants party"), "the step's roster is required: " .. tostring(why))
+WoW.units.raid1 = nil
+ok, why = L.candidateHolds({ roster = "raid" })()
+check(not ok and why:find("parses show"), "a parse that disagrees fails: " .. tostring(why))
+WoW.raid, WoW.combat = nil, false
 check(#WoW.chat == 0, "the layout probe wrote nothing to chat")
 
 done("test_probe")
