@@ -522,3 +522,57 @@ and key 8 likewise to Renew with `help`. The bar's 7 held Renew.
   counts any cast of the step, at any rank (by the client's name), sent or failed.
 - The release step ran while still in combat and was refused ("out of combat only"). The
   `/reload` dropped the override bindings.
+
+### 14. The group layout, M1-M4 (1.60.1.70450, 2026-10-18, hunter with a pet, party of 2 → raid of 2, run #238)
+For #69 (the plan: Glass UI's `docs/GROUP-LAYOUT.md`). Measured with `/fp steps raid layout`
+(rev 4), GlassRaidFrames off. Cells 96×60, raid-pet cells 64×28, party-pet buttons 96×30. UIParent
+was 2133.3×1200 (scale 0.64, 3840×2160, `useUiScale` 0). Header facts that hold for any addon are
+in the porting guide ("`SecureGroupHeaderTemplate` layout: what holds").
+- **M1, the sets hold.**
+  - The row: a party of 2 gave 198×60, with its bottom at the baseline + 68 (236.9) and centred.
+  - The columns (forced; the beta can't gather 6) gave 96×126 with its bottom on the baseline
+    (168.9).
+  - Swaps out of combat: the batch with the clear held. Without the clear, the old anchors stayed
+    on the shown cells (2×2 instead of 2×1, two anchors a cell).
+  - The same-value refresh (`point` set to its own value) fired and re-laid every time, so the
+    `rpRefresh` fallback never ran.
+- **M1, in combat.** Under the forced columns, the other player leaving in combat shrank the grid
+  to one cell (96×60), and inviting them back grew it to 96×126. Its bottom stayed at 168.9 and
+  nothing was blocked (no `ADDON_ACTION_BLOCKED` in the session). Converting to a raid in combat
+  switched the cells from `player, party1` to `raid1, raid2`.
+- **A stale column anchor doesn't stretch the cell** (the new `collapse` step). Precreation left the
+  grid's child 1 with 2 anchors (the pet header's with 0: no pets were listed, so it was hidden and
+  cleared). Two rows back to one without the clear left child 1 with `LEFT` + `BOTTOM`, but it
+  stayed 96×60 at the grid's left edge, with the grid at 198×60, through one more pass. So a raid of
+  6 falling to 5 in combat under the columns should keep its cells (the columns' `TOP` + `LEFT` pair
+  is unmeasured).
+- **M2: the raid-pet header follows the grid in combat.** Its top-left stayed 6 right of the grid's
+  top-right through 126 → 60 → 126 (top 294.9, 228.9, 294.9). In a raid, the pet was listed
+  (`cells=1`, 64×28).
+- **M3: the bars.**
+  - The main bars' top is 132.6 (MultiBarBottomRight), so the baseline (168.9) clears them by 36.
+  - The pet action bar (x 641-896, top 253.1) sits left of a small grid, under GlassUnitFrames'
+    player frame. The probe's check failed because its footprint (HALF: 8 columns and 4 pet
+    columns) took it in. The owner judged the party and the small raid clear.
+  - But the columns' bottom (168.9) is 84 below the pet bar's top. So a grid more than about 340
+    wide (5 columns of 80: a raid of 21 or more) would reach over a hunter's or warlock's pet bar.
+- **M4: the party-pet holder fails in combat.**
+  - Out of combat it holds: in the party the holder was shown, with the pet under the player's
+    cell. Under the columns its driver was `hide`. In a raid, `[group:raid]` hid it.
+  - **Converting to a raid in combat left it shown** until combat ended (`SecureCmdOptionParse`
+    still said `show` 6 s later), on top of the raid-pet column that listed the same pet. The cell
+    above it was `raid1`. `[group:raid]` reads false in combat, like `[party]`/`[raid]` (item 11).
+  - **The fix holds: `[@raid1,exists] hide; show`** (`/fp steps raid raidunit`, rev 1, run #240,
+    same day, party of 2). A frame behind it was shown in the party. A conversion to a raid **in
+    combat** hid it within 0.3 s (it parsed `hide`, while `[group:raid]` still parsed `show`). The
+    other player leaving, still in combat, showed it again. Nothing was blocked. GlassUI#35 adopts
+    it if it holds.
+- **The owner's concern:** in the raid, the raid-pet column sat over GlassUnitFrames' target
+  debuffs. The probe announces nothing, so GlassUnitFrames didn't move. The build's announced
+  rectangle includes the pet column. But a column that appears in combat (a raid's first pet, or a
+  conversion) can't push GlassUnitFrames aside until combat ends.
+- The run itself:
+  - The first leave step failed: combat ended before the other player left. The leave came in the
+    next combat, during the rejoin step, and the log has it (`GROUP_ROSTER_UPDATE` under lockdown).
+  - Five of the nine screenshots timed out (`no SCREENSHOT_SUCCEEDED within 5 s`). The other four
+    were read, then removed.
