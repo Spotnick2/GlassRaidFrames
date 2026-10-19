@@ -314,7 +314,7 @@ local function build()
     end), 30, 4)
 
     header("Frames")
-    controls.pets = checkbox("Show pets, under the group frames (this role)",
+    controls.pets = checkbox("Show pets, in a column beside the group frames (this role)",
         function() return GRF.Profile() and GRF.Profile().showPets end, S.SetShowPets)
     controls.solo = checkbox("Show your own frame when not in a group",
         function() return GRF.db.showSolo end, S.SetShowSolo)

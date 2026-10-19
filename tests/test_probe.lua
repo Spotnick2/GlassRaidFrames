@@ -24,6 +24,7 @@ local function rprobe(s) SlashCmdList.FOREVERPROBE("raid " .. s) end
 rawset(_G, "RaidProbeDB", { log = { "1.0 an earlier session's line" }, sessions = 2 })
 local ns = {}
 assert(loadfile("Tools/RaidProbe/RaidProbe.lua"))("RaidProbe", ns)
+assert(loadfile("Tools/RaidProbe/Layout.lua"))("RaidProbe", ns)
 local T = ns._test
 check(rawget(_G, "RaidProbe_test") == nil, "the test seam stays off _G")
 check(rawget(SlashCmdList, "RAIDPROBE") == nil, "no /rprobe any more: /fp raid")
@@ -213,5 +214,166 @@ WoW.fire("UNIT_SPELLCAST_SENT", "player", "Elder Mottled Boar", "guid-6", 594)
 WoW.combat = true
 check(not cast(), "an in-combat step ignores a cast sent outside combat")
 WoW.combat = false
+
+-- The group layout (#69): Layout.lua joins the same module.
+local L = ns._layout
+check(L and FP.byCmd.raid == T.Probe, "Layout.lua is part of RaidProbe")
+rprobe("")
+check(consoleHas("  layout %- "), "/fp raid lists layout")
+local A = L.LAYOUT
+
+-- The size the client's configureChildren gives the plan's sets
+-- (SecureGroupHeaders.lua:143-255): ceil(n/5) columns in a raid, a row in a party.
+local function size(set, n, cw, ch)
+    local w, h, cols, per = L.expectSize(set, n, cw or A.W, ch or A.H)
+    return string.format("%gx%g %s/%s", w, h, tostring(cols), tostring(per))
+end
+eq(size(A.COLUMNS, 2), "96x126 1/2", "a 2-player raid: one column of 2")
+eq(size(A.COLUMNS, 5), "96x324 1/5", "5: one column of 5")
+eq(size(A.COLUMNS, 10), "198x324 2/5", "10: 2 columns")
+eq(size(A.COLUMNS, 11), "300x324 3/5", "11: 3 columns")
+eq(size(A.COLUMNS, 40), "810x324 8/5", "40: 8 columns")
+eq(size(A.COLUMNS, 0), "96x0.1 0/0", "no cells: the header's minimum (a raid set)")
+eq(size(A.ROW, 1), "96x60 1/1", "solo: one cell")
+eq(size(A.ROW, 5), "504x60 1/5", "a party of 5: one row")
+eq(size(A.ROW, 10), "504x126 2/5", "a raid of 10 in the party set: rows of 5 stacked")
+eq(size(A.ROW, 0), "0.1x60 0/0", "no cells: the header's minimum (the party set)")
+eq(size(A.PETS, 12, A.PET_W, A.PET_H), "134x316 2/10", "12 raid pets: columns of 10")
+
+-- What the client lists for each set (both keep the other kind's attributes
+-- on: GlassUI#30).
+local group = { raid = false, inGroup = false, members = 0, sub = 0 }
+WoW.raid = nil
+rawset(_G, "IsInGroup", function() return group.inGroup end)
+rawset(_G, "GetNumGroupMembers", function() return group.members end)
+rawset(_G, "GetNumSubgroupMembers", function() return group.sub end)
+eq(L.wantCells(A.ROW), 1, "solo: the row shows you")
+eq(L.wantCells(A.COLUMNS), 1, "solo: the columns show you too")
+group.inGroup, group.members, group.sub = true, 2, 1
+eq(L.wantCells(A.ROW), 2, "a party of 2")
+eq(L.wantCells(A.COLUMNS), 2, "and a party (a raid fallen back to one in combat)")
+-- showSolo is the player's setting: off, showParty still lists the party.
+local noSolo = setmetatable({ showSolo = false }, { __index = A.COLUMNS })
+eq(L.wantCells(noSolo), 2, "the columns list a party with show-solo off")
+
+-- The build: 40 cells, 40 raid pets, five party pets under the first five
+-- cells, the pet header on the grid's right edge, the driver registered.
+local drivers = {}
+rawset(_G, "RegisterStateDriver", function(f, state, values) drivers[#drivers + 1] = { f, state, values } end)
+rawset(_G, "SecureCmdOptionParse", function() return "show" end)
+UIParent._width, UIParent._height = 1920, 1080
+check(L.build(), "the layout builds out of combat")
+local LP = L.LP
+eq(#LP.cells .. " " .. #LP.petCells .. " " .. #LP.partyPets, "40 40 5", "40 cells, 40 pet cells, 5 party pets")
+eq(drivers[1] and drivers[1][1], LP.holder, "the visibility driver is on the party-pet holder")
+eq(drivers[1] and drivers[1][3], "[group:raid] hide; show", "with the plan's condition")
+local pp, cp = { LP.pets:GetPoint(1) }, { LP.partyPets[2]:GetPoint(1) }
+check(pp[1] == "TOPLEFT" and pp[2] == LP.grid and pp[3] == "TOPRIGHT" and pp[4] == 6, "pets on the grid's right edge, 6 apart")
+check(cp[1] == "TOP" and cp[2] == LP.cells[2] and cp[3] == "BOTTOM" and cp[5] == -6, "partypet1 under the second cell")
+check(WoW.unitWatch[LP.partyPets[5]], "party pets are unit-watched")
+eq(LP.set, A.ROW, "built with 2 members: the row")
+eq(LP.grid:GetAttribute("point"), "LEFT", "the row's point")
+eq(LP.grid:GetAttribute("showParty"), true, "and it lists a party")
+local gp = { LP.grid:GetPoint(1) }
+check(gp[1] == "BOTTOM" and math.abs(gp[5] - (152 + 68)) < 0.01 and gp[4] == 960, "bottom centre at baseline + 68")
+
+-- The batch: the complete set (no party key left over), _ignore off after,
+-- anchors cleared or kept.
+for _, c in ipairs(LP.cells) do c._points = { { "LEFT" } } end
+L.applySet(A.COLUMNS, false)
+eq(LP.cells[3]:GetNumPoints(), 1, "the swap experiment keeps the anchors")
+L.applySet(A.COLUMNS, true)
+eq(drivers[#drivers][1] == LP.holder and drivers[#drivers][3], "hide", "the columns re-register the holder's driver as hide")
+eq(LP.cells[3]:GetNumPoints(), 0, "the batch clears them")
+eq(LP.grid:GetAttribute("_ignore"), nil, "_ignore is off after the batch")
+eq(LP.grid:GetAttribute("groupBy"), "GROUP", "the columns group by subgroup")
+eq(LP.grid:GetAttribute("yOffset"), -6, "the columns' yOffset")
+gp = { LP.grid:GetPoint(1) }
+check(math.abs(gp[5] - 152) < 0.01, "the columns' bottom on the baseline")
+
+-- The grid check, on a party of 2 laid out by hand (the stub has no layout).
+L.applySet(A.ROW, true)
+eq(drivers[#drivers][3], "[group:raid] hide; show", "the row gives it the raid condition back")
+eq(LP.grid:GetAttribute("groupBy"), nil, "the row clears groupBy (INDEX order: pets under owners)")
+eq(LP.grid:GetAttribute("groupingOrder"), nil, "and groupingOrder")
+local function place(f, x, y, w, h) f._center, f._width, f._height = { x, y }, w, h end
+place(LP.grid, 960, 220 + 30, 198, 60)
+for i, c in ipairs(LP.cells) do c._shown = i <= 2; c._points = i <= 2 and { { "LEFT" } } or {} end
+LP.cells[1]._attrs.unit, LP.cells[2]._attrs.unit = "player", "party1"
+place(LP.cells[1], 960 - 51, 250, 96, 60)
+place(LP.cells[2], 960 + 51, 250, 96, 60)
+local ok, why = L.check({ combat = false })()
+check(ok, "a party of 2 in one row holds: " .. tostring(why))
+place(LP.cells[2], 960 - 51, 250 - 66, 96, 60)
+ok, why = L.check({ combat = false })()
+check(not ok and why:find("1 columns x 2 rows, want 2 x 1"), "a cell left under the first fails: " .. tostring(why))
+place(LP.cells[2], 960 + 51, 250, 96, 60)
+place(LP.grid, 960, 250 + 10, 198, 60)
+ok, why = L.check({ combat = false })()
+check(not ok and why:find("bottom"), "a grid off the baseline fails: " .. tostring(why))
+place(LP.grid, 960, 250, 198, 60)
+ok, why = L.check({ combat = true })()
+check(not ok and why:find("not in combat"), "an in-combat step out of combat fails")
+group.sub = 2
+ok, why = L.check({ combat = false })()
+check(not ok and why:find("2 cells shown, the roster lists 3"), "a missing cell fails: " .. tostring(why))
+group.sub = 1
+
+-- M2 and M4 on the same hand layout.
+place(LP.pets, 960 + 99 + 6 + 32, 280 - 0.05, 64, 0.1)
+ok, why = L.check({ combat = false, pets = true })()
+check(ok, "pets on the grid's top-right hold: " .. tostring(why))
+place(LP.pets, 960 + 99 + 6 + 32, 300, 64, 0.1)
+ok = L.check({ combat = false, pets = true })()
+check(not ok, "pets left behind fail")
+WoW.units.pet = { name = "Wolf" }
+LP.partyPets[1]._shown = false
+ok, why = L.check({ combat = false, partyPets = true })()
+check(not ok and why:find("pet exists but isn't shown"), "a pet not shown in a party fails: " .. tostring(why))
+LP.partyPets[1]._shown = true
+place(LP.partyPets[1], 960 - 51, 220 - 6 - 15, 96, 30)
+ok, why = L.check({ combat = false, partyPets = true })()
+check(ok, "the pet under its owner holds: " .. tostring(why))
+place(LP.partyPets[1], 960 + 51, 220 - 6 - 15, 96, 30)
+ok, why = L.check({ combat = false, partyPets = true })()
+check(not ok and why:find("pet isn't under player"), "a pet under the wrong cell fails: " .. tostring(why))
+-- Under the columns the holder must be hidden (its driver says hide).
+L.applySet(A.COLUMNS, true)
+ok, why = L.check({ partyPets = true })()
+check(not ok and why:find("holder shown=true"), "a holder shown under the columns fails: " .. tostring(why))
+LP.holder._shown = false
+ok, why = L.check({ partyPets = true })()
+check(not why:find("holder"), "hidden under the columns holds: " .. tostring(why))
+LP.holder._shown = true
+L.applySet(A.ROW, true)
+WoW.units.pet = nil
+
+-- Out of combat, the set follows the member count; in combat it waits.
+-- A raid of 5 or fewer keeps the row (GlassUI#30); 6 get the columns.
+WoW.raid = { player = { index = 1, subgroup = 1 } }
+L.sync()
+eq(LP.set, A.ROW, "a raid of 2: still the row")
+group.members = 6
+WoW.combat = true
+L.sync()
+eq(LP.set, A.ROW, "in combat the set waits")
+WoW.combat = false
+L.sync()
+eq(LP.set, A.COLUMNS, "out of combat, 6 members get the columns")
+group.members = 2
+L.sync()
+eq(LP.set, A.ROW, "back to 2: the row")
+-- The forced columns (a raid of 6+ the beta can't gather), released after combat.
+L.force()
+eq(LP.set, A.COLUMNS, "forced: the columns with 2 members")
+WoW.combat = true
+check(not L.released(), "released only out of combat")
+eq(LP.set, A.COLUMNS, "and the columns stay meanwhile")
+WoW.combat = false
+check(L.released(), "after combat: released")
+eq(LP.set, A.ROW, "and the row applies")
+eq(LP.force, nil, "the force is gone")
+WoW.raid = nil
+check(#WoW.chat == 0, "the layout probe wrote nothing to chat")
 
 done("test_probe")
