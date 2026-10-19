@@ -576,3 +576,33 @@ in the porting guide ("`SecureGroupHeaderTemplate` layout: what holds").
     next combat, during the rejoin step, and the log has it (`GROUP_ROSTER_UPDATE` under lockdown).
   - Five of the nine screenshots timed out (`no SCREENSHOT_SUCCEEDED within 5 s`). The other four
     were read, then removed.
+
+### 15. The shipped group layout in game (1.60.1.70450, 2026-10-19, GRF#72, two accounts, runs #255-#259 and #184-#186)
+Measured with `/fp steps raid grid` (rev 1) on main after #72. Account 1 played healer (HUD; first
+as melee, side), account 12 played caster (side) with a pet. UIParent was 2133.3×1200.
+- **The layout holds what it announces.** Solo, party of 2 and a raid of 2: the grid's GetRect
+  matched the client's size formula and `LayoutState` (top, the bottom at baseline + 68 for the
+  row, centred on the HUD), with at most one anchor a cell.
+  - Healer HUD: base 168.9, the party's union 967.7..1165.7. The owner: centred above the bars,
+    clear of them, GUF's frames beside it.
+  - Side (melee, caster): the grid's left edge at 30, its bottom at 575 (507 + 68).
+- **Pets.** The party's pet row sat under its owner (Tarthosuk under Kaleid). In the raid of 2, the
+  pet went to the column on the grid's right, the holder hid, and the announced width was the grid
+  plus one reserved column (198 + 70). The owner: the column is clear of GUF's target and debuffs.
+- **Combat** (account 1): the other player leaving emptied the grid, and the invite back refilled
+  it (`player, party1`), with the set and the grid's bottom unchanged, no announcement in combat,
+  and nothing blocked. One announcement followed after combat. Account 12's in-combat steps ran
+  out of order: Next before the leave, and combat ended before the invite.
+- **`/grf layout off`** plus `/reload` brought the eight-group grid back where the owner had left
+  it (announced as `legacy`), on both accounts. `/grf layout on` brought the layout back.
+- **The first placement after a load uses UIParent's size before the UI scale applies**
+  (1365.3×768). Right after the `/reload`, the healer's grid was announced at base 108.1, centred
+  on 682.7. The caster's side baseline was at 291. Both were corrected 1.1 s later (168.9 and
+  1066.6, 507), when an event re-ran the layout. Which event, and whether it comes before the
+  loading screen lifts, is unmeasured. GUF follows the wrong first announcement too.
+- **The side default sits on side action bars.** At x 30 its first cell covered GlassActionBars'
+  vertical bars at the left edge (MultiBar5 and 6, x 2-87). The legacy grid, placed by hand at
+  135.7, didn't. The owner: the side grid must coordinate with GAB when a bar is on the left or
+  right.
+- Both accounts answered "unsure" to "did anything move in combat". The owner saw nothing move,
+  but was busy reading the probe panel. The checks found the grid held.
