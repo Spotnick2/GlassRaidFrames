@@ -28,4 +28,55 @@
             </OnAttributeChanged>
         </Scripts>
     </Button>
+    <!-- The group layout probe (#69, Layout.lua): the plan's 96x60 cells and
+         64x28 raid-pet cells. The header can't size its children, so the
+         template does. The party-pet buttons use the pet template, resized. -->
+    <Button name="RaidProbeLayoutCellTemplate" inherits="SecureUnitButtonTemplate" virtual="true">
+        <Size x="96" y="60"/>
+        <Attributes>
+            <Attribute name="type1" type="string" value="target"/>
+        </Attributes>
+        <Layers>
+            <Layer level="BACKGROUND">
+                <Texture parentKey="bg" setAllPoints="true">
+                    <Color r="0.15" g="0.35" b="0.6" a="0.6"/>
+                </Texture>
+            </Layer>
+            <Layer level="OVERLAY">
+                <FontString parentKey="label" inherits="GameFontHighlightSmall" setAllPoints="true"/>
+            </Layer>
+        </Layers>
+        <Scripts>
+            <OnLoad>
+                self:RegisterForClicks("AnyUp")
+            </OnLoad>
+            <OnAttributeChanged>
+                RaidProbe_LayoutAttribute(self, name, value)
+            </OnAttributeChanged>
+        </Scripts>
+    </Button>
+    <Button name="RaidProbeLayoutPetTemplate" inherits="SecureUnitButtonTemplate" virtual="true">
+        <Size x="64" y="28"/>
+        <Attributes>
+            <Attribute name="type1" type="string" value="target"/>
+        </Attributes>
+        <Layers>
+            <Layer level="BACKGROUND">
+                <Texture parentKey="bg" setAllPoints="true">
+                    <Color r="0.2" g="0.55" b="0.25" a="0.6"/>
+                </Texture>
+            </Layer>
+            <Layer level="OVERLAY">
+                <FontString parentKey="label" inherits="GameFontHighlightSmall" setAllPoints="true"/>
+            </Layer>
+        </Layers>
+        <Scripts>
+            <OnLoad>
+                self:RegisterForClicks("AnyUp")
+            </OnLoad>
+            <OnAttributeChanged>
+                RaidProbe_LayoutAttribute(self, name, value)
+            </OnAttributeChanged>
+        </Scripts>
+    </Button>
 </Ui>

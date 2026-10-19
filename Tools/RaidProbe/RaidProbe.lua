@@ -17,6 +17,7 @@
 --   later, #19: buff/debuff indicators                        /fp raid ind ...
 --   later, #61: the hover-key member gate on a target frame   /fp steps raid ufgate
 --   later, #63: a spell's reaction, always-bound keys on the world  /fp steps raid worldkey
+--   later, #69: the group layout's M1-M4 (Layout.lua)     /fp steps raid layout
 --
 -- Every client call that may be missing or throw goes through try(), so one
 -- refusal cannot stop the rest of the probe.

@@ -25,7 +25,7 @@ try {
     if (-not (Test-Path $luac)) {
         Write-Host "luac -p SKIPPED: no luac.exe beside $Lua - syntax was NOT checked" -ForegroundColor Yellow
     } else {
-        & $luac -p @tocFiles "Tools\RaidProbe\RaidProbe.lua"
+        & $luac -p @tocFiles (Get-ChildItem "Tools\RaidProbe\*.lua").FullName
         if ($LASTEXITCODE -ne 0) { Write-Host "luac -p FAILED" -ForegroundColor Red; exit 1 }
         Remove-Item -LiteralPath "luac.out" -ErrorAction SilentlyContinue
         Write-Host "luac -p: ok ($($tocFiles.Count) addon files + probe)" -ForegroundColor DarkGray

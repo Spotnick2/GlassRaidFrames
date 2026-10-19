@@ -82,8 +82,9 @@ function GRF.Profile()
     return GRF.db and GRF.role and GRF.db.profiles[GRF.role] or nil
 end
 
--- Tell other addons where the grid is and for which role. GlassUnitFrames
--- listens (its #35) and makes room; neither addon depends on the other.
+-- Tell other addons where the grid is and for which role. Nothing listens
+-- yet: GlassUnitFrames' listener comes with the group layout (#69, its #132),
+-- and neither addon will depend on the other.
 -- EventRegistry is usable on 70009 (probe item 9).
 GRF.LAYOUT_EVENT = "GlassRaidFrames.LayoutChanged"
 function GRF.Announce()
@@ -298,7 +299,7 @@ function Settings.SetSize(w, h)
     return true
 end
 
--- Pets for the current role (the pet row under the grid).
+-- Pets for the current role (their own column beside the grid).
 function Settings.SetShowPets(on)
     local prof = GRF.Profile()
     if not prof then return false end

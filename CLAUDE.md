@@ -133,8 +133,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   through the combat queue and **announces `GlassRaidFrames.LayoutChanged` (role, left, bottom,
   width, height)** through `API.TriggerEvent` (EventRegistry). Every *saved* position (drag stop,
   combat mid-drag) announces from `Header.SetPosition`, and resets announce too. Nothing is
-  announced without a placed grid. GlassUnitFrames listens; neither needs the
-  other. New per-role settings go in the profile, not at the top of the DB.
+  announced without a placed grid. Nothing listens yet: GlassUnitFrames' listener comes with the
+  group layout (#69, its #132), and neither addon will need the other. New per-role settings go in the profile, not at the top of the DB.
 - **`Options.lua`**: Game Menu > Options > AddOns > Glass Raid Frames (`/grf options`). The panel
   is created **hidden**, so Settings' `Show()` always fires `OnShow`. The Unlock button closes
   Settings with **`SettingsPanel:Close(true)`**: plain `Close()` goes back to the Game Menu, whose
@@ -408,6 +408,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     `..\ForeverProbe`). `tests/test_probe.lua` loads it (`loadForeverProbe`); CI has no checkout
     (private) and skips it with `FOREVERPROBE_OPTIONAL=1`, so run the tests locally before a probe PR.
   - New in-game experiments go in as guided procedures (`Probe:Steps`), not checklists in chat.
+  - `Layout.lua` (#69) is the same module in a second file: the group layout's M1-M4
+    (`/fp steps raid layout`, `/fp raid layout [bars|swap|collapse]`).
 
 Forever is **Vanilla content running on Blizzard's Retail (Mainline) codebase**: assume Vanilla
 content and the Retail API. `WOW_PROJECT_ID == WOW_PROJECT_MAINLINE`. Advice that cites a TBC or
