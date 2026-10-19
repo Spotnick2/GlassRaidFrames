@@ -402,6 +402,9 @@ end)
 -- from where the visuals were, except the session's first placement.
 function Layout.Apply()
     if not L.grid or InCombatLockdown() then return false end
+    -- A real setting applied ends the preview (Codex P2 on #74): the caller
+    -- announces the real state, once.
+    Layout.ClearPreview()
     local from = L.from or (L.placed and capture())
     L.from = nil
     if L.snapNext then from, L.snapNext = nil, nil end   -- the screen changed: a canonical place
@@ -687,11 +690,17 @@ end
 
 -- Back to the real grid, which never moved: its state is announced again.
 -- Safe as combat starts (PLAYER_REGEN_DISABLED comes before the lockdown).
-function Layout.EndPreview()
+-- The mocks gone and the real grid shown, without announcing.
+function Layout.ClearPreview()
     if not L.preview then return false end
     L.preview = nil
     L.previewFrame:Hide()
     realAlpha(1)
+    return true
+end
+
+function Layout.EndPreview()
+    if not Layout.ClearPreview() then return false end
     setState(geometry())
     if GRF.Announce then GRF.Announce() end
     return true
@@ -760,6 +769,8 @@ API.RegisterEvents(login, { "PLAYER_LOGIN", "LOADING_SCREEN_ENABLED", "LOADING_S
 local combat = CreateFrame("Frame")
 combat:SetScript("OnEvent", function()
     L.from = nil
+    -- Combat starts with every visual on its click target (Codex P2 on #74).
+    Layout.Snap()
     if GRF.layoutOn then Layout.EndPreview() end
 end)
 API.RegisterEvents(combat, { "PLAYER_REGEN_DISABLED" })
