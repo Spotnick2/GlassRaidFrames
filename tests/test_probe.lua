@@ -503,6 +503,32 @@ ok, why = L.gridCheck({ roster = "party", combat = false })()
 check(ok, "a party of 2 on its baseline, centred, as announced: holds: " .. tostring(why))
 ok, why = L.gridCheck({ roster = "raid" })()
 check(not ok and why:find("the step wants raid"), "the step's roster is required: " .. tostring(why))
+-- A party of 2 shown as one cell, laid out and announced for one, fails: the
+-- grid is checked against the roster (Codex P2 on #73).
+fake.cells[2]._shown = false
+place(fake.grid, 960, 250, 96, 60)
+place(fake.cells[1], 960, 250, 96, 60)
+state.l, state.w = 960 - 48, 96
+ok, why = L.gridCheck({ roster = "party", combat = false })()
+check(not ok and why:find("1 cells shown, the roster lists 2"), "a member missing from the grid fails: " .. tostring(why))
+-- An empty grid announced as width 0, in a party: fails too.
+fake.cells[1]._shown = false
+state.w = 0
+ok, why = L.gridCheck({ roster = "party", combat = false })()
+check(not ok and why:find("0 cells shown, the roster lists 2"), "an empty grid in a party fails: " .. tostring(why))
+-- Alone: your own cell is expected only when the grid shows you solo.
+group.inGroup, group.sub = false, 0
+ok, why = L.gridCheck({ roster = "solo" })()
+check(not why:find("cells shown"), "alone, show-solo off: an empty grid is right: " .. tostring(why))
+fake.grid._attrs.showSolo = true
+ok, why = L.gridCheck({ roster = "solo" })()
+check(not ok and why:find("0 cells shown, the roster lists 1"), "alone, show-solo on: an empty grid fails: " .. tostring(why))
+fake.grid._attrs.showSolo = nil
+group.inGroup, group.sub = true, 1
+fake.cells[1]._shown, fake.cells[2]._shown = true, true
+place(fake.grid, 960, 250, 198, 60)
+place(fake.cells[1], 960 - 51, 250, 96, 60)
+state.l, state.w = 960 - 99, 198
 state.top = 300
 ok, why = L.gridCheck({ combat = false })()
 check(not ok and why:find("state top"), "a grid that isn't where it's announced fails: " .. tostring(why))

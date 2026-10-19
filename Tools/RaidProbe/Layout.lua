@@ -670,6 +670,22 @@ local G = { announced = 0, inCombat = 0, atCombat = 0, blocked = {} }
 
 local function addon() return rawget(_G, "GlassRaidFrames") end
 
+-- How many cells the client should list now, from the group APIs: the
+-- shipped sets keep raid, party and player on, so the raid's members, else
+-- the party with you, else you if the grid shows you solo (Codex P2 on #73:
+-- a grid is checked against the roster, not only against itself).
+local function rosterCells(grid)
+    local n
+    if IsInRaid() then
+        n = GetNumGroupMembers()
+    elseif IsInGroup() then
+        n = GetNumSubgroupMembers() + 1
+    else
+        n = grid:GetAttribute("showSolo") and 1 or 0
+    end
+    return math.min(n, 40)
+end
+
 local function shipped()
     local A = addon()
     local Lay = A and A.Layout
@@ -678,7 +694,7 @@ local function shipped()
         raid = IsInRaid() == true, group = IsInGroup() == true, combat = InCombatLockdown() == true }
     if not (r.on and L and L.grid and L.set) then return r end
     r.set, r.cellW, r.cellH = L.set.name, L.cellW, L.cellH
-    r.grid, r.cells = box(L.grid), cellsOf(L.cells)
+    r.grid, r.cells, r.want = box(L.grid), cellsOf(L.cells), rosterCells(L.grid)
     r.model = { Lay.HeaderSize(L.set, r.cells.n, L.cellW, L.cellH) }
     r.petsShown = L.pets ~= nil and L.pets:IsShown()
     r.petCells = cellsOf(L.petCells)
@@ -730,6 +746,7 @@ local function gridCheck(opts)
             need(ROSTER[opts.roster](r), "the group is " .. rosterOf(r) .. ", the step wants " .. opts.roster)
         end
         local s, g, n = r.state, r.grid, r.cells.n
+        need(n == r.want, string.format("%d cells shown, the roster lists %d", n, r.want))
         need(g ~= nil, "no grid rect")
         if g and n > 0 then
             need(near(g.w, r.model[1]) and near(g.h, r.model[2]),
