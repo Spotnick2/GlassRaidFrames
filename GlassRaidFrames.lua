@@ -18,6 +18,8 @@ local function ensureDefaults()
         if db[k] == nil then db[k] = v end
     end
     if type(db.profiles) ~= "table" then db.profiles = {} end
+    -- The group layout (#69) is on unless switched off; on isn't saved.
+    if db.groupLayout ~= false then db.groupLayout = nil end
     -- The name display (#18): a style (the default, first, isn't saved) and
     -- nicknames by GUID, account-wide; junk dropped.
     if db.nameStyle == "first" or not GRF.Frames.NAME_STYLES[db.nameStyle] then db.nameStyle = nil end
@@ -31,6 +33,9 @@ local function ensureDefaults()
     end
     for _, role in ipairs(Role.ROLES) do
         if type(db.profiles[role]) ~= "table" then db.profiles[role] = {} end
+        local prof = db.profiles[role]
+        if not GRF.Layout.MODES[prof.layout] then prof.layout = nil end
+        if type(prof.layoutPos) ~= "table" then prof.layoutPos = nil end
     end
     -- Per character: the manual role pick ("auto" = from talents, then class).
     if type(GlassRaidFramesCharDB) ~= "table" then GlassRaidFramesCharDB = {} end
@@ -82,17 +87,34 @@ function GRF.Profile()
     return GRF.db and GRF.role and GRF.db.profiles[GRF.role] or nil
 end
 
--- Tell other addons where the grid is and for which role. Nothing listens
--- yet: GlassUnitFrames' listener comes with the group layout (#69, its #132),
--- and neither addon will depend on the other.
+-- Where the group frames are, for other addons (GlassUnitFrames places its
+-- player and target beside them; neither addon needs the other): a fresh
+-- { role, l, b, w, h, top, base, mode } in UIParent units from its
+-- bottom-left, or nil before the build. l, b, w, h is the grid with its pets;
+-- top is the grid's own top, base the baseline. Mode "hud" or "side" (the
+-- group layout, #69), or "legacy" with top = b + h and base = b.
+function GRF.LayoutState()
+    if GRF.layoutOn then return GRF.Layout.State() end
+    local l, b, w, h = GRF.Header.Rect()
+    if not (l and GRF.role) then return nil end
+    return { role = GRF.role, l = l, b = b, w = w, h = h, top = b + h, base = b, mode = "legacy" }
+end
+
+-- The same, as an event (role, l, b, w, h, top, base, mode): never in combat,
+-- where nothing of ours moves; once after it instead.
 -- EventRegistry is usable on 70009 (probe item 9).
 GRF.LAYOUT_EVENT = "GlassRaidFrames.LayoutChanged"
 function GRF.Announce()
-    if not GRF.role then return end
-    local l, b, w, h = GRF.Header.Rect()
-    if not l then return end   -- no grid (not built, or it failed): nothing to announce
-    API.TriggerEvent(GRF.LAYOUT_EVENT, GRF.role, l, b, w, h)
+    if InCombatLockdown() then
+        GRF.WhenOutOfCombat("announce", GRF.Announce, false)
+        return
+    end
+    local s = GRF.LayoutState()
+    if not s then return end   -- no grid (not built, or it failed): nothing to announce
+    API.TriggerEvent(GRF.LAYOUT_EVENT, s.role, s.l, s.b, s.w, s.h, s.top, s.base, s.mode)
 end
+
+local reportSuite   -- below: Glass UI's page shows the layout's mode too
 
 -- Move the grid to the current role's position and say so. Out of combat.
 local function applyRole()
@@ -105,6 +127,7 @@ local function applyRole()
     -- Unlocked: the movers follow the role (the pet mover appears or goes).
     if GRF.Movers.IsUnlocked() then GRF.Movers.Unlock() end
     GRF.Announce()
+    reportSuite()   -- the layout's mode is per role
 end
 
 -- Work out the role again (talents may have changed, or the manual pick);
@@ -140,12 +163,14 @@ local suite, suiteMinor
 -- What this session built, for Glass UI's page: plain values only, under
 -- pcall. Sent after the instance is built, and again whenever the click-cast
 -- setting changes (`others` is the setting, not proof of coverage).
-local function reportSuite()
+function reportSuite()
     if not suite then return end
     pcall(suite.Report, ADDON, {
         api = 1, built = GRF.following, reason = GRF.suiteFailure, minor = suiteMinor,
         options = function() return GRF.Options and GRF.Options.Open() end,
         clickCast = { open = function() GRF.ClickCastOptions.Open() end, others = GRF.ClickCast.Everywhere() },
+        -- What this session applied (#69): the layout, and its mode for the role.
+        layout = { on = GRF.layoutOn == true, mode = GRF.layoutOn and GRF.Layout.ModeOf(GRF.role) or "legacy" },
     })
 end
 
@@ -164,6 +189,31 @@ function Settings.SetRole(pick)
     if pick ~= "auto" and not Role.VALID[pick] then return false end
     GRF.char.role = pick
     evaluateRole(true)
+    return true
+end
+
+-- The group layout (#69), account-wide: on (the default, not saved) or the
+-- legacy grid. Takes effect after /reload: the frames are built once.
+function Settings.SetGroupLayout(on)
+    if on == false then GRF.db.groupLayout = false else GRF.db.groupLayout = nil end
+    return true
+end
+
+-- The current role's layout: "hud" (centred above the action bars) or "side".
+-- The role's default isn't saved.
+function Settings.SetLayoutMode(mode)
+    local prof = GRF.Profile()
+    if not (prof and GRF.Layout.MODES[mode]) then return false end
+    prof.layout = mode ~= GRF.Layout.DefaultMode(GRF.role) and mode or nil
+    if GRF.layoutOn then
+        whenOutOfCombat("layout", function()
+            if GRF.Header.ApplySize() then
+                if GRF.Movers.IsUnlocked() then GRF.Movers.Unlock() end   -- the mover follows
+                GRF.Announce()
+            end
+        end, false)
+    end
+    reportSuite()
     return true
 end
 
@@ -497,6 +547,17 @@ local function nickCommand(rest)
     say(lower == "clear" and "nickname cleared for your target" or ("your target is now shown as " .. (rest:gsub("|", ""))))
 end
 
+local function layoutLine()
+    local saved = GRF.db.groupLayout ~= false
+    local line = "group layout: " .. (GRF.layoutOn and "on" or "off (the eight-group grid)")
+    if saved ~= GRF.layoutOn then line = line .. ", " .. (saved and "on" or "off") .. " after /reload" end
+    if GRF.layoutOn then
+        line = line .. "; " .. tostring(GRF.role):lower() .. ": "
+            .. (GRF.Layout.ModeOf(GRF.role) == "hud" and "centred above the action bars" or "at the side")
+    end
+    return line
+end
+
 local function roleLine()
     local pick = GRF.char.role
     return "role: " .. tostring(GRF.role):lower() .. " (" .. tostring(GRF.roleSource)
@@ -532,6 +593,16 @@ local function slash(msg)
     elseif cmd == "pets" then
         Settings.SetShowPets(not (GRF.Profile() and GRF.Profile().showPets))
         say("pets for " .. tostring(GRF.role):lower() .. ": " .. ((GRF.Profile() and GRF.Profile().showPets) and "shown" or "hidden"))
+    elseif cmd == "layout" then
+        if arg == "on" or arg == "off" then
+            Settings.SetGroupLayout(arg == "on")
+        elseif arg == "hud" or arg == "side" then
+            if not GRF.layoutOn then say("the group layout is off (/grf layout on, then /reload)") end
+            Settings.SetLayoutMode(arg)
+        elseif arg ~= "" then
+            say("usage: /grf layout on|off|hud|side")
+        end
+        say(layoutLine())
     elseif cmd == "solo" then
         Settings.SetShowSolo(not GRF.db.showSolo)
         say("show frames when solo: " .. (GRF.db.showSolo and "on" or "off"))
@@ -585,6 +656,7 @@ local function slash(msg)
         say("/grf unlock | lock - move the group frames for this role (out of combat)")
         say("/grf reset - this role's default position")
         say("/grf size <width> <height> | reset - this role's tile size")
+        say("/grf layout on|off - one grid sized by the group (after /reload); hud|side - this role's place")
         say("/grf solo - show your own frame when not in a group")
         say("/grf pets - show or hide pets (this role)")
         say("/grf ind - buff and debuff indicators (per class); /grf ind <n> on|off, /grf ind reset")
@@ -610,6 +682,10 @@ boot:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
         if arg1 ~= ADDON then return end
         GRF.db, GRF.char = ensureDefaults()
+        -- Which frames to build, decided once (#69): the group layout, or
+        -- the legacy grid. Before anything is built.
+        GRF.layoutOn = GRF.db.groupLayout ~= false
+        if GRF.layoutOn then GRF.Layout.Install() end
         -- The look first: every surface belongs to its instance (#37, #38).
         -- Glass UI's suite theme when following it (#67), else our own.
         suite, suiteMinor = GRF.UseSuite(ADDON)

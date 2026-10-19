@@ -80,6 +80,24 @@ mv._center = { 520, 390 }
 mv._scripts.OnDragStart(mv); mv._scripts.OnUpdate(mv); mv._scripts.OnDragStop(mv)
 GlassRaidFrames.Movers.Lock()
 
+-- The group layout (#69): built, a party and a raid laid out, pets shown,
+-- its mover dragged, its settings clicked.
+GlassRaidFramesDB = nil
+loadAddon({ layout = true })
+local function roster() WoW.layoutHeaders(); WoW.fire("GROUP_ROSTER_UPDATE"); WoW.flushTimers() end
+party(2); roster()
+GlassRaidFrames.Settings.SetShowPets(true)
+raid(8); roster()
+GlassRaidFrames.Movers.Unlock()
+local lm = GlassRaidFrames.Movers._test.mover()
+lm._center = { 520, 390 }
+lm._scripts.OnDragStart(lm); lm._scripts.OnUpdate(lm); lm._scripts.OnDragStop(lm)
+GlassRaidFrames.Movers.Lock()
+local LO = GlassRaidFrames.Options._test
+LO.panel._scripts.OnShow(LO.panel)
+for _, key in ipairs({ "groupLayout", "layoutHud" }) do LO.controls[key]._scripts.OnClick(LO.controls[key]) end
+SlashCmdList.GLASSRAIDFRAMES("layout")
+
 -- Methods the dump cannot list: Blizzard_AuraContainer is a load-on-demand
 -- Blizzard addon the dump did not capture. Evidence they exist on Forever:
 -- GlassUnitFrames and DinoUnitFrames call every one of them in game, and the

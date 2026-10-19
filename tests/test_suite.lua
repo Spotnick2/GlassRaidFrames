@@ -173,6 +173,8 @@ eq(r.reason, nil, "no failure")
 eq(r.minor, 11, "LibGlass's MINOR")
 eq(type(r.options), "function", "an options opener")
 eq(r.clickCast and r.clickCast.others, true, "click-casting on other frames: the setting, on")
+-- The group layout (#69): off in these tests (the harness's default).
+eq(r.layout and tostring(r.layout.on) .. " " .. r.layout.mode, "false legacy", "the layout: what this session applied")
 local opened = 0
 local realOpen = GRF.ClickCastOptions.Open
 GRF.ClickCastOptions.Open = function(parent) opened = opened + 1; eq(parent, nil, "the editor opens standalone") end

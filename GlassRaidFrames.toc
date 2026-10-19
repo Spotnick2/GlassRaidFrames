@@ -16,6 +16,7 @@ Frames.lua
 IndicatorDefaults.lua
 Indicators.lua
 Header.lua
+Layout.lua
 GlassRaidFrames.xml
 Blizzard.lua
 Movers.lua

@@ -350,6 +350,12 @@ function Header.PetsShown()
     return Header.petHeader ~= nil and Header.petHeader:IsShown()
 end
 
+-- Whether the pets get a mover of their own (the group layout's follow the grid).
+function Header.PetsMovable() return Header.PetsShown() end
+
+-- Reset forgets these (the group layout forgets its own instead).
+function Header.ForgetPosition(prof) prof.pos, prof.petPos = nil, nil end
+
 -- Build once, out of combat (the build step of the combat queue).
 function Header.Build(setup)
     if Header.container then return end
@@ -400,7 +406,7 @@ end
 -- grid when the UI scale or resolution changes (out of combat).
 local rescaler = CreateFrame("Frame")
 rescaler:SetScript("OnEvent", function()
-    if not Header.container then return end
+    if GRF.layoutOn or not Header.container then return end   -- the group layout re-places itself
     local prof = GRF.Profile and GRF.Profile()
     if prof and prof.pos then return end   -- a saved spot stays where it was put
     GRF.WhenOutOfCombat("rescale", function()
@@ -415,6 +421,7 @@ API.RegisterEvents(rescaler, { "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" })
 -- out of combat (a protected re-anchor).
 local rosterWatch = CreateFrame("Frame")
 rosterWatch:SetScript("OnEvent", function()
+    if GRF.layoutOn then return end   -- the group layout's pets follow the grid
     C_Timer.After(0, function()
         GRF.WhenOutOfCombat("placepets", function()
             if Header.PlacePets() and Header.PetsShown() and GRF.Announce then GRF.Announce() end
@@ -422,5 +429,8 @@ rosterWatch:SetScript("OnEvent", function()
     end)
 end)
 API.RegisterEvents(rosterWatch, { "GROUP_ROSTER_UPDATE" })
+
+-- Shared with the group layout (Layout.lua): its tiles are dressed the same way.
+Header.Collect, Header.Dress, Header.UnitChanged = collect, dress, childUnitChanged
 
 Header._test = { childUnitChanged = childUnitChanged, rescaler = rescaler, rosterWatch = rosterWatch }

@@ -84,7 +84,7 @@ local SPECS = {
     { key = "pets", name = "GlassRaidFramesPetMover", label = "Pets",
       target = function() return Header.petContainer end, size = function() return Header.PetSize() end,
       set = function(x, y, save) Header.SetPetPosition(x, y, save) end,
-      shown = function() return Header.PetsShown() end },
+      shown = function() return Header.PetsMovable() end },
 }
 
 function Movers.Unlock()
@@ -132,7 +132,7 @@ function Movers.Reset(role)
     if InCombatLockdown() then return false end
     role = role or GRF.role
     local prof = GRF.db and GRF.db.profiles and GRF.db.profiles[role]
-    if prof then prof.pos, prof.petPos = nil, nil end
+    if prof then Header.ForgetPosition(prof) end
     if role ~= GRF.role then return true end   -- another role: nothing on screen moves
     local ok = Header.SetPosition(Header.DefaultPosition(role))
     Header.PlacePets()
