@@ -66,14 +66,14 @@ local function libGlass(minor, newFails)
     end
 end
 
-local function boot(ui, db, minor, newFails)
+local function boot(ui, db, minor, newFails, layout)
     if restoreLib then restoreLib() end
     GlassRaidFrames = nil
     dofile("tests/wow_stubs.lua")
     party(1)
     reports, themeCalls, pearlBuilt = {}, {}, 0
     rawset(_G, "GlassUI", ui)   -- nil: no Glass UI this boot
-    return loadAddon({ db = db, beforeLoaded = libGlass(minor, newFails) })
+    return loadAddon({ db = db, beforeLoaded = libGlass(minor, newFails), layout = layout })
 end
 
 -- The saved appearance a player might have: classic and smoked.
@@ -263,5 +263,22 @@ GRF = boot({ Suite = { API = 2, Theme = pearl, Report = function() end, Open = f
 O = GRF.Options._test
 O.panel._scripts.OnShow(O.panel)
 eq(O.controls.glassUI, nil, "a Suite that isn't API 1: no button")
+
+-- The group layout's mode at startup is the role's, once the role is known
+-- (Codex P2 on #72: the first report went out with no role, as "side").
+GlassRaidFramesCharDB = { role = "HEALER" }
+GRF = boot(glassUI(pearl()), saved(), 11, nil, true)
+eq(#reports, 1, "layout on: reported once at load")
+local lay = reports[1].state.layout
+eq(lay and tostring(lay.on) .. " " .. lay.mode, "true hud", "a healer: the HUD, from the first report")
+GlassRaidFramesCharDB = { role = "CASTER" }
+GRF = boot(glassUI(pearl()), { profiles = { CASTER = { layout = "hud" } } }, 11, nil, true)
+eq(reports[1].state.layout.mode, "hud", "a caster saved to the HUD: the HUD")
+GlassRaidFramesCharDB = { role = "CASTER" }
+GRF = boot(glassUI(pearl()), saved(), 11, nil, true)
+eq(reports[1].state.layout.mode, "side", "a caster by default: the side")
+GRF.Settings.SetRole("HEALER")
+eq(reports[#reports].state.layout.mode, "hud", "a role change reports the new role's mode")
+GlassRaidFramesCharDB = nil
 
 done("test_suite")

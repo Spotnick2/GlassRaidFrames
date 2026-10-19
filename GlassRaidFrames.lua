@@ -691,8 +691,10 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         suite, suiteMinor = GRF.UseSuite(ADDON)
         if not GRF.following then GRF.UseLook(GRF.db.look, GRF.db.glassBody) end
         if GRF.lookFallback then say("look: " .. GRF.PEARL_FALLBACK) end
-        reportSuite()
         evaluateRole(true)
+        -- After the role: the layout's mode is the role's (Codex P2 on #72).
+        -- Later role changes report from applyRole, after the build.
+        reportSuite()
         -- A position saved before roles existed: every role without one gets
         -- it (the talents aren't read yet, so which role is yours isn't known).
         if type(GRF.db.pos) == "table" then
