@@ -659,6 +659,212 @@ Probe:Steps("raidunit", {
     { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
 })
 
+--------------------------------------------------------------------------------
+-- The shipped layout in game (#69, GRF#72): Glass Raid Frames' own grid, read
+-- from outside. Its state is GlassRaidFrames.LayoutState() and what its layout
+-- built (Layout._test.L, read only); the screen is GetRect. Announcements and
+-- actions blocked on Glass Raid Frames are counted here.
+--------------------------------------------------------------------------------
+
+local G = { announced = 0, inCombat = 0, atCombat = 0, blocked = {} }
+
+local function addon() return rawget(_G, "GlassRaidFrames") end
+
+-- How many cells the client should list now, from the group APIs: the
+-- shipped sets keep raid, party and player on, so the raid's members, else
+-- the party with you, else you if the grid shows you solo (Codex P2 on #73:
+-- a grid is checked against the roster, not only against itself).
+local function rosterCells(grid)
+    local n
+    if IsInRaid() then
+        n = GetNumGroupMembers()
+    elseif IsInGroup() then
+        n = GetNumSubgroupMembers() + 1
+    else
+        n = grid:GetAttribute("showSolo") and 1 or 0
+    end
+    return math.min(n, 40)
+end
+
+local function shipped()
+    local A = addon()
+    local Lay = A and A.Layout
+    local L = Lay and Lay._test and Lay._test.L
+    local r = { loaded = A ~= nil, on = A ~= nil and A.layoutOn == true, role = A and A.role,
+        raid = IsInRaid() == true, group = IsInGroup() == true, combat = InCombatLockdown() == true }
+    if not (r.on and L and L.grid and L.set) then return r end
+    r.set, r.cellW, r.cellH = L.set.name, L.cellW, L.cellH
+    r.grid, r.cells, r.want = box(L.grid), cellsOf(L.cells), rosterCells(L.grid)
+    r.model = { Lay.HeaderSize(L.set, r.cells.n, L.cellW, L.cellH) }
+    r.petsShown = L.pets ~= nil and L.pets:IsShown()
+    r.petCells = cellsOf(L.petCells)
+    r.holder, r.driver = L.holder ~= nil and L.holder:IsShown(), L.driver
+    local ok, s = pcall(A.LayoutState)
+    r.state = ok and s or nil
+    local prof = A.Profile and A.Profile()
+    r.saved = prof ~= nil and prof.layoutPos ~= nil
+    r.petsOn = prof ~= nil and prof.showPets == true
+    local pet, cell = L.partyPets[1], L.cells[1]
+    local pb, cb = box(pet), box(cell)
+    r.petVisible = pet ~= nil and pet:IsVisible()
+    r.petUnder = r.petVisible and pb ~= nil and cb ~= nil and near(pb.t, cb.b - LAYOUT.GAP) and near(pb.x, cb.x)
+    return r
+end
+
+local function stateText(s)
+    if not s then return "nil" end
+    return string.format("%s l=%.1f b=%.1f w=%.1f h=%.1f top=%.1f base=%.1f", tostring(s.mode), s.l, s.b, s.w, s.h,
+        s.top, s.base)
+end
+
+local function shippedLine(r)
+    if not r.on then return "Glass Raid Frames " .. (r.loaded and "loaded, its group layout off" or "not loaded") end
+    if not r.set then return "the group layout isn't built" end
+    return string.format("role=%s set=%s group=%s combat=%s | grid %s cells=%d [%s] cols=%d rows=%d maxPoints=%d"
+        .. " cell=%sx%s model=%.1fx%.1f | state %s | raid pets shown=%s n=%d | party pets holder=%s driver=%s"
+        .. " pet visible=%s under=%s | announced %d (%d in combat), blocked %d",
+        tostring(r.role), r.set, rosterOf(r), show(r.combat), boxText(r.grid), r.cells.n, table.concat(r.cells.units, ","),
+        r.cells.cols, r.cells.rows, r.cells.maxPoints, tostring(r.cellW), tostring(r.cellH), r.model[1], r.model[2],
+        stateText(r.state), show(r.petsShown), r.petCells.n, show(r.holder), show(r.driver), show(r.petVisible),
+        show(r.petUnder), G.announced, G.inCombat, #G.blocked)
+end
+
+-- A step's check on the shipped grid. opts.roster and opts.combat as above;
+-- opts.held: since combat began, the grid's bottom and set unchanged (in
+-- combat the state isn't refreshed, by design: it's compared out of combat
+-- only); opts.pets: pets on, the party's under their owners, the raid's
+-- column reserved; opts.after: announced since combat began.
+local function gridCheck(opts)
+    return function()
+        local r = shipped()
+        say("grid: " .. shippedLine(r))
+        local probs = {}
+        local function need(ok, why) if not ok then probs[#probs + 1] = why end end
+        if not (r.on and r.set) then return false, shippedLine(r) end
+        if opts.combat ~= nil then need(r.combat == opts.combat, opts.combat and "not in combat" or "in combat") end
+        if opts.roster then
+            need(ROSTER[opts.roster](r), "the group is " .. rosterOf(r) .. ", the step wants " .. opts.roster)
+        end
+        local s, g, n = r.state, r.grid, r.cells.n
+        need(n == r.want, string.format("%d cells shown, the roster lists %d", n, r.want))
+        need(g ~= nil, "no grid rect")
+        if g and n > 0 then
+            need(near(g.w, r.model[1]) and near(g.h, r.model[2]),
+                string.format("grid %.1fx%.1f, the client's formula %.1fx%.1f", g.w, g.h, r.model[1], r.model[2]))
+            need(r.cells.maxPoints <= 2, "a cell has " .. r.cells.maxPoints .. " anchors")
+            local lines, across = math.ceil(n / 5), math.min(n, 5)
+            if r.set == "row" then
+                need(r.cells.rows == lines and r.cells.cols == across, r.cells.cols .. " columns x " .. r.cells.rows .. " rows")
+            else
+                need(r.cells.cols == lines and r.cells.rows == across, r.cells.cols .. " columns x " .. r.cells.rows .. " rows")
+            end
+        end
+        if not r.combat then
+            need(s ~= nil, "no LayoutState")
+            if s and g and n == 0 then need(s.w == 0, "nothing shown, yet announced " .. s.w .. " wide") end
+            if s and g and n > 0 then
+                need(near(g.t, s.top), string.format("grid top %.1f, state top %.1f", g.t, s.top))
+                need(near(g.b, s.base + (r.set == "row" and LAYOUT.PARTY_LIFT or 0)),
+                    string.format("grid bottom %.1f, baseline %.1f", g.b, s.base))
+                if s.mode == "hud" and not r.saved then
+                    need(near(s.l + s.w / 2, UIParent:GetWidth() / 2), "the union isn't centred")
+                end
+            end
+        end
+        if opts.held then
+            local b = G.before
+            need(b and b.grid and g and near(b.grid.b, g.b), "the grid's bottom moved in combat")
+            need(b and b.set == r.set, "the set changed in combat")
+        end
+        if opts.pets then
+            need(r.petsOn, "pets are off for this role (/grf pets)")
+            if r.raid then
+                need(not r.holder, "the party-pet holder is shown in a raid")
+                local cols = math.max(1, math.ceil(r.petCells.n / 10))
+                need(s and g and near(s.w, g.w + cols * 70), "the pet column isn't reserved in the announced width")
+            elseif UnitExists("pet") then
+                need(r.petUnder, "your pet isn't shown under your cell")
+            end
+        end
+        if opts.after then need(G.announced > G.atCombat, "nothing announced after combat") end
+        need(G.inCombat == 0, G.inCombat .. " announcements in combat")
+        need(#G.blocked == 0, "blocked: " .. table.concat(G.blocked, ", "))
+        return #probs == 0, table.concat(probs, "; "), shippedLine(r)
+    end
+end
+
+local function legacyCheck()
+    local A = addon()
+    local ok, s = pcall(A and A.LayoutState or error)
+    local legacy = A ~= nil and not A.layoutOn and rawget(_G, "GlassRaidFramesGroup8") ~= nil
+    return legacy and ok and s ~= nil and s.mode == "legacy",
+        "layout on=" .. show(A and A.layoutOn) .. " group 8 header=" .. show(rawget(_G, "GlassRaidFramesGroup8") ~= nil)
+        .. " state " .. stateText(ok and s or nil)
+end
+
+Probe:Steps("grid", {
+    rev = 1,
+    title = "The group layout in game (#69): Glass Raid Frames' own grid",
+    { text = "Glass Raid Frames with its group layout on (the default). Off? Type /grf layout on and /reload: the "
+        .. "panel comes back here. Then Next.",
+      check = function()
+          local A = addon()
+          return A ~= nil and A.layoutOn == true, "loaded=" .. show(A ~= nil) .. " layout on=" .. show(A and A.layoutOn)
+      end },
+    { text = "Solo, out of combat. Then Next. Already in a group? Skip.",
+      check = gridCheck({ roster = "solo", combat = false }), screenshot = "grid solo" },
+    { text = "Form a PARTY with one other player (not a raid), out of combat. Then Next.",
+      check = gridCheck({ roster = "party", combat = false }), screenshot = "grid party" },
+    { text = "Healer: are the frames centred above your action bars and clear of them, with Glass Unit Frames' player "
+        .. "and target beside them? (Other roles: at the left side.)", ask = true },
+    { text = "Pets: turn them on for this role if they're off (/grf pets), and call your pet. Then Next.",
+      check = gridCheck({ roster = "party", combat = false, pets = true }), screenshot = "grid party pets" },
+    { text = "Convert the party to a RAID, out of combat. Then Next. Expect the same row, your pet in a column to "
+        .. "the right.", check = gridCheck({ roster = "raid", combat = false, pets = true }),
+      screenshot = "grid small raid" },
+    { text = "Is the pet column clear of Glass Unit Frames' target frame and its debuffs?", ask = true },
+    { text = "Start combat (a training dummy or a mob) and stay in it.", event = "PLAYER_REGEN_DISABLED" },
+    { text = "In combat: the other player LEAVES the raid. Next once they're gone (stay in combat).",
+      check = gridCheck({ roster = "solo", combat = true, held = true }), screenshot = "grid left in combat" },
+    { text = "Still in combat: invite them back (a party). Next once they've joined. Can't invite in combat? Skip.",
+      check = gridCheck({ roster = "party", combat = true, held = true }), screenshot = "grid back in combat" },
+    { text = "Leave combat and wait.", wait = outOfCombat, timeout = 180,
+      check = gridCheck({ combat = false, after = true }), screenshot = "grid after combat" },
+    { text = "In combat, did anything of Glass Raid Frames move, apart from the frames growing or shrinking with the "
+        .. "group?", ask = true },
+    { text = "Type /grf layout off, then /reload (or press Reload now): the old grid should come back.",
+      reload = true },
+    { text = "The old grid, out of combat.", auto = true, run = legacyCheck, screenshot = "grid legacy" },
+    { text = "Is this your old grid, where you had it?", ask = true },
+    { text = "Type /grf layout on, then /reload (or press Reload now).", reload = true },
+    { text = "The group layout again.", auto = true, run = gridCheck({ combat = false }) },
+    { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
+})
+
+-- Every announcement Glass Raid Frames makes, and every action blocked on it.
+if type(rawget(_G, "EventRegistry")) == "table" then
+    pcall(EventRegistry.RegisterCallback, EventRegistry, "GlassRaidFrames.LayoutChanged", function(_, ...)
+        G.announced = G.announced + 1
+        if InCombatLockdown() then G.inCombat = G.inCombat + 1 end
+        local args = {}
+        for i = 1, select("#", ...) do args[i] = tostring((select(i, ...))) end
+        say("grid: LayoutChanged " .. table.concat(args, ", ") .. (InCombatLockdown() and " IN COMBAT" or ""))
+    end, G)
+end
+local gridEv = CreateFrame("Frame")
+gridEv:SetScript("OnEvent", function(_, event, who, what)
+    if event == "PLAYER_REGEN_DISABLED" then
+        G.before, G.atCombat = shipped(), G.announced
+    elseif event == "GROUP_ROSTER_UPDATE" then
+        -- After the header's own update: what the client re-laid, in combat too.
+        if addon() then C_Timer.After(0.3, function() say("grid roster: " .. shippedLine(shipped())) end) end
+    elseif who == "GlassRaidFrames" then
+        G.blocked[#G.blocked + 1] = event .. " " .. tostring(what)
+    end
+end)
+Probe:RegisterEvents(gridEv, { "PLAYER_REGEN_DISABLED", "GROUP_ROSTER_UPDATE", "ADDON_ACTION_BLOCKED",
+    "ADDON_ACTION_FORBIDDEN" })
+
 local ev = CreateFrame("Frame")
 ev:SetScript("OnEvent", function(_, event)
     if LP.candidate then
@@ -694,4 +900,4 @@ end, "[bars|swap|collapse|candidate] #69's grid, raid-pet header and party pets 
 NS._layout = { LAYOUT = LAYOUT, LP = LP, expectSize = expectSize, wantCells = wantCells, build = build,
     state = state, check = check, applySet = applySet, sync = sync, swap = swap, bars = bars, force = force,
     released = released, precreate = precreate, collapse = collapse, buildCandidate = buildCandidate,
-    candidateHolds = candidateHolds }
+    candidateHolds = candidateHolds, G = G, gridCheck = gridCheck, legacyCheck = legacyCheck, gridEv = gridEv }

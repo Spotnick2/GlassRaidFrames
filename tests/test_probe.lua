@@ -473,6 +473,118 @@ WoW.units.raid1 = nil
 ok, why = L.candidateHolds({ roster = "raid" })()
 check(not ok and why:find("parses show"), "a parse that disagrees fails: " .. tostring(why))
 WoW.raid, WoW.combat = nil, false
+
+-- The shipped layout's check (grid): Glass Raid Frames stood in for by a
+-- table with what the check reads (LayoutState, Layout._test.L, Profile).
+local GC = L.G
+ok, why = L.gridCheck({})()
+check(not ok and why:find("not loaded"), "no Glass Raid Frames: the check fails: " .. tostring(why))
+local function frame() return CreateFrame("Button", nil, UIParent) end
+local fake = { cells = {}, petCells = {}, partyPets = { frame() } }
+for i = 1, 3 do fake.cells[i] = frame() end
+fake.grid, fake.pets, fake.holder = frame(), frame(), frame()
+fake.set = { name = "row" }
+fake.cellW, fake.cellH = 96, 60
+local prof = { showPets = false }
+local state = { mode = "hud", l = 960 - 99, b = 220, w = 198, h = 60, top = 280, base = 152 }
+local grf = { layoutOn = true, role = "HEALER", Profile = function() return prof end,
+    LayoutState = function() return state end,
+    Layout = { _test = { L = fake }, HeaderSize = function(_, n) return n * 96 + (n - 1) * 6, 60 end } }
+rawset(_G, "GlassRaidFrames", grf)
+place(fake.grid, 960, 250, 198, 60)
+fake.cells[1]._attrs.unit, fake.cells[2]._attrs.unit = "player", "party1"
+place(fake.cells[1], 960 - 51, 250, 96, 60)
+place(fake.cells[2], 960 + 51, 250, 96, 60)
+fake.cells[1]._points, fake.cells[2]._points, fake.cells[3]._points = { { "LEFT" } }, { { "LEFT" } }, {}
+fake.cells[3]._shown = false
+fake.holder._shown = false
+group.inGroup, group.sub, group.members = true, 1, 2
+ok, why = L.gridCheck({ roster = "party", combat = false })()
+check(ok, "a party of 2 on its baseline, centred, as announced: holds: " .. tostring(why))
+ok, why = L.gridCheck({ roster = "raid" })()
+check(not ok and why:find("the step wants raid"), "the step's roster is required: " .. tostring(why))
+-- A party of 2 shown as one cell, laid out and announced for one, fails: the
+-- grid is checked against the roster (Codex P2 on #73).
+fake.cells[2]._shown = false
+place(fake.grid, 960, 250, 96, 60)
+place(fake.cells[1], 960, 250, 96, 60)
+state.l, state.w = 960 - 48, 96
+ok, why = L.gridCheck({ roster = "party", combat = false })()
+check(not ok and why:find("1 cells shown, the roster lists 2"), "a member missing from the grid fails: " .. tostring(why))
+-- An empty grid announced as width 0, in a party: fails too.
+fake.cells[1]._shown = false
+state.w = 0
+ok, why = L.gridCheck({ roster = "party", combat = false })()
+check(not ok and why:find("0 cells shown, the roster lists 2"), "an empty grid in a party fails: " .. tostring(why))
+-- Alone: your own cell is expected only when the grid shows you solo.
+group.inGroup, group.sub = false, 0
+ok, why = L.gridCheck({ roster = "solo" })()
+check(not why:find("cells shown"), "alone, show-solo off: an empty grid is right: " .. tostring(why))
+fake.grid._attrs.showSolo = true
+ok, why = L.gridCheck({ roster = "solo" })()
+check(not ok and why:find("0 cells shown, the roster lists 1"), "alone, show-solo on: an empty grid fails: " .. tostring(why))
+fake.grid._attrs.showSolo = nil
+group.inGroup, group.sub = true, 1
+fake.cells[1]._shown, fake.cells[2]._shown = true, true
+place(fake.grid, 960, 250, 198, 60)
+place(fake.cells[1], 960 - 51, 250, 96, 60)
+state.l, state.w = 960 - 99, 198
+state.top = 300
+ok, why = L.gridCheck({ combat = false })()
+check(not ok and why:find("state top"), "a grid that isn't where it's announced fails: " .. tostring(why))
+state.top = 280
+place(fake.grid, 960, 250, 198, 70)
+ok, why = L.gridCheck({ combat = false })()
+check(not ok and why:find("formula"), "a grid of another size than the client's formula fails: " .. tostring(why))
+place(fake.grid, 960, 250, 198, 60)
+-- In combat: compared with where combat began, not with the state.
+WoW.combat = true
+L.gridEv._scripts.OnEvent(L.gridEv, "PLAYER_REGEN_DISABLED")
+state.top = 999
+ok, why = L.gridCheck({ combat = true, held = true })()
+check(ok, "in combat, held where it began: holds (the state isn't refreshed in combat): " .. tostring(why))
+place(fake.grid, 960, 260, 198, 60)
+ok, why = L.gridCheck({ combat = true, held = true })()
+check(not ok and why:find("bottom moved"), "a grid whose bottom moved in combat fails: " .. tostring(why))
+place(fake.grid, 960, 250, 198, 60)
+GC.inCombat = 1
+ok, why = L.gridCheck({ combat = true })()
+check(not ok and why:find("in combat"), "an announcement in combat fails: " .. tostring(why))
+GC.inCombat = 0
+WoW.combat = false
+state.top = 280
+ok, why = L.gridCheck({ after = true })()
+check(not ok and why:find("nothing announced after combat"), "nothing announced after combat fails: " .. tostring(why))
+GC.announced = GC.atCombat + 1
+ok = L.gridCheck({ after = true })()
+check(ok, "announced after combat: holds")
+-- Pets: the column reserved in a raid's announced width.
+prof.showPets = true
+WoW.raid = { player = { index = 1, subgroup = 1 } }
+fake.set = { name = "row" }
+ok, why = L.gridCheck({ pets = true })()
+check(not ok and why:find("reserved"), "a raid's pet column not in the announced width fails: " .. tostring(why))
+state.w, state.l = 198 + 70, 960 - 134
+ok, why = L.gridCheck({ pets = true })()
+check(ok, "reserved: holds: " .. tostring(why))
+WoW.raid = nil
+-- A blocked action on Glass Raid Frames fails every later check.
+L.gridEv._scripts.OnEvent(L.gridEv, "ADDON_ACTION_BLOCKED", "GlassRaidFrames", "Frame:Show()")
+L.gridEv._scripts.OnEvent(L.gridEv, "ADDON_ACTION_BLOCKED", "OtherAddon", "OtherFrame:Hide()")
+ok, why = L.gridCheck({})()
+check(not ok and why:find("blocked: ADDON_ACTION_BLOCKED Frame:Show") and not why:find("Other"),
+    "an action blocked on Glass Raid Frames fails (others' don't count): " .. tostring(why))
+GC.blocked = {}
+-- The legacy grid after /grf layout off.
+grf.layoutOn = false
+state.mode = "legacy"
+ok = L.legacyCheck()
+check(not ok, "layout off without the eight headers: not the legacy grid")
+rawset(_G, "GlassRaidFramesGroup8", frame())
+ok, why = L.legacyCheck()
+check(ok, "layout off, eight headers, announced as legacy: holds: " .. tostring(why))
+rawset(_G, "GlassRaidFrames", nil)
+rawset(_G, "GlassRaidFramesGroup8", nil)
 check(#WoW.chat == 0, "the layout probe wrote nothing to chat")
 
 done("test_probe")
