@@ -419,7 +419,9 @@ function Layout.Apply()
     applyPets()
     place()
     if from then glideFrom(from) else Layout.Snap() end
-    if L.settled then L.placed = true end   -- the session's first placement (on the real size) snapped
+    -- Nothing glides until the loading screen has lifted: every placement
+    -- before it, and the first after it, snaps (GROUP-LAYOUT.md, GlassUI#39).
+    if L.settled and L.lifted then L.placed = true end
     return true
 end
 
@@ -739,12 +741,19 @@ API.RegisterEvents(watcher, { "GROUP_ROSTER_UPDATE", "UNIT_PET", "UI_SCALE_CHANG
 -- frames are built, it's still 1365x768 before the UI scale (measured on
 -- 70450, FOREVER-PROBE item 16). The first placement and announcement wait
 -- for it, and snap.
+-- A loading screen (login or a zone change) holds the glide until it lifts.
 local login = CreateFrame("Frame")
-login:SetScript("OnEvent", function()
-    L.settled = true
-    if GRF.layoutOn then GRF.WhenOutOfCombat("layout", Layout.Refresh, false) end
+login:SetScript("OnEvent", function(_, event)
+    if event == "LOADING_SCREEN_ENABLED" then
+        L.lifted, L.placed, L.from = false, false, nil
+    elseif event == "LOADING_SCREEN_DISABLED" then
+        L.lifted = true
+    else
+        L.settled = true
+        if GRF.layoutOn then GRF.WhenOutOfCombat("layout", Layout.Refresh, false) end
+    end
 end)
-API.RegisterEvents(login, { "PLAYER_LOGIN" })
+API.RegisterEvents(login, { "PLAYER_LOGIN", "LOADING_SCREEN_ENABLED", "LOADING_SCREEN_DISABLED" })
 
 -- Combat: the preview ends before the lockdown, and a capture waiting for a
 -- refresh is stale by the time it runs.

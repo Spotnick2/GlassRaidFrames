@@ -121,8 +121,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     bottom: in combat it grows upward. The mover moves the baseline
     (`profiles[role].layoutPos[mode]`); Reset forgets it. `pos` and `petPos` stay set aside.
   - **At login** UIParent is 1365x768 at `ADDON_LOADED` and has its real size by `PLAYER_LOGIN`
-    (item 16): `Layout.State()` is nil and nothing is announced until then, and that first
-    placement snaps.
+    (item 16): `Layout.State()` is nil and nothing is announced until then. **Nothing glides
+    until a loading screen has lifted** (GlassUI#39): every placement before
+    `LOADING_SCREEN_DISABLED`, and the first after it, snaps, at login and on a zone change.
   - **The glide** (GUF's zoom: 0.3 s, cubic ease-out): every out-of-combat `Layout.Apply` reads
     each shown tile's insecure `b.body` on screen first (a roster event captures before the
     header's own reflow), then offsets it back there and eases it to its tile. Hitboxes snap.

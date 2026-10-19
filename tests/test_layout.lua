@@ -328,7 +328,7 @@ check(L.placed, "and the next ones glide")
 -- At login: UIParent has its real size by PLAYER_LOGIN, not at ADDON_LOADED
 -- where the frames are built (item 16). Nothing is announced before it, and
 -- the first placement on it snaps.
-L.settled, L.placed = false, false
+L.settled, L.placed, L.lifted = false, false, false
 eq(GRF.LayoutState(), nil, "before PLAYER_LOGIN, no state")
 announced = {}
 GRF.Announce()
@@ -338,7 +338,17 @@ rect(c1.body, 700, 300, 96, 60)
 WoW.fire("PLAYER_LOGIN")
 eq(#announced, 1, "PLAYER_LOGIN places and announces")
 check(not Lay._test.gliding()[c1], "that first placement snaps")
+check(not L.placed, "the loading screen is still up: the next placement snaps too")
+WoW.fire("LOADING_SCREEN_DISABLED")
+rect(c1.body, 640, 300, 96, 60)
+L.from = nil
+Lay.Apply()
+check(not Lay._test.gliding()[c1], "the first placement after the loading screen lifts snaps")
 check(L.placed, "after it, changes glide")
+WoW.fire("LOADING_SCREEN_ENABLED")
+check(not L.placed, "a new loading screen (a zone change) holds the glide again")
+WoW.fire("LOADING_SCREEN_DISABLED")
+Lay.Apply()
 -- A new screen size is placed, not glided to.
 rect(c1.body, 700, 300, 96, 60)
 WoW.fire("UI_SCALE_CHANGED")
