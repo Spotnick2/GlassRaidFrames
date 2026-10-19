@@ -158,12 +158,25 @@ local function units(list)
     return n
 end
 
+-- GlassActionBars' side bars (its #37; GROUP-LAYOUT.md 5c): the right edge
+-- of the bars docked at the screen's left, in UIParent units, or 0 (no bar,
+-- no GlassActionBars, or nothing usable yet).
+function Layout.LeftEdge()
+    local gab = rawget(_G, "GlassActionBars")
+    local fn = type(gab) == "table" and rawget(gab, "EdgeState")
+    if type(fn) ~= "function" then return 0 end
+    local ok, e = pcall(fn)
+    local v = ok and type(e) == "table" and e.left
+    if API.IsSecret(v) or type(v) ~= "number" or v ~= v or v < 0 or v > UIParent:GetWidth() / 2 then return 0 end
+    return v
+end
+
 -- The baseline's anchor point for a mode: x is the union's centre (hud) or
--- left edge (side), y the baseline.
+-- left edge (side, clear of GlassActionBars' side bars), y the baseline.
 local function defaultAnchor(mode)
     local W, H = UIParent:GetWidth(), UIParent:GetHeight()
     if mode == "hud" then return W / 2, H * Layout.BASE end
-    return Layout.SIDE_MARGIN, H / 2 + Layout.SIDE_BASE
+    return Layout.LeftEdge() + Layout.SIDE_MARGIN, H / 2 + Layout.SIDE_BASE
 end
 
 -- A drag in progress, else the role's save for the mode, else the default.
@@ -176,21 +189,24 @@ local function anchorFor(mode)
 end
 
 -- Where everything goes for the applied set and the roster as the headers
--- list it now: the grid's rectangle and the union with the pets.
-local function geometry()
+-- list it now: the grid's rectangle and the union with the pets. `mock`
+-- ({ set, n, pets, cellW, cellH }) describes a raid that isn't there: the
+-- preview.
+local function geometry(mock)
     local set, cw, ch = L.set, L.cellW, L.cellH
     local n = units(L.cells)
+    if mock then set, n, cw, ch = mock.set, mock.n, mock.cellW, mock.cellH end
     local gw, gh = Layout.HeaderSize(set, n, cw, ch)
     local mode = Layout.ModeOf(GRF.role)
     local ax, ay = anchorFor(mode)
     local gy = ay + (set == Layout.ROW and Layout.ROW_LIFT or 0)
-    local raid = IsInRaid() == true
+    local raid = mock ~= nil or IsInRaid() == true
     local pets = petsOn()
     -- One pet column always kept in a raid (a first pet in combat lands in
     -- room already left), more as the pets need them.
     local petCols, petRows = 0, 0
     if pets and raid and n > 0 then
-        local np = units(L.petCells)
+        local np = mock and mock.pets or units(L.petCells)
         petCols = math.max(1, math.min(Layout.PET_COLUMNS, math.ceil(np / Layout.PETS_PER_COLUMN)))
         petRows = math.min(np, Layout.PETS_PER_COLUMN)
     end
@@ -274,6 +290,16 @@ end
 
 -- The grid on its anchor, and the insecure box (the mover's target) on the
 -- union.
+-- The state others read, and the insecure box (the mover's target) on its
+-- union.
+local function setState(s)
+    L.state = s
+    local bw, bh = Layout.Size()
+    L.box:ClearAllPoints()
+    L.box:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", s.l, s.b)
+    L.box:SetSize(bw, bh)
+end
+
 local function place()
     local s = geometry()
     local g = L.grid
@@ -283,17 +309,102 @@ local function place()
     else
         g:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", s.gridL, s.gridB)
     end
-    L.state = s
-    local bw, bh = Layout.Size()
-    L.box:ClearAllPoints()
-    L.box:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", s.l, s.b)
-    L.box:SetSize(bw, bh)
+    setState(s)
 end
 
+--------------------------------------------------------------------------------
+-- The glide (GROUP-LAYOUT.md 5): hitboxes snap, visuals glide. Before an
+-- out-of-combat change, each shown tile's body is read where it is on
+-- screen; after it, the body is offset back there from its tile's new place
+-- and eased to it, as GlassUnitFrames' zoom: 0.3 s, cubic ease-out. A change
+-- mid-glide starts again from where the body is. Bodies are insecure, and
+-- nothing protected anchors to one. In combat nothing of ours moves: the
+-- header's own reflow snaps.
+--------------------------------------------------------------------------------
+
+Layout.GLIDE = 0.3
+local gliding = {}   -- tile -> { dx, dy, t }
+local glider = CreateFrame("Frame")
+glider:Hide()
+
+local function coord(v)
+    if API.IsSecret(v) or type(v) ~= "number" or v ~= v or v == math.huge or v == -math.huge then return nil end
+    return v
+end
+
+-- A body offset from its tile (in the tile's own units: a body has its scale).
+local function offset(b, dx, dy)
+    local body = b.body
+    body:ClearAllPoints()
+    if dx == 0 and dy == 0 then
+        body:SetAllPoints(b)
+        return
+    end
+    body:SetPoint("TOPLEFT", b, "TOPLEFT", dx, dy)
+    body:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", dx, dy)
+end
+
+-- Where each shown tile's visual is now.
+local function capture()
+    local at = {}
+    for _, b in ipairs(Layout.AllChildren()) do
+        if b.body and b:IsVisible() then
+            local x, y = coord(b.body:GetLeft()), coord(b.body:GetBottom())
+            if x and y then at[b] = { x, y } end
+        end
+    end
+    return at
+end
+
+-- Every visual on its tile at once (a canonical place).
+function Layout.Snap()
+    for b in pairs(gliding) do offset(b, 0, 0) end
+    gliding = {}
+    glider:Hide()
+end
+
+-- From where the visuals were to where their tiles are now. A tile that
+-- wasn't shown before appears in place.
+local function glideFrom(at)
+    for b, from in pairs(at) do
+        local x, y = coord(b:GetLeft()), coord(b:GetBottom())
+        if x and y and b:IsVisible() then
+            local dx, dy = from[1] - x, from[2] - y
+            if math.abs(dx) >= 0.5 or math.abs(dy) >= 0.5 then
+                gliding[b] = { dx = dx, dy = dy, t = 0 }
+                offset(b, dx, dy)
+            elseif gliding[b] then
+                gliding[b] = nil
+                offset(b, 0, 0)
+            end
+        end
+    end
+    if next(gliding) then glider:Show() end
+end
+
+glider:SetScript("OnUpdate", function(self, elapsed)
+    for b, g in pairs(gliding) do
+        g.t = g.t + elapsed
+        local k = math.min(1, g.t / Layout.GLIDE)
+        if k >= 1 then
+            gliding[b] = nil
+            offset(b, 0, 0)
+        else
+            local rest = (1 - k) ^ 3   -- what's left of the way: 1 - (1 - (1-k)^3)
+            offset(b, g.dx * rest, g.dy * rest)
+        end
+    end
+    if not next(gliding) then self:Hide() end
+end)
+
 -- Everything for the role and the group as they are now. Out of combat.
--- Doesn't announce: the callers do, once (as Header's functions).
+-- Doesn't announce: the callers do, once (as Header's functions). Glides
+-- from where the visuals were, except the session's first placement.
 function Layout.Apply()
     if not L.grid or InCombatLockdown() then return false end
+    local from = L.from or (L.placed and capture())
+    L.from = nil
+    if L.snapNext then from, L.snapNext = nil, nil end   -- the screen changed: a canonical place
     local set = Layout.WantSet()
     local cw, ch = Layout.CellSize()
     local resized = cw ~= L.cellW or ch ~= L.cellH
@@ -307,6 +418,8 @@ function Layout.Apply()
     if L.grid:GetAttribute("showSolo") ~= showSolo() then L.grid:SetAttribute("showSolo", showSolo()) end
     applyPets()
     place()
+    if from then glideFrom(from) else Layout.Snap() end
+    if L.settled then L.placed = true end   -- the session's first placement (on the real size) snapped
     return true
 end
 
@@ -437,6 +550,7 @@ end
 -- every other caller means by "put it where it belongs".
 function Layout.SetPosition(x, y, save)
     if not L.grid or InCombatLockdown() then return false end
+    Layout.EndPreview()   -- a drag moves the real grid
     if save == nil then
         L.live = nil
         place()
@@ -478,7 +592,7 @@ end
 -- before the build. UIParent units from its bottom-left.
 function Layout.State()
     local s = L.state
-    if not (s and GRF.role) then return nil end
+    if not (s and GRF.role and L.settled) then return nil end   -- nothing before UIParent's real size
     return { role = GRF.role, l = s.l, b = s.b, w = s.w, h = s.h, top = s.top, base = s.base, mode = s.mode }
 end
 
@@ -491,6 +605,98 @@ function Layout.AllChildren()
     return all
 end
 
+--------------------------------------------------------------------------------
+-- The tier preview: raids of 10, 20 and 40 can't be gathered on the beta.
+-- Insecure glass cells at the tier's geometry, pets included (the reserved
+-- column too), shown in place of the real grid (alpha 0, untouched) and
+-- announced as the layout, so GlassUnitFrames, and through it
+-- GlassActionBars, follow. Out of combat only. It ends on its button, as
+-- combat starts (before the lockdown) and on any real roster change, and the
+-- real state is announced again.
+--------------------------------------------------------------------------------
+
+Layout.PREVIEWS = { [10] = 3, [20] = 6, [40] = 12 }   -- members, and the pets shown with them
+-- Names of every length, so the 80-wide cells show the client shortening them.
+Layout.PREVIEW_NAMES = { "Karuzo", "Kaleid", "Morphisto", "Elegiadelamar", "Awlie", "Tarthosuk", "Drakuzamephis",
+    "Grol", "Sumnerwind", "Ivy" }
+local mocks, mockPets = {}, {}
+
+local function mock(list, i, w, h, label)
+    local f = list[i]
+    if not f then
+        local Glass = GRF.Glass
+        f = CreateFrame("Frame", nil, L.previewFrame)
+        Glass.Apply(f, "small")
+        local inset = Glass.Inset("small")
+        f.label = Glass.Font(f, 10, "CENTER")
+        f.label:SetPoint("LEFT", f, "LEFT", inset + 3, 0)
+        f.label:SetPoint("RIGHT", f, "RIGHT", -inset - 3, 0)
+        list[i] = f
+    end
+    f:SetSize(w, h)
+    local Glass = GRF.Glass
+    local font = Glass.FONTS[Glass.fontKey] or Glass.FONTS.arial
+    f.label:SetFont(font.file, GRF.Frames.NameSize(h) + font.bump, "")
+    f.label:SetText(label)
+    f:Show()
+    return f
+end
+
+local function hideFrom(list, first)
+    for i = first, #list do list[i]:Hide() end
+end
+
+local function realAlpha(a)
+    for _, f in ipairs({ L.grid, L.pets, L.holder }) do f:SetAlpha(a) end
+end
+
+-- n = 10, 20 or 40. Out of combat. Returns false when it can't show.
+function Layout.Preview(n)
+    local petCount = Layout.PREVIEWS[n]
+    if not (petCount and L.grid) or InCombatLockdown() then return false end
+    if not L.previewFrame then L.previewFrame = CreateFrame("Frame", "GlassRaidFramesPreview", UIParent) end
+    L.preview = n
+    local cw, ch = Layout.TileSize()
+    if n >= Layout.TIER then cw = math.floor(cw * Layout.TIER_RATIO + 0.5) end
+    local m = { set = Layout.COLUMNS, n = n, pets = petsOn() and petCount or 0, cellW = cw, cellH = ch }
+    local s = geometry(m)
+    local names = Layout.PREVIEW_NAMES
+    for i = 1, n do
+        local f = mock(mocks, i, cw, ch, names[(i - 1) % #names + 1])
+        local col, row = math.floor((i - 1) / 5), (i - 1) % 5
+        f:ClearAllPoints()
+        f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", s.gridL + col * (cw + Layout.GAP), s.top - row * (ch + Layout.GAP))
+    end
+    hideFrom(mocks, n + 1)
+    for j = 1, m.pets do
+        local f = mock(mockPets, j, Layout.PET_W, Layout.PET_H, "Pet " .. j)
+        local col, row = math.floor((j - 1) / Layout.PETS_PER_COLUMN), (j - 1) % Layout.PETS_PER_COLUMN
+        f:ClearAllPoints()
+        f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", s.gridL + s.gridW + Layout.GAP + col * (Layout.PET_W + Layout.GAP),
+            s.top - row * (Layout.PET_H + Layout.PET_GAP))
+    end
+    hideFrom(mockPets, m.pets + 1)
+    realAlpha(0)
+    L.previewFrame:Show()
+    setState(s)
+    if GRF.Announce then GRF.Announce() end
+    return true
+end
+
+-- Back to the real grid, which never moved: its state is announced again.
+-- Safe as combat starts (PLAYER_REGEN_DISABLED comes before the lockdown).
+function Layout.EndPreview()
+    if not L.preview then return false end
+    L.preview = nil
+    L.previewFrame:Hide()
+    realAlpha(1)
+    setState(geometry())
+    if GRF.Announce then GRF.Announce() end
+    return true
+end
+
+function Layout.Previewing() return L.preview end
+
 local INSTALLED = { "Build", "ApplySize", "ApplyPets", "SetShowSolo", "PositionOf", "DefaultPosition",
     "SetPosition", "Rect", "AllChildren", "TileSize", "Size", "PetsMovable", "ForgetPosition" }
 
@@ -498,6 +704,7 @@ local INSTALLED = { "Build", "ApplySize", "ApplyPets", "SetShowSolo", "PositionO
 function Layout.Install()
     for _, k in ipairs(INSTALLED) do Header[k] = Layout[k] end
     Header.DEFAULT_W, Header.DEFAULT_H = Layout.CELL_W, Layout.CELL_H
+    GRF.Frames.NAME_RATIO = 15 / Layout.CELL_H   -- names of 15 at 60
     Header.children, Header.petChildren = L.cells, L.petCells
 end
 
@@ -507,15 +714,53 @@ end
 --------------------------------------------------------------------------------
 
 local scheduled = false
-local watcher = CreateFrame("Frame")
-watcher:SetScript("OnEvent", function()
-    if not (GRF.layoutOn and L.grid) or scheduled then return end
+local SCREEN = { UI_SCALE_CHANGED = true, DISPLAY_SIZE_CHANGED = true }
+local function schedule(_, event)
+    if not (GRF.layoutOn and L.grid) then return end
+    Layout.EndPreview()   -- a real change ends the preview
+    if SCREEN[event] then
+        L.snapNext, L.from = true, nil   -- a new screen size is placed, not glided to
+    elseif not InCombatLockdown() and L.placed and not L.from then
+        -- Where the visuals are, before the headers' own update moves the
+        -- tiles (this frame registered first). Out of combat only.
+        L.from = capture()
+    end
+    if scheduled then return end
     scheduled = true
     C_Timer.After(0, function()
         scheduled = false
         GRF.WhenOutOfCombat("layout", Layout.Refresh, false)
     end)
-end)
+end
+local watcher = CreateFrame("Frame")
+watcher:SetScript("OnEvent", schedule)
 API.RegisterEvents(watcher, { "GROUP_ROSTER_UPDATE", "UNIT_PET", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" })
+-- UIParent has its real size by PLAYER_LOGIN; at ADDON_LOADED, where the
+-- frames are built, it's still 1365x768 before the UI scale (measured on
+-- 70450, FOREVER-PROBE item 16). The first placement and announcement wait
+-- for it, and snap.
+local login = CreateFrame("Frame")
+login:SetScript("OnEvent", function()
+    L.settled = true
+    if GRF.layoutOn then GRF.WhenOutOfCombat("layout", Layout.Refresh, false) end
+end)
+API.RegisterEvents(login, { "PLAYER_LOGIN" })
 
-Layout._test = { L = L, geometry = geometry, watcher = watcher, applySet = applySet }
+-- Combat: the preview ends before the lockdown, and a capture waiting for a
+-- refresh is stale by the time it runs.
+local combat = CreateFrame("Frame")
+combat:SetScript("OnEvent", function()
+    L.from = nil
+    if GRF.layoutOn then Layout.EndPreview() end
+end)
+API.RegisterEvents(combat, { "PLAYER_REGEN_DISABLED" })
+-- GlassActionBars' side bars moved (out of combat, only on a change).
+-- Applied idempotently: the refresh reads EdgeState again.
+local reg = rawget(_G, "EventRegistry")
+if type(reg) == "table" and type(reg.RegisterCallback) == "function" then
+    pcall(reg.RegisterCallback, reg, "GlassActionBars.EdgesChanged", schedule, Layout)
+end
+
+Layout._test = { L = L, geometry = geometry, watcher = watcher, applySet = applySet, glider = glider,
+    gliding = function() return gliding end, capture = capture, glideFrom = glideFrom, mocks = mocks,
+    mockPets = mockPets, combat = combat, login = login }

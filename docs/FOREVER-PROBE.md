@@ -606,3 +606,25 @@ as melee, side), account 12 played caster (side) with a pet. UIParent was 2133.3
   right.
 - Both accounts answered "unsure" to "did anything move in combat". The owner saw nothing move,
   but was busy reading the probe panel. The checks found the grid held.
+
+### 16. When UIParent reaches its real size at login (1.60.1.70450, 2026-10-19, two accounts, runs #262 and #190)
+Logged by RaidProbe's login logger (`Layout.lua`) on a `/reload`, at UIParent 2133.3×1200 (scale
+0.64). In order, all within 0.1 s of the probe loading:
+1. `DISPLAY_SIZE_CHANGED` and `UI_SCALE_CHANGED` with UIParent still at **1365.3×768, scale 1**;
+2. the same two events again at **2133.3×1200, scale 0.64**;
+3. `PLAYER_LOGIN`, `PLAYER_ENTERING_WORLD` and `LOADING_SCREEN_DISABLED`, all at the real size.
+
+Glass Raid Frames builds at `ADDON_LOADED`, before step 2, so its first placement used 1365×768
+(item 15). Its queued refresh ran 1.2 s after `LOADING_SCREEN_DISABLED`, so the wrong place was
+on screen for about a second. So the group layout waits for `PLAYER_LOGIN` before its first
+placement and announcement, which snaps, and any re-placement after a screen-size or scale event
+snaps too.
+
+**With that fix** (`/fp steps raid login`, run #266-#269, account 1):
+- On a `/reload`, `LayoutState` was nil before `PLAYER_LOGIN`. The first announcement came at
+  `PLAYER_LOGIN`, already on the real size (base 168.9). A second identical one followed 1 s later
+  (the queued scale refresh).
+- **A full logout and login** gives the same order: the size was real at `PLAYER_LOGIN` (3.8 s
+  after load). The party wasn't listed yet, so the first announcement said nothing is shown
+  (width 0). The party arrived and was announced 1.7 s later, as the loading screen lifted
+  (`LOADING_SCREEN_DISABLED`). Cells that weren't shown before appear in place; they don't glide.

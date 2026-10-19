@@ -7,7 +7,11 @@ dofile("tests/harness.lua")
 UIParent._width, UIParent._height = 1920, 1080   -- the baseline is 152 there
 GlassRaidFramesCharDB = { role = "HEALER" }
 local announced = {}
-rawset(_G, "EventRegistry", { TriggerEvent = function(_, event, ...) announced[#announced + 1] = { event, ... } end })
+local callbacks = {}
+rawset(_G, "EventRegistry", {
+    TriggerEvent = function(_, event, ...) announced[#announced + 1] = { event, ... } end,
+    RegisterCallback = function(_, event, fn, owner) callbacks[event] = function(...) fn(owner, ...) end end,
+})
 local GRF = loadAddon({ layout = true })
 local H, Lay = GRF.Header, GRF.Layout
 local L = Lay._test.L
@@ -35,6 +39,10 @@ check(L.cells[1].body and L.petCells[1].body and L.partyPets[1].body, "every til
 check(L.petCells[1].isPet and L.partyPets[3].isPet and not L.cells[1].isPet, "pet tiles are flagged (the debuff row only)")
 eq(L.petCells[1]._width .. "x" .. L.petCells[1]._height, "64x28", "raid-pet cells are 64x28")
 eq(L.cells[1]._width .. "x" .. L.cells[1]._height, "96x60", "cells are 96x60")
+eq(GRF.Frames.NameSize(60), 15, "names are 15 at the layout's 60")
+eq(L.cells[1].nameText._font and L.cells[1].nameText._font[2] - GRF.Frames.NameSize(60), L.petCells[1].nameText._font[2]
+    - GRF.Frames.NameSize(28), "set on the tiles at their size")
+eq(L.cells[1].nameText._wordWrap, false, "one line (LibGlass's Font): the client shortens a long name")
 eq(L.grid:GetAttribute("startingIndex"), 1, "startingIndex restored")
 for _, c in ipairs(L.cells) do
     if c:GetNumPoints() > 0 and not c._shown then check(false, "a hidden cell kept an anchor") break end
@@ -185,6 +193,36 @@ eq(GRF.Profile().layout, "side", "the healer's side is saved")
 gp = { L.grid:GetPoint(1) }
 check(gp[1] == "BOTTOMLEFT" and near(gp[4], 30) and near(gp[5], 540 - 93 + 68), "the side anchor: " .. gp[4] .. " " .. gp[5])
 eq(GRF.LayoutState().mode, "side", "announced as side")
+-- GlassActionBars' left-edge bars (its #37): the side starts 30 past them.
+check(callbacks["GlassActionBars.EdgesChanged"], "listening to GlassActionBars.EdgesChanged")
+local edge = { left = 87, right = 1920, width = 1920 }
+rawset(_G, "GlassActionBars", { EdgeState = function() return edge end })
+announced = {}
+callbacks["GlassActionBars.EdgesChanged"](87, 1920, 1920)
+WoW.flushTimers()
+gp = { L.grid:GetPoint(1) }
+check(near(gp[4], 117), "the side starts 30 past GAB's bars: " .. gp[4])
+eq(#announced, 1, "and the new place is announced")
+for label, bad in pairs({ secret = WoW.Secret("edge"), negative = -5, ["past the middle"] = 1500, text = "87" }) do
+    edge.left = bad
+    callbacks["GlassActionBars.EdgesChanged"]()
+    WoW.flushTimers()
+    check(near(select(4, L.grid:GetPoint(1)), 30), "a " .. label .. " edge reads as no bar")
+end
+rawset(_G, "GlassActionBars", { EdgeState = function() error("boom") end })
+callbacks["GlassActionBars.EdgesChanged"]()
+WoW.flushTimers()
+check(near(select(4, L.grid:GetPoint(1)), 30), "an EdgeState that throws reads as no bar")
+edge.left = 87
+rawset(_G, "GlassActionBars", { EdgeState = function() return edge end })
+local sx, sy = H.PositionOf()
+H.SetPosition(sx + 200, sy, true)
+callbacks["GlassActionBars.EdgesChanged"]()
+WoW.flushTimers()
+check(near(select(4, L.grid:GetPoint(1)), 230), "a dragged side position stays where it was put")
+GRF.Movers.Reset()
+rawset(_G, "GlassActionBars", nil)
+GRF.Layout.Refresh()
 GRF.Settings.SetLayoutMode("hud")
 eq(GRF.Profile().layout, nil, "the role's default isn't saved")
 check(not GRF.Settings.SetLayoutMode("middle"), "an unknown mode is refused")
@@ -193,6 +231,119 @@ check(not GRF.Settings.SetLayoutMode("middle"), "an unknown mode is refused")
 GRF.Settings.SetRole("CASTER")
 eq(GRF.LayoutState().mode, "side", "the caster's default is the side")
 GRF.Settings.SetRole("HEALER")
+
+-- The tier preview: mock raids where the grid is, announced; the real grid
+-- hidden, untouched.
+WoW.raid = nil
+for i = 1, 40 do WoW.units["raid" .. i] = nil end
+party(1)
+roster()
+GRF.Settings.SetShowPets(true)
+announced = {}
+check(GRF.Settings.Preview(10), "a preview of 10")
+local M, MP = Lay._test.mocks, Lay._test.mockPets
+local shownMocks = 0
+for _, f in ipairs(M) do if f._shown then shownMocks = shownMocks + 1 end end
+eq(shownMocks, 10, "10 mock cells")
+eq(M[1]._width .. "x" .. M[1]._height, "96x60", "at the 96 cell")
+eq(#MP, 3, "3 mock pets")
+eq(L.grid._alpha, 0, "the real grid is hidden")
+s = GRF.LayoutState()
+check(near(s.w, 198 + 70) and near(s.top, 152 + 324) and near(s.base, 152), "announced: 2 columns and a pet column, on the baseline: " .. s.w)
+eq(#announced, 1, "announced once")
+local mp = { M[6]:GetPoint(1) }
+check(near(mp[4], s.l + 102) and near(mp[5], s.top), "the 6th cell heads the second column")
+check(GRF.Settings.Preview(40), "a preview of 40")
+eq(M[1]._width, 80, "40: cells 80 wide")
+s = GRF.LayoutState()
+check(near(s.w, 8 * 80 + 7 * 6 + 2 * 70), "8 columns of 80 and 2 of pets: " .. s.w)
+eq(M[1].label._text, "Karuzo", "mock cells have names")
+-- A real roster change ends it, and the real state is announced again.
+announced = {}
+party(2)
+roster()
+eq(Lay.Previewing(), nil, "a roster change ends the preview")
+eq(L.grid._alpha, 1, "the real grid is back")
+check(not M[1]:IsVisible() and not MP[1]:IsVisible(), "the mocks are hidden")
+check(near(GRF.LayoutState().w, 3 * 96 + 2 * 6), "the real party announced again: " .. GRF.LayoutState().w)
+-- Combat ends it, before the lockdown.
+GRF.Settings.Preview(20)
+WoW.fire("PLAYER_REGEN_DISABLED")
+eq(Lay.Previewing(), nil, "combat starting ends the preview")
+eq(L.grid._alpha, 1, "and shows the real grid")
+WoW.combat = true
+local okP, whyP = GRF.Settings.Preview(10)
+check(not okP and whyP:find("combat"), "no preview in combat")
+WoW.combat = false
+check(not GRF.Settings.Preview(30), "only 10, 20 or 40")
+SlashCmdList.GLASSRAIDFRAMES("preview 10")
+check(chatHas("preview: a raid of 10"), "/grf preview 10")
+SlashCmdList.GLASSRAIDFRAMES("preview off")
+eq(Lay.Previewing(), nil, "/grf preview off ends it")
+GRF.Settings.Preview(10)
+local px, py = H.PositionOf()
+H.SetPosition(px, py, false)
+eq(Lay.Previewing(), nil, "a drag ends the preview")
+H.SetPosition(nil, nil, nil)
+GRF.Settings.SetShowPets(false)
+
+-- The glide: a body is offset back to where it was, and eased to its tile
+-- in 0.3 s (cubic ease-out); a tile that didn't move doesn't glide.
+local function rect(f, x, y, w, h) f._center, f._width, f._height = { x, y }, w, h end
+local c1, c2 = L.cells[1], L.cells[2]
+rect(c1, 500, 300, 96, 60)
+rect(c2, 602, 300, 96, 60)
+c1._shown, c2._shown = true, true
+Lay._test.glideFrom({ [c1] = { 452 - 40, 270 + 10 }, [c2] = { 554, 270 } })
+local bp = { c1.body:GetPoint(1) }
+check(bp[1] == "TOPLEFT" and bp[2] == c1 and near(bp[4], -40) and near(bp[5], 10), "offset back where it was")
+check(Lay._test.gliding()[c1] and not Lay._test.gliding()[c2], "only the tile that moved glides")
+check(Lay._test.glider._shown, "the glide runs")
+WoW.tick(0.15)
+bp = { c1.body:GetPoint(1) }
+check(near(bp[4], -40 * 0.125) and near(bp[5], 10 * 0.125), "halfway in time, 7/8 of the way (cubic ease-out): " .. bp[4])
+WoW.tick(0.2)
+bp = { c1.body:GetPoint(1) }
+eq(bp[1], "ALL", "at the end, the body is on its tile again")
+check(not Lay._test.glider._shown, "and the glide stops")
+-- A roster event reads the visuals before the headers move the tiles.
+rect(c1.body, 500, 300, 96, 60)
+WoW.fire("GROUP_ROSTER_UPDATE")
+check(L.from and L.from[c1] and near(L.from[c1][1], 452), "a roster change captures where the visuals were")
+WoW.fire("PLAYER_REGEN_DISABLED")
+eq(L.from, nil, "combat drops a capture waiting for its refresh")
+WoW.flushTimers()
+check(L.placed, "the first placement is behind us")
+-- Apply glides from what was captured; the session's first placement snaps.
+rect(c1, 500, 300, 96, 60)
+L.from = { [c1] = { 452 + 30, 270 } }
+Lay.Apply()
+check(Lay._test.gliding()[c1], "a layout change glides from where the visuals were")
+WoW.tick(1)
+L.placed = false
+rect(c1.body, 600, 300, 96, 60)
+Lay.Apply()
+check(not Lay._test.gliding()[c1], "the session's first placement snaps")
+check(L.placed, "and the next ones glide")
+-- At login: UIParent has its real size by PLAYER_LOGIN, not at ADDON_LOADED
+-- where the frames are built (item 16). Nothing is announced before it, and
+-- the first placement on it snaps.
+L.settled, L.placed = false, false
+eq(GRF.LayoutState(), nil, "before PLAYER_LOGIN, no state")
+announced = {}
+GRF.Announce()
+eq(#announced, 0, "and no announcement")
+Lay.Apply()   -- the build's own placement, at ADDON_LOADED
+rect(c1.body, 700, 300, 96, 60)
+WoW.fire("PLAYER_LOGIN")
+eq(#announced, 1, "PLAYER_LOGIN places and announces")
+check(not Lay._test.gliding()[c1], "that first placement snaps")
+check(L.placed, "after it, changes glide")
+-- A new screen size is placed, not glided to.
+rect(c1.body, 700, 300, 96, 60)
+WoW.fire("UI_SCALE_CHANGED")
+WoW.flushTimers()
+check(not Lay._test.gliding()[c1], "a UI scale change snaps")
 
 -- The switch is saved for the next /reload; nothing rebuilds now.
 GRF.Settings.SetGroupLayout(false)

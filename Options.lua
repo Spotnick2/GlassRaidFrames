@@ -283,6 +283,21 @@ local function build()
     controls.layoutHud = checkbox("Centred above the action bars (this role; off: at the side)",
         function() return GRF.Layout.ModeOf(GRF.role) == "hud" end,
         function(on) S.SetLayoutMode(on and "hud" or "side") end)
+    -- The tier preview: mock raids where the grid is, out of combat. Combat
+    -- or a roster change ends it too.
+    note("Preview a raid you can't gather (combat or a group change ends it):")
+    controls.preview = {}
+    local prev
+    for _, n in ipairs({ 10, 20, 40 }) do
+        local b = button(n .. " players", 110, function() S.Preview(n) end)
+        if prev then b:SetPoint("LEFT", prev, "RIGHT", 8, 0) else place(b, 0, 4) end
+        controls.preview[#controls.preview + 1] = b
+        prev = b
+    end
+    local stop = button("End preview", 110, function() S.Preview(nil) end)
+    stop:SetPoint("LEFT", prev, "RIGHT", 8, 0)
+    controls.preview[#controls.preview + 1] = stop
+    col.y = col.y - 30
 
     header("Position")
     note("For the current role. Unlocking closes this window; drag the frames, right-click to lock.")

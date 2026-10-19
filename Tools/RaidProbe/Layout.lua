@@ -848,6 +848,108 @@ end)
 Probe:RegisterEvents(gridEv, { "PLAYER_REGEN_DISABLED", "GROUP_ROSTER_UPDATE", "ADDON_ACTION_BLOCKED",
     "ADDON_ACTION_FORBIDDEN" })
 
+--------------------------------------------------------------------------------
+-- When UIParent reaches its real size at login (#69, GlassUI#38): the
+-- layout's first placement used the size before the UI scale (item 15).
+-- For 20 s after this file loads: the login events, every UIParent resize and
+-- Glass Raid Frames' announcements (above), each with its time.
+--------------------------------------------------------------------------------
+
+local loginStart = GetTime()
+local function uiLine(what)
+    if GetTime() - loginStart > 20 then return end
+    local ok, w, h = pcall(UIParent.GetSize, UIParent)
+    local okS, scale = pcall(UIParent.GetScale, UIParent)
+    local A = addon()
+    local okL, s = pcall(A and A.LayoutState or error)
+    say(string.format("login: %s +%.2fs UIParent %s scale %s | Glass Raid Frames state %s", what, GetTime() - loginStart,
+        (ok and num(w) and num(h)) and string.format("%.1fx%.1f", w, h) or "?", okS and show(scale) or "?", stateText(okL and s or nil)))
+end
+uiLine("RaidProbe loaded")
+local loginEv = CreateFrame("Frame")
+loginEv:SetScript("OnEvent", function(_, event) uiLine(event) end)
+Probe:RegisterEvents(loginEv, { "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED",
+    "LOADING_SCREEN_ENABLED", "LOADING_SCREEN_DISABLED" })
+UIParent:HookScript("OnSizeChanged", function() uiLine("UIParent OnSizeChanged") end)
+
+Probe:Steps("login", {
+    rev = 1,
+    title = "When UIParent reaches its real size at login (#69)",
+    { text = "Type /reload (or press Reload now).", reload = true },
+    { text = "Now a real login: log out to the character screen and log back in with this character.",
+      reload = true },
+    { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
+})
+
+--------------------------------------------------------------------------------
+-- The second half of #69 in game: the tier preview with GlassUnitFrames
+-- following, the glide, names at 80 wide, nothing blocked. The probe drives
+-- Glass Raid Frames' own settings (GRF.Settings) and reads its state.
+--------------------------------------------------------------------------------
+
+local function previewAt(n)
+    return function()
+        local A = addon()
+        if not (A and A.Settings and A.Settings.Preview) then return false, "Glass Raid Frames has no preview" end
+        local ok, why = A.Settings.Preview(n)
+        local s = A.LayoutState and A.LayoutState()
+        say("preview: " .. tostring(n) .. " -> " .. show(ok) .. " " .. tostring(why or "") .. " | state " .. stateText(s))
+        if n == nil then return A.Layout.Previewing() == nil, stateText(s) end
+        return ok == true and A.Layout.Previewing() == n, stateText(s)
+    end
+end
+
+local modeBefore
+local function switchMode(to)
+    return function()
+        local A = addon()
+        if not (A and A.Settings and A.Layout) then return false, "no group layout" end
+        if to == nil then to = modeBefore else modeBefore = A.Layout.ModeOf(A.role) end
+        return A.Settings.SetLayoutMode(to), "mode " .. tostring(A.Layout.ModeOf(A.role))
+    end
+end
+
+local function cleanRun()
+    return #G.blocked == 0 and G.inCombat == 0, "blocked: " .. (#G.blocked > 0 and table.concat(G.blocked, ", ") or "none")
+        .. "; announcements in combat: " .. G.inCombat
+end
+
+Probe:Steps("glide", {
+    rev = 1,
+    title = "The group layout's preview and glide (#69): GlassUnitFrames following",
+    { text = "Glass Raid Frames and Glass Unit Frames loaded, the group layout on, your role centred above the bars "
+        .. "(the healer's default; /grf layout hud). Solo or in a party, out of combat. Then Next.",
+      check = function()
+          local A = addon()
+          local ok = A ~= nil and A.layoutOn == true and A.Layout.ModeOf(A.role) == "hud"
+          return ok, "layout on=" .. show(A and A.layoutOn) .. " mode=" .. show(A and A.Layout.ModeOf(A.role))
+      end },
+    { text = "Out of combat: previewing a raid of 10.", auto = true, run = previewAt(10), screenshot = "preview 10" },
+    { text = "Did Glass Unit Frames' player and target glide out to the 10-player grid, beside it?", ask = true },
+    { text = "Out of combat: previewing a raid of 20.", auto = true, run = previewAt(20), screenshot = "preview 20" },
+    { text = "And again to the 20-player grid?", ask = true },
+    { text = "Out of combat: previewing a raid of 40 (80-wide cells).", auto = true, run = previewAt(40),
+      screenshot = "preview 40" },
+    { text = "At 40: are the names readable, the long ones shortened with an ellipsis?", ask = true },
+    { text = "Ending the preview: everything goes back.", auto = true, run = previewAt(nil),
+      screenshot = "preview ended" },
+    { text = "Did Glass Unit Frames glide back beside your real grid?", ask = true },
+    { text = "Out of combat: moving your grid to the side. Watch the cells.", auto = true, run = switchMode("side") },
+    { text = "Did the cells glide to the left side in about a third of a second, like Glass Unit Frames' zoom?",
+      ask = true },
+    { text = "And back to the centre. Watch them again.", auto = true, run = switchMode(nil) },
+    { text = "Did they glide back as smoothly?", ask = true },
+    { text = "Out of combat: a raid of 20 again; combat must end it at once.", auto = true, run = previewAt(20) },
+    { text = "Start combat (a dummy or a mob) and stay in it.", event = "PLAYER_REGEN_DISABLED" },
+    { text = "In combat: has the preview ended (the real grid back)? Next.",
+      check = function()
+          local A = addon()
+          return A.Layout.Previewing() == nil, "previewing=" .. show(A.Layout.Previewing())
+      end },
+    { text = "Leave combat and wait.", wait = outOfCombat, timeout = 180, check = cleanRun },
+    { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
+})
+
 local ev = CreateFrame("Frame")
 ev:SetScript("OnEvent", function(_, event)
     if LP.candidate then
@@ -883,4 +985,5 @@ end, "[bars|swap|collapse|candidate] #69's grid, raid-pet header and party pets 
 NS._layout = { LAYOUT = LAYOUT, LP = LP, expectSize = expectSize, wantCells = wantCells, build = build,
     state = state, check = check, applySet = applySet, sync = sync, swap = swap, bars = bars, force = force,
     released = released, precreate = precreate, collapse = collapse, buildCandidate = buildCandidate,
-    candidateHolds = candidateHolds, G = G, gridCheck = gridCheck, legacyCheck = legacyCheck, gridEv = gridEv }
+    candidateHolds = candidateHolds, G = G, gridCheck = gridCheck, legacyCheck = legacyCheck, gridEv = gridEv,
+    previewAt = previewAt, switchMode = switchMode, cleanRun = cleanRun }

@@ -557,6 +557,28 @@ check(not ok, "layout off without the eight headers: not the legacy grid")
 rawset(_G, "GlassRaidFramesGroup8", frame())
 ok, why = L.legacyCheck()
 check(ok, "layout off, eight headers, announced as legacy: holds: " .. tostring(why))
+-- The glide procedure's steps drive Glass Raid Frames' own settings.
+local previewing, modes, mode = nil, {}, "hud"
+grf.Settings = {
+    Preview = function(n) previewing = n; return true end,
+    SetLayoutMode = function(m) modes[#modes + 1] = m; mode = m; return true end,
+}
+grf.Layout.Previewing = function() return previewing end
+grf.Layout.ModeOf = function() return mode end
+check(L.previewAt(40)(), "a preview of 40 holds when it shows")
+eq(previewing, 40, "asked for 40")
+grf.Settings.Preview = function() return false, "not in combat" end
+check(not L.previewAt(10)(), "a refused preview fails")
+grf.Settings.Preview = function(n) previewing = n; return true end
+check(L.previewAt(nil)() and previewing == nil, "ending it holds when it ended")
+L.switchMode("side")()
+L.switchMode(nil)()
+eq(table.concat(modes, ","), "side,hud", "the mode goes to the side and back to what it was")
+GC.blocked, GC.inCombat = {}, 0
+check(L.cleanRun(), "a run with nothing blocked is clean")
+GC.inCombat = 1
+check(not L.cleanRun(), "an announcement in combat isn't")
+GC.inCombat = 0
 rawset(_G, "GlassRaidFrames", nil)
 rawset(_G, "GlassRaidFramesGroup8", nil)
 check(#WoW.chat == 0, "the layout probe wrote nothing to chat")
