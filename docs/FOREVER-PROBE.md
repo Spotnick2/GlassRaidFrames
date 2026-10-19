@@ -628,3 +628,17 @@ snaps too.
   after load). The party wasn't listed yet, so the first announcement said nothing is shown
   (width 0). The party arrived and was announced 1.7 s later, as the loading screen lifted
   (`LOADING_SCREEN_DISABLED`). Cells that weren't shown before appear in place; they don't glide.
+
+### 17. The preview and the glide in game (1.60.1.70450, 2026-10-19, healer, party of 2, run #270)
+The owner's acceptance of the second half of #69 (GRF#74), `/fp steps raid glide` (rev 1), with
+Glass Unit Frames loaded and following. Every answer was yes, and every check passed.
+- **The preview** announced each tier's footprint on the baseline (168.9): 10 is 268 wide (two
+  columns and the pet column), 20 is 472, and 40 is 822 (eight columns of 80 and two pet columns
+  for 12 pets), each 324 high. Glass Unit Frames' player and target glided out beside each, at
+  their own height, and back when it ended.
+- **Names at 80 wide** were readable, and the long ones were shortened by the client
+  ("Drakuza…", "Elegiadel…", "Sumnerw…").
+- **The glide:** the owner judged the cells' glide to the side and back as smooth as Glass Unit
+  Frames' zoom.
+- **Combat starting ended the preview** at once, before the lockdown. Nothing was blocked, and
+  nothing was announced in combat.
