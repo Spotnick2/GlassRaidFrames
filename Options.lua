@@ -275,6 +275,15 @@ local function build()
         { "HEALER", "Healer" }, { "CASTER", "Caster" }, { "MELEE", "Melee" }, { "TANK", "Tank" },
     }, function() return GRF.char.role end, S.SetRole)
 
+    -- The group layout (#69): built once, so switching takes /reload.
+    header("Layout")
+    controls.groupLayout = checkbox("One grid sized by the group (takes effect after /reload)",
+        function() return GRF.db.groupLayout ~= false end, S.SetGroupLayout)
+    note("A row up to 5, then columns of 5. Off: the eight-group grid, with the position it had.")
+    controls.layoutHud = checkbox("Centred above the action bars (this role; off: at the side)",
+        function() return GRF.Layout.ModeOf(GRF.role) == "hud" end,
+        function(on) S.SetLayoutMode(on and "hud" or "side") end)
+
     header("Position")
     note("For the current role. Unlocking closes this window; drag the frames, right-click to lock.")
     local unlock = button("Unlock frames", 160, function()
@@ -314,7 +323,7 @@ local function build()
     end), 30, 4)
 
     header("Frames")
-    controls.pets = checkbox("Show pets, in a column beside the group frames (this role)",
+    controls.pets = checkbox("Show pets, beside or under the group frames (this role)",
         function() return GRF.Profile() and GRF.Profile().showPets end, S.SetShowPets)
     controls.solo = checkbox("Show your own frame when not in a group",
         function() return GRF.db.showSolo end, S.SetShowSolo)

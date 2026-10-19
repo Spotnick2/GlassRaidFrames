@@ -84,6 +84,7 @@ function WoW.reset()
     WoW.chat = {}
     WoW.timers = {}
     WoW.unitWatch = {}
+    WoW.stateDrivers = {}   -- frame -> { state, values } (RegisterStateDriver)
     WoW.methodsCalled = {}
     WoW.combat = false
     WoW.shift = false
@@ -141,7 +142,7 @@ local function isProtected(w)
 end
 
 local function guard(w, what)
-    if WoW.combat and isProtected(w) then
+    if WoW.combat and isProtected(w) and not WoW.secureCode then   -- the client's own secure code may
         table.insert(WoW.blocked, (w._name or w._type) .. ":" .. what)
         return false
     end
@@ -171,9 +172,13 @@ end
 function CreateFrame(ftype, name, parent, template)
     local w = newWidget(ftype, parent, name)
     w._template = template
+    -- A template's <Size> (the client sizes a frame from its template).
+    local size = template and WoW.templateSizes and WoW.templateSizes[template]
+    if size then w._width, w._height = size[1], size[2] end
     if template == "SecureGroupHeaderTemplate" or template == "SecureGroupPetHeaderTemplate" then
         w._isHeader = true
         w._isPetHeader = template == "SecureGroupPetHeaderTemplate"
+        if WoW.clientHeaders then WoW.clientHeaders.dress(w) end
     end
     if template and (template:find("Secure") or WoW.secureTemplates[template]) then
         local p = w
@@ -205,7 +210,15 @@ function Methods.IsVisible(w)
     while p do if not p._shown then return false end; p = p._parent end
     return true
 end
-function Methods.SetPoint(w, ...) if guard(w, "SetPoint") then table.insert(w._points, { ... }) end end
+-- A point already set is replaced, as the client does (a frame keeps one
+-- anchor per point).
+function Methods.SetPoint(w, point, ...)
+    if not guard(w, "SetPoint") then return end
+    for i = #w._points, 1, -1 do
+        if w._points[i][1] == point then table.remove(w._points, i) end
+    end
+    table.insert(w._points, { point, ... })
+end
 function Methods.ClearAllPoints(w) if guard(w, "ClearAllPoints") then w._points = {} end end
 function Methods.GetNumPoints(w) return #w._points end
 function Methods.GetPoint(w, i)
@@ -260,7 +273,13 @@ function Methods.GetObjectType(w) return w._type end
 function Methods.SetClipsChildren(w, v) w._clips = v end
 
 -- Secure attributes and clicks.
-function Methods.SetAttribute(w, k, v) if guard(w, "SetAttribute") then w._attrs[k] = v end end
+function Methods.SetAttribute(w, k, v)
+    if not guard(w, "SetAttribute") then return end
+    w._attrs[k] = v
+    -- With the client's header code, every attribute change is heard, as in
+    -- the client (the model below calls the unit hooks itself).
+    if WoW.clientHeaders and w._scripts.OnAttributeChanged then w._scripts.OnAttributeChanged(w, k, v) end
+end
 function Methods.GetAttribute(w, k) return w._attrs[k] end
 function Methods.RegisterForClicks(w, ...) if guard(w, "RegisterForClicks") then w._clicks = { ... } end end
 function Methods.StartMoving(w) if guard(w, "StartMoving") then w._moving = true end end
@@ -499,6 +518,8 @@ function InCombatLockdown() return WoW.combat end
 function IsShiftKeyDown() return WoW.shift end
 function IsAltKeyDown() return WoW.alt == true end
 function RegisterUnitWatch(frame) WoW.unitWatch[frame] = true end
+-- FrameXML's (SecureStateDriver.lua): recorded, not evaluated.
+function RegisterStateDriver(frame, state, values) WoW.stateDrivers[frame] = { state, values } end
 function UnregisterUnitWatch(frame) WoW.unitWatch[frame] = nil; frame._unwatched = true end
 -- Blizzard_RestrictedAddOnEnvironment/SecureHandlers.lua:602. The snippet is
 -- recorded, not run: a test runs it with its own handle stubs.
@@ -723,6 +744,23 @@ C_AddOns = {
 
 -- Raid roster: WoW.raid = { [unit] = { index = n, subgroup = g } } while in a raid.
 function IsInRaid() return WoW.raid ~= nil end
+local function partyCount()
+    local n = 0
+    for i = 1, 4 do if WoW.units["party" .. i] then n = n + 1 end end
+    return n
+end
+function IsInGroup() return WoW.raid ~= nil or partyCount() > 0 end
+-- A raid's members, or the party with you (0 alone).
+function GetNumGroupMembers()
+    if WoW.raid then
+        local n = 0
+        for _ in pairs(WoW.raid) do n = n + 1 end
+        return n
+    end
+    local n = partyCount()
+    return n > 0 and n + 1 or 0
+end
+function GetNumSubgroupMembers() return partyCount() end
 function UnitInRaid(u) return WoW.raid and WoW.raid[u] and WoW.raid[u].index or nil end
 function GetRaidRosterInfo(index)
     for u, r in pairs(WoW.raid or {}) do
@@ -814,6 +852,7 @@ local function headerUnits(h)
 end
 
 function WoW.layoutHeader(h)
+    if WoW.clientHeaders then return WoW.clientHeaders.update(h) end
     local list = headerUnits(h)
     local i = 1
     while h._attrs["child" .. i] do
@@ -838,7 +877,7 @@ end
 local plainShow = Methods.Show
 function Methods.Show(w)
     plainShow(w)
-    if not w._isHeader then return end
+    if not w._isHeader or WoW.clientHeaders then return end   -- the client's: its OnShow updates
     local start = w._attrs.startingIndex
     if type(start) == "number" and start <= 0 then
         local want = 1 - start
@@ -852,6 +891,54 @@ function Methods.Show(w)
         end
     end
     WoW.layoutHeader(w)
+end
+
+-- Blizzard's own header code (#69's harness): after
+-- WoW.useClientHeaders(file), header templates run Forever's
+-- SecureGroupHeaders.lua instead of the model above. Created hidden, as the
+-- template is; laid out on OnShow, on attribute changes, and by
+-- WoW.layoutHeaders() (the roster events). Secure code: never blocked.
+function WoW.useClientHeaders(file)
+    local chunk = loadfile(file)
+    if not chunk then return false end
+    -- What the file reads, at load and while it lays out.
+    rawset(string, "trim", function(v) return (v:gsub("^%s+", ""):gsub("%s+$", "")) end)
+    rawset(table, "wipe", function(t) for k in pairs(t) do t[k] = nil end return t end)
+    rawset(_G, "strsplit", function(sep, v)
+        local out = {}
+        for piece in (v .. sep):gmatch("(.-)" .. sep:gsub("%p", "%%%0")) do out[#out + 1] = piece end
+        return unpack(out)
+    end)
+    rawset(_G, "GetFrameHandle", function(f) return f end)
+    rawset(_G, "GetManagedEnvironment", function() return {} end)
+    rawset(_G, "CallRestrictedClosure", function() error("the harness runs no snippets") end)
+    rawset(_G, "scrub", function(...) return ... end)
+    rawset(_G, "CLASS_SORT_ORDER", {})
+    rawset(_G, "GetPartyAssignment", function() return false end)
+    rawset(_G, "UnitName", function(u) return unitField(u, "name") end)
+    chunk()
+    local function secure(fn, ...)
+        local was = WoW.secureCode
+        WoW.secureCode = true
+        local ok, err = pcall(fn, ...)
+        WoW.secureCode = was
+        if not ok then error(err, 0) end
+    end
+    WoW.clientHeaders = {
+        dress = function(h)
+            local pet = h._isPetHeader
+            local update = pet and SecureGroupPetHeader_Update or SecureGroupHeader_Update
+            local changed = pet and SecureGroupPetHeader_OnAttributeChanged or SecureGroupHeader_OnAttributeChanged
+            h._shown = false
+            h._scripts.OnShow = function(self) secure(update, self) end
+            h._scripts.OnAttributeChanged = function(self, k, v) secure(changed, self, k, v) end
+        end,
+        update = function(h)
+            if not Methods.IsVisible(h) then return end
+            secure(h._isPetHeader and SecureGroupPetHeader_Update or SecureGroupHeader_Update, h)
+        end,
+    }
+    return true
 end
 
 local function durationFor(u, channel)

@@ -49,9 +49,12 @@ jobs:
       # tests/events-70338.txt and test_methods skips the method check.
       # RaidProbe is a ForeverProbe module, and ForeverProbe is private and
       # local (..\ForeverProbe): test_probe skips here and runs locally.
+      # test_layout_client runs Forever's own SecureGroupHeaders.lua from the
+      # local wow-ui-source checkout: skipped here too.
       - name: Unit tests
         env:
           FOREVERPROBE_OPTIONAL: "1"
+          WOW_UI_SOURCE_OPTIONAL: "1"
         run: |
           for f in tests/test_*.lua; do
             echo "-- $f"

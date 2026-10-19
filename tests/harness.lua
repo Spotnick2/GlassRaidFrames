@@ -135,6 +135,13 @@ function loadAddon(opts)
         end
     end
     if opts.db then GlassRaidFramesDB = opts.db end
+    -- The group layout (#69) is on by default; the tests written before it
+    -- cover the legacy grid, so they load with it off unless they ask
+    -- (opts.layout).
+    if not opts.layout then
+        if type(GlassRaidFramesDB) ~= "table" then GlassRaidFramesDB = {} end
+        if GlassRaidFramesDB.groupLayout == nil then GlassRaidFramesDB.groupLayout = false end
+    end
     -- After the files, before ADDON_LOADED: what loaded first (Glass UI, a
     -- newer LibGlass) is in place by then.
     if opts.beforeLoaded then opts.beforeLoaded() end

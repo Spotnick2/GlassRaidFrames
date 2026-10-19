@@ -37,7 +37,7 @@ then the dispel box and sound (#4). Work goes through GitHub issues and PRs at
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) → `Compat.lua` →
 `Glass.lua` → `Role.lua` → `Engine.lua` → `Frames.lua` → `IndicatorDefaults.lua` →
-`Indicators.lua` → `Header.lua` → `GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` →
+`Indicators.lua` → `Header.lua` → `Layout.lua` → `GlassRaidFrames.xml` → `Blizzard.lua` → `Movers.lua` →
 `ClickCast.lua` → `ClickCastCatalog.lua` → `ClickCastEditor.lua` →
 `GlassRaidFrames.lua` → `Options.lua` → `ClickCastOptions.lua` →
 `IndicatorOptions.lua`. Planned: `Dispel.lua`.
@@ -93,7 +93,41 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     - Glass UI's SkinProbe reads `GRF.Glass.preset`/`STYLE` and `db.look`/`glassBody`: keep
       those names. Tests: `test_suite.lua`. The real Pearl is built on r11+. An older
       LibGlass is modelled by lowering the MINOR, and a failed build by a throwing `New`.
-- **`Header.lua`**: the layout. **Eight `SecureGroupHeaderTemplate` headers**, one per raid
+- **`Layout.lua`** (#69): **the group layout, on by default.** The plan is Glass UI's
+  `docs/GROUP-LAYOUT.md`, measured on 70450 (`docs/FOREVER-PROBE.md` item 14).
+  - **One `SecureGroupHeaderTemplate`** (`GlassRaidFramesGrid`), 40 children precreated. Two
+    complete attribute sets, chosen by **member count** out of combat: the row (5 or fewer,
+    party or raid; no `groupBy`, so a party is player, party1..4) and the columns of 5 (more
+    than 5; `groupBy GROUP`). Both keep `showRaid`, `showParty` and `showPlayer` on, so the
+    client keeps everyone listed when the group changes kind in combat. A set change is one
+    batch: `_ignore`, the whole set, **every child's anchors cleared**, `_ignore` off, one
+    refresh (re-setting `point` to its own value re-lays the header, measured).
+  - **Cells:** the role's saved size (`profiles[role].size`, 96x60 by default), its width
+    80/96 from 21 members (`Layout.CellSize`). `TileSize` is the saved cell.
+  - **Pets** (`profiles[role].showPets`): in a raid, a raid-only `SecureGroupPetHeaderTemplate`
+    (64x28, columns of 10, 40 precreated) anchored to the grid's right edge, so it follows the
+    grid's own resize in combat. **One pet column is always reserved** in a raid. In a party,
+    five fixed buttons (`pet`, `partypet1..4`) under their owners' cells, `RegisterUnitWatch`ed,
+    in a holder whose **state driver is its only owner**: `"[@raid1,exists] hide; show"` under
+    the row (`[group:raid]` reads false in combat, run #238; the unit test holds, run #240),
+    `"…; [@party1,exists] show; hide"` with show-solo off, `"hide"` under the columns or with
+    pets off. Re-registered out of combat when that changes; never `Hide()`.
+  - **Placed on a baseline** (`Layout.ModeOf(role)`, `profiles[role].layout`, unsaved default
+    `hud` for the healer and `side` for the others): the HUD centres the grid and its pets on
+    UIParent's middle, the baseline at 152/1080 of its height, and the row 68 raw units above
+    it. The side anchors the grid's bottom-left at (30, middle − 93), so it grows right. The
+    grid is anchored by its bottom: in combat it grows upward. The mover moves the baseline
+    (`profiles[role].layoutPos[mode]`); Reset forgets it. `pos` and `petPos` stay set aside.
+  - **Nothing of ours moves in combat**: `GROUP_ROSTER_UPDATE`, `UNIT_PET` and screen changes
+    queue one `Layout.Refresh` (the combat queue, key `layout`), which applies and announces.
+  - `Layout.Install()` puts its functions over `Header`'s at `ADDON_LOADED` (`GRF.layoutOn`,
+    from `db.groupLayout ~= false`), so every caller keeps calling `Header`. Switching takes
+    `/reload` (`GRF.Settings.SetGroupLayout`, `/grf layout on|off`, the Layout section);
+    `SetLayoutMode`, `/grf layout hud|side` apply at once.
+  - `Layout.HeaderSize` is `configureChildren`'s size formula: the announced union is computed
+    from it and from the units the headers list. `test_layout_client.lua` checks it against
+    Forever's own header code.
+- **`Header.lua`**: the **legacy** layout (`db.groupLayout = false`). **Eight `SecureGroupHeaderTemplate` headers**, one per raid
   group (`groupFilter` 1..8), side by side in one protected container, as in EllesmereUI's
   separated mode. Header 1 also has `showParty`/`showPlayer`, so **the client switches between
   the party column and the raid grid, in combat too; there is no mode code**. No
@@ -130,11 +164,15 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   saved before roles existed (`db.pos`) is copied into **every** role without one (the role
   isn't known yet at load). An unsaved role's side grid is re-placed on `UI_SCALE_CHANGED` /
   `DISPLAY_SIZE_CHANGED`. A role change (talent events via `Role.Watch`, or a pick) re-applies
-  through the combat queue and **announces `GlassRaidFrames.LayoutChanged` (role, left, bottom,
-  width, height)** through `API.TriggerEvent` (EventRegistry). Every *saved* position (drag stop,
-  combat mid-drag) announces from `Header.SetPosition`, and resets announce too. Nothing is
-  announced without a placed grid. Nothing listens yet: GlassUnitFrames' listener comes with the
-  group layout (#69, its #132), and neither addon will need the other. New per-role settings go in the profile, not at the top of the DB.
+  through the combat queue and **announces `GlassRaidFrames.LayoutChanged` (role, l, b, w, h,
+  top, base, mode)** through `API.TriggerEvent` (EventRegistry). `GRF.LayoutState()` returns the
+  same as a fresh table, or nil before the build: UIParent units from its bottom-left; l, b, w, h
+  the grid with its pets, `top` the grid's own top, `base` the baseline, mode `hud`/`side`, or
+  `legacy` (top = b + h, base = b). Width 0 means nothing is shown. GlassUnitFrames places its
+  player and target beside it (its #132); neither addon needs the other. **Never announced in
+  combat** (queued instead). Every *saved* position (drag stop, combat mid-drag) announces from
+  `Header.SetPosition`, and resets announce too. Nothing is announced without a placed grid.
+  Glass UI's report carries `layout = { on, mode }`. New per-role settings go in the profile, not at the top of the DB.
 - **`Options.lua`**: Game Menu > Options > AddOns > Glass Raid Frames (`/grf options`). The panel
   is created **hidden**, so Settings' `Show()` always fires `OnShow`. The Unlock button closes
   Settings with **`SettingsPanel:Close(true)`**: plain `Close()` goes back to the Game Menu, whose
@@ -670,6 +708,12 @@ does four more things:
 - It models `FontString:SetFormattedText` taking secrets without formatting them in Lua.
 - It records every widget method called. `test_methods.lua` checks each one exists in the dump,
   closing the gap where a catch-all stub silently swallows a method Forever lacks.
+- `loadAddon` loads with the group layout **off** (the tests before #69 cover the legacy grid);
+  `loadAddon({ layout = true })` turns it on (`test_layout.lua`).
+- `WoW.useClientHeaders(file)` swaps the stub's header model for **Forever's own
+  `SecureGroupHeaders.lua`** (`test_layout_client.lua`, from `$env:WOW_UI_SOURCE` or
+  `..\wow-ui-source`; CI has none and skips it with `WOW_UI_SOURCE_OPTIONAL=1`, so run the tests
+  locally before a layout PR).
 
 `GlassRaidFrames.paintFailures` collects the errors that painters swallow, so a
 secrets test should assert it stays empty. Before trusting a new test, **mutation-test it**:
