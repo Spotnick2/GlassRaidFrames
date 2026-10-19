@@ -4,7 +4,8 @@
 --      (chosen by member count, GlassUI#30), swapped out of combat in one
 --      _ignore batch with every child's anchors cleared, its bottom centre on
 --      the baseline, and a roster change in combat that reflows it with
---      nothing blocked;
+--      nothing blocked; and whether a column anchor child 1 keeps when two
+--      columns become one (in combat, nothing may clear it) stretches it;
 --   M2 the raid-pet header anchored to the grid's right edge: does it follow
 --      the grid's own resize in combat?
 --   M3 the baseline (152/1080 of UIParent's height) against the action bars;
@@ -185,11 +186,26 @@ local function holderDriver()
     return ok
 end
 
+-- One refresh by re-setting one attribute to the value it already has.
+-- Whether that alone fires OnAttributeChanged (counted on the grid) and
+-- re-lays the header is measured; if it doesn't, a changing attribute does
+-- it, and that is logged.
+local function relay(h, list)
+    local before = LP.pointChanges
+    h:SetAttribute("point", h:GetAttribute("point"))
+    local fired = LP.pointChanges > before
+    local first = list[1]
+    local relaid = not first or not first:IsShown() or first:GetNumPoints() > 0
+    if not relaid then
+        LP.refreshes = LP.refreshes + 1
+        h:SetAttribute("rpRefresh", LP.refreshes)
+    end
+    return fired, relaid
+end
+
 -- The plan's orientation batch: _ignore on, the complete set, every child's
--- anchors cleared (or not: the swap experiment), _ignore off, then one
--- refresh by re-setting one attribute to the value it already has. Whether
--- that alone fires OnAttributeChanged and re-lays the header is measured;
--- if it doesn't, a changing attribute does it, and that is logged.
+-- anchors cleared (or not: the swap experiment), _ignore off, then the
+-- refresh.
 local function applySet(set, clear)
     local g = LP.grid
     g:SetAttribute("_ignore", "attributeChanges")
@@ -199,27 +215,26 @@ local function applySet(set, clear)
     LP.set = set
     placeGrid()
     holderDriver()
-    local before = LP.pointChanges
-    g:SetAttribute("point", set.point)
-    local fired = LP.pointChanges > before
-    local first = LP.cells[1]
-    local relaid = not first:IsShown() or first:GetNumPoints() > 0
-    if not relaid then
-        LP.refreshes = LP.refreshes + 1
-        g:SetAttribute("rpRefresh", LP.refreshes)
-    end
+    local fired, relaid = relay(g, LP.cells)
     say(string.format("layout: %s set applied (anchors %s); the same-value refresh fired=%s re-laid=%s",
         set.name, clear and "cleared" or "kept", show(fired), show(relaid)))
     return fired, relaid
 end
 
+-- Laying out n cells in several columns gives child 1 the column anchor too
+-- (SecureGroupHeaders.lua:203-205), and the one-column pass back on the real
+-- roster sets only the point (:202), so a shown child 1 would keep it. The
+-- count is logged, then every child's anchors are cleared and re-laid.
 local function precreate(h, n)
     h:SetAttribute("startingIndex", 1 - n)
     h:Show()
     h:SetAttribute("startingIndex", 1)
     local list = {}
     while h:GetAttribute("child" .. (#list + 1)) do list[#list + 1] = h:GetAttribute("child" .. (#list + 1)) end
-    return list
+    local stale = list[1] and list[1]:GetNumPoints() or 0
+    for _, c in ipairs(list) do c:ClearAllPoints() end
+    relay(h, list)
+    return list, stale
 end
 
 local function build()
@@ -236,7 +251,8 @@ local function build()
     LP.set = wanted()
     setAll(grid, LP.set)
     placeGrid()
-    LP.cells = precreate(grid, 40)
+    local staleGrid, stalePets
+    LP.cells, staleGrid = precreate(grid, 40)
 
     local pets = CreateFrame("Frame", "RaidProbeLayoutPets", UIParent, "SecureGroupPetHeaderTemplate")
     pets:SetAttribute("template", "RaidProbeLayoutPetTemplate")
@@ -246,7 +262,7 @@ local function build()
     -- combat should carry the pets along (M2).
     pets:SetPoint("TOPLEFT", grid, "TOPRIGHT", LAYOUT.GAP, 0)
     LP.pets = pets
-    LP.petCells = precreate(pets, 40)
+    LP.petCells, stalePets = precreate(pets, 40)
 
     local holder = CreateFrame("Frame", "RaidProbeLayoutPartyPets", UIParent)
     LP.holder = holder
@@ -263,8 +279,9 @@ local function build()
         LP.partyPets[k] = b
     end
     local ok = holderDriver()
-    say(string.format("layout built: %d grid cells, %d raid-pet cells, %d party-pet buttons; visibility driver %s %s",
-        #LP.cells, #LP.petCells, #LP.partyPets, show(LP.driver), ok and "registered" or "threw"))
+    say(string.format("layout built: %d grid cells, %d raid-pet cells, %d party-pet buttons; visibility driver %s %s;"
+        .. " child 1's anchors after precreation (then cleared): grid %d, pets %d",
+        #LP.cells, #LP.petCells, #LP.partyPets, show(LP.driver), ok and "registered" or "threw", staleGrid, stalePets))
     return #LP.cells == 40 and #LP.petCells == 40 and #LP.partyPets == 5 and ok,
         "cells=" .. #LP.cells, "pets=" .. #LP.petCells, "partyPets=" .. #LP.partyPets, "driver=" .. show(ok)
 end
@@ -374,9 +391,19 @@ local function partyPetsHold(s)
     return #probs == 0, table.concat(probs, "; ")
 end
 
--- A step's check. opts.combat: must be (true) or not be (false) in combat;
+-- A step's check. opts.roster: "solo", "party" or "raid", the group the step
+-- asked for; opts.combat: must be (true) or not be (false) in combat;
 -- opts.pets: M2; opts.partyPets: M4; opts.resized: the grid's size changed
 -- since combat began (else the in-combat check proved nothing).
+-- What the step asked for: solo, a party (not a raid) or a raid. Without it
+-- a step would pass on the roster it was meant to change.
+local ROSTER = {
+    solo = function(s) return not s.group end,
+    party = function(s) return s.group and not s.raid end,
+    raid = function(s) return s.raid end,
+}
+local function rosterOf(s) return s.raid and "raid" or s.group and "party" or "solo" end
+
 local function check(opts)
     return function()
         if not LP.grid then return false, "not built: /fp raid layout" end
@@ -385,6 +412,9 @@ local function check(opts)
         local probs = {}
         local function need(ok, why) if not ok then probs[#probs + 1] = why end end
         if opts.combat ~= nil then need(s.combat == opts.combat, opts.combat and "not in combat" or "in combat") end
+        if opts.roster then
+            need(ROSTER[opts.roster](s), "the group is " .. rosterOf(s) .. ", the step wants " .. opts.roster)
+        end
         need(gridHolds(s))
         if opts.pets then need(petsFollow(s)) end
         if opts.partyPets then need(partyPetsHold(s)) end
@@ -448,6 +478,32 @@ local function swap()
     return ok, why, "without the clear: " .. (keptOk and "held" or keptWhy), "cells=" .. cleared.cells.n
 end
 
+-- A raid of 6 falling to 5 in combat under the columns: two columns become
+-- one, and nothing may clear child 1's column anchor until combat ends. Out
+-- of combat on the party's row: two rows (unitsPerColumn 1), back to one
+-- without the clear, child 1's size read, then again after one more pass
+-- (the header sizes itself from child 1). Passes when the cell keeps its
+-- size; the set is applied cleanly after.
+local function collapse()
+    if not LP.grid then return false, "not built: /fp raid layout" end
+    if InCombatLockdown() then say("out of combat only") return false end
+    if cellsOf(LP.cells).n < 2 then return false, "needs two cells shown (a party of 2)" end
+    local g, first, per = LP.grid, LP.cells[1], LP.set.unitsPerColumn
+    g:SetAttribute("unitsPerColumn", 1)
+    local split = first:GetNumPoints()
+    g:SetAttribute("unitsPerColumn", per)
+    local points, cell, grid = first:GetNumPoints(), box(first), box(g)
+    relay(g, LP.cells)
+    local cell2, grid2 = box(first), box(g)
+    local kept = cell and cell2 and near(cell.w, LAYOUT.W) and near(cell.h, LAYOUT.H) and near(cell2.w, LAYOUT.W)
+        and near(cell2.h, LAYOUT.H)
+    local detail = string.format("child 1: %d anchors in two rows, %d back in one; cell %s, grid %s; after one more"
+        .. " pass cell %s, grid %s", split, points, boxText(cell), boxText(grid), boxText(cell2), boxText(grid2))
+    say("layout: stale column anchor: " .. detail)
+    applySet(LP.set, true)
+    return kept == true, detail
+end
+
 --------------------------------------------------------------------------------
 -- The procedure
 --------------------------------------------------------------------------------
@@ -479,7 +535,7 @@ local function released()
 end
 
 Probe:Steps("layout", {
-    rev = 3,
+    rev = 4,
     title = "Group layout (#69): one header, the pet header, the baseline, the party pets",
     { text = "GlassRaidFrames must be off for this (its grid would sit on the probe's). If it's on, turn it off in the "
         .. "AddOns list and /reload: the panel comes back here. Then Next.",
@@ -491,33 +547,40 @@ Probe:Steps("layout", {
       auto = true, run = build },
     { text = "Solo, out of combat: one cell (yours) centred above the bars, your pet's bar under it if you have one. "
         .. "Then Next. Already in a group? Skip.",
-      check = check({ combat = false, partyPets = true }), screenshot = "layout solo" },
+      check = check({ roster = "solo", combat = false, partyPets = true }), screenshot = "layout solo" },
     { text = "Form a PARTY with one other player (not a raid), out of combat. If either of you has a pet, call it. "
         .. "Then Next.",
-      check = check({ combat = false, partyPets = true }), screenshot = "layout party" },
+      check = check({ roster = "party", combat = false, partyPets = true }), screenshot = "layout party" },
+    { text = "Out of combat: two rows and back to one without clearing the anchors, as a raid of 6 falling to 5 in "
+        .. "combat does. Does the first cell stretch?", auto = true, run = collapse },
     { text = "Measuring the baseline against your action bars.", auto = true, run = bars, screenshot = "layout bars" },
     { text = "Do the grid and the pet bars sit clear above your action bars, with room to spare?", ask = true },
     { text = "Convert the party to a RAID, out of combat. Then Next. Expect the same row (5 or fewer), the party-pet "
         .. "bars gone and any pet in the raid-pet column to the right.",
-      check = check({ combat = false, pets = true, partyPets = true }), screenshot = "layout small raid" },
+      check = check({ roster = "raid", combat = false, pets = true, partyPets = true }),
+      screenshot = "layout small raid" },
     { text = "Out of combat: swapping orientation without clearing the cells' anchors, then with it.",
       auto = true, run = swap },
     { text = "Out of combat: switching to the columns, as a raid of more than 5 gets them (a column of 2 here).",
       auto = true, run = force, screenshot = "layout columns" },
     { text = "Start combat (a training dummy or a mob) and stay in it.", event = "PLAYER_REGEN_DISABLED" },
     { text = "In combat: the other player LEAVES the raid. Next once they're gone.",
-      check = check({ combat = true, pets = true, partyPets = true, resized = true }), screenshot = "layout left" },
+      check = check({ roster = "solo", combat = true, pets = true, partyPets = true, resized = true }),
+      screenshot = "layout left" },
     { text = "Still in combat: invite them back (a party now). Next once they've joined. Can't invite in combat? "
         .. "Skip, and say so in the note.",
-      check = check({ combat = true, pets = true, partyPets = true }), screenshot = "layout rejoined" },
+      check = check({ roster = "party", combat = true, pets = true, partyPets = true }),
+      screenshot = "layout rejoined" },
     { text = "Leave combat and wait: the probe drops the columns and applies the row.", wait = released,
-      timeout = 180, check = check({ combat = false, partyPets = true }), screenshot = "layout row after combat" },
+      timeout = 180, check = check({ roster = "party", combat = false, partyPets = true }),
+      screenshot = "layout row after combat" },
     { text = "In the party: start combat again and stay in it.", event = "PLAYER_REGEN_DISABLED" },
     { text = "In combat: convert the party to a RAID. Next once converted. Not allowed in combat? Skip, and say so "
         .. "in the note.",
-      check = check({ combat = true, pets = true, partyPets = true }), screenshot = "layout raid in combat" },
+      check = check({ roster = "raid", combat = true, pets = true, partyPets = true }),
+      screenshot = "layout raid in combat" },
     { text = "Leave combat and wait: the row stays (5 or fewer).", wait = synced, timeout = 180,
-      check = check({ combat = false, pets = true, partyPets = true }) },
+      check = check({ roster = "raid", combat = false, pets = true, partyPets = true }) },
     { text = "Type /reload (or press Reload now) so the log reaches the disk. Then turn GlassRaidFrames back on.",
       reload = true },
 })
@@ -539,12 +602,13 @@ Probe:Command("layout", function(args)
     args = (args or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if args == "bars" then bars() return end
     if args == "swap" then swap() return end
+    if args == "collapse" then collapse() return end
     if not LP.grid then build() return end
     say("layout: " .. line(state()))
-end, "[bars|swap] #69's grid, raid-pet header and party pets (again: report); bars: the baseline (M3); "
-    .. "swap: the orientation batch without and with the anchor clear")
+end, "[bars|swap|collapse] #69's grid, raid-pet header and party pets (again: report); bars: the baseline (M3); "
+    .. "swap: the orientation batch without and with the anchor clear; collapse: two rows back to one, uncleared")
 
 -- Seam for tests/test_probe.lua.
 NS._layout = { LAYOUT = LAYOUT, LP = LP, expectSize = expectSize, wantCells = wantCells, build = build,
     state = state, check = check, applySet = applySet, sync = sync, swap = swap, bars = bars, force = force,
-    released = released }
+    released = released, precreate = precreate, collapse = collapse }

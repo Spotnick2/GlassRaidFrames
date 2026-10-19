@@ -277,6 +277,50 @@ eq(LP.grid:GetAttribute("showParty"), true, "and it lists a party")
 local gp = { LP.grid:GetPoint(1) }
 check(gp[1] == "BOTTOM" and math.abs(gp[5] - (152 + 68)) < 0.01 and gp[4] == 960, "bottom centre at baseline + 68")
 
+-- Precreation (Codex P2 on #70): the client's pass over 40 cells gives child 1
+-- the column anchor too, and the one-column pass back keeps it. A header
+-- that anchors child 1 as the client does (SecureGroupHeaders.lua:201-205),
+-- showing a party of 2 once startingIndex is back to 1.
+local function fakeHeader()
+    local h = { attrs = { point = "LEFT", columnAnchorPoint = "BOTTOM", unitsPerColumn = 5 }, kids = {} }
+    local function anchor(c, p, ...)
+        for i = #c._points, 1, -1 do if c._points[i][1] == p then table.remove(c._points, i) end end
+        c:SetPoint(p, ...)
+    end
+    function h:GetAttribute(k) return self.attrs[k] end
+    function h:SetAttribute(k, v) self.attrs[k] = v if self.shown then self:layout() end end
+    function h:Show() self.shown = true self:layout() end
+    function h:layout()
+        local start = self.attrs.startingIndex or 1
+        local n = start <= 0 and 1 - start or 2
+        for i = 1, math.max(n, #self.kids) do
+            local c = self.kids[i]
+            if not c then
+                c = CreateFrame("Button", nil, UIParent)
+                self.kids[i], self.attrs["child" .. i] = c, c
+            end
+            if i > n then
+                c:Hide()
+                c:ClearAllPoints()
+            elseif i == 1 then
+                c:Show()
+                anchor(c, self.attrs.point, self, self.attrs.point, 0, 0)
+                if n > self.attrs.unitsPerColumn then
+                    anchor(c, self.attrs.columnAnchorPoint, self, self.attrs.columnAnchorPoint, 0, 0)
+                end
+            else
+                c:Show()
+                anchor(c, self.attrs.point, self.kids[i - 1], "RIGHT", 6, 0)
+            end
+        end
+    end
+    return h
+end
+local kids, stale = L.precreate(fakeHeader(), 40)
+eq(#kids .. " " .. stale, "40 2", "precreation leaves child 1 with two anchors (logged)")
+eq(kids[1]:GetNumPoints(), 1, "cleared and re-laid: child 1 has its point only")
+eq(kids[2]:GetNumPoints(), 1, "and child 2 its own")
+
 -- The batch: the complete set (no party key left over), _ignore off after,
 -- anchors cleared or kept.
 for _, c in ipairs(LP.cells) do c._points = { { "LEFT" } } end
@@ -318,6 +362,18 @@ group.sub = 2
 ok, why = L.check({ combat = false })()
 check(not ok and why:find("2 cells shown, the roster lists 3"), "a missing cell fails: " .. tostring(why))
 group.sub = 1
+-- Each step's roster (Codex P2 on #70): Next before the change can't pass.
+ok, why = L.check({ combat = false, roster = "party" })()
+check(ok, "the party step in a party holds: " .. tostring(why))
+ok, why = L.check({ combat = false, roster = "raid" })()
+check(not ok and why:find("the group is party, the step wants raid"), "a conversion step in an unchanged party fails: "
+    .. tostring(why))
+group.inGroup = false
+ok, why = L.check({ roster = "party" })()
+check(why:find("the group is solo, the step wants party"), "a rejoin step still alone fails: " .. tostring(why))
+ok, why = L.check({ roster = "solo" })()
+check(not why:find("the step wants"), "the solo step alone holds: " .. tostring(why))
+group.inGroup = true
 
 -- M2 and M4 on the same hand layout.
 place(LP.pets, 960 + 99 + 6 + 32, 280 - 0.05, 64, 0.1)
@@ -347,6 +403,22 @@ check(not why:find("holder"), "hidden under the columns holds: " .. tostring(why
 LP.holder._shown = true
 L.applySet(A.ROW, true)
 WoW.units.pet = nil
+
+-- Two rows back to one without the clear (a raid of 6 falling to 5 in combat):
+-- passes while the first cell keeps its size, and leaves the set applied.
+for i, c in ipairs(LP.cells) do c._points = i <= 2 and { { "LEFT" } } or {} end
+ok, why = L.collapse()
+check(ok, "collapse: a first cell that keeps its size holds: " .. tostring(why))
+eq(LP.grid:GetAttribute("unitsPerColumn"), 5, "and the row's unitsPerColumn is back")
+eq(LP.cells[1]:GetNumPoints(), 0, "and the set re-applied with the clear (no stale anchor left)")
+place(LP.cells[1], 960 - 51, 250, 198, 60)
+ok, why = L.collapse()
+check(not ok and why:find("w=198"), "a stretched first cell fails: " .. tostring(why))
+place(LP.cells[1], 960 - 51, 250, 96, 60)
+LP.cells[2]._shown = false
+ok, why = L.collapse()
+check(not ok and why:find("needs two cells"), "collapse needs a party of 2: " .. tostring(why))
+LP.cells[2]._shown = true
 
 -- Out of combat, the set follows the member count; in combat it waits.
 -- A raid of 5 or fewer keeps the row (GlassUI#30); 6 get the columns.
