@@ -805,3 +805,28 @@ break the behaviour and confirm it goes red.
   porting guide has already had to reverse reasoned conclusions (click-casting, "park it off
   screen", persistence).
 - Match the surrounding code's idiom. Keep pure refactors in their own commit.
+
+## Consulting Codex
+
+The shared `codex-consult` skill (user level) has the invocation and the gotchas. For this repo:
+
+For GlassRaidFrames, good things to hand Codex:
+- anything that touches a secret value (health, auras, range, roles), or that does arithmetic,
+  comparison or string work near one;
+- secure unit buttons, click-cast attributes and `RegisterUnitWatch`, and whatever combat
+  lockdown defers (roster layout, mode switches, binding changes);
+- the dispel box: the secure button over an `AuraContainer`, the cure-slot mapping, the sound;
+- the render-cost budget of 45 glass tiles and their aura containers;
+- any plan that grows scope back toward full Cell or Decursive.
+
+**Always hand it `CLAUDE.md` alongside the diff or plan**, plus
+`C:/Projects/WoW/References/Docs/PORTING-TBC-TO-FOREVER.md` and any `docs/` probe results. Those findings
+were measured on the live client. Without them, a cold reviewer argues from Classic-era or Retail
+behaviour that doesn't hold here: that auras throw for the whole group in combat, that secure
+snippets and state drivers are broken, that some unit numbers are secret.
+`C:/Projects/WoW/References/Forever/api/forever-api-<version>.<build>.md` (take the highest build) is the full API surface when a question
+turns on whether something exists. The reference addons are
+`C:/Projects/WoW/References/Addons/UnitFrames/Cell/Cell` (the design reference, not Forever-aware),
+`C:/Projects/WoW/References/Addons/BuffsDebuffs/Decursive-Forever/Decursive` (dispel, ported to
+Forever) and `C:/Projects/WoW/References/Addons/UnitFrames/DinoUnitFrames-Forever` (manual party/raid
+buttons on Forever, `modules/units.lua`).
