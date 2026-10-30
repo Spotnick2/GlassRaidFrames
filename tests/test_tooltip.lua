@@ -31,6 +31,32 @@ t._scripts.OnLeave(t)
 eq(left[1], t, "hidden on leave")
 eq(t.hoverRim:GetAlpha(), 0, "and the rim goes out")
 
+-- Hidden while hovered (the header drops the member, in combat too): the rim
+-- goes, and only a tooltip this tile OWNS is faded (#78 F5).
+local owner
+rawset(tip, "IsOwned", function(_, f) return owner == f end)
+local t2 = childFor("party2")
+t2._scripts.OnEnter(t2)
+t2.UpdateTooltip = function() end   -- what UnitFrame_UpdateTooltip leaves on the tile
+owner, left = t2, {}
+WoW.enterCombat()
+WoW.SetUnit("party2", nil); WoW.layoutHeaders()
+check(not t2:IsShown(), "the header hid the hovered tile")
+eq(t2.hoverRim:GetAlpha(), 0, "its rim goes out")
+eq(left[1], t2, "the tooltip it owns is faded")
+eq(rawget(t2, "UpdateTooltip"), nil, "and its tooltip update forgotten")
+WoW.leaveCombat()
+WoW.SetUnit("party2", { name = "Member 2", class = "PALADIN", player = true }); WoW.layoutHeaders()
+t2._scripts.OnEnter(t2)
+owner, left = t, {}   -- another frame owns the tooltip now
+WoW.enterCombat()
+WoW.SetUnit("party2", nil); WoW.layoutHeaders()
+eq(t2.hoverRim:GetAlpha(), 0, "hidden again: the rim goes")
+eq(#left, 0, "but another frame's tooltip is left alone")
+WoW.leaveCombat()
+WoW.SetUnit("party2", { name = "Member 2", class = "PALADIN", player = true }); WoW.layoutHeaders()
+entered, left = { t }, { t }   -- the counts the checks below expect
+
 -- Pet tiles get it too (same dressing).
 local pet = GRF.Header.petChildren[1]
 check(pet and pet._scripts.OnEnter ~= nil, "pet tiles have the hook")

@@ -126,6 +126,18 @@ eq(GRF.Profile().pos, nil, "without moving the grid's")
 eq(petAnchor()[1], "CENTER", "the pets now sit at their own spot")
 raid(40); WoW.layoutHeaders(); WoW.fire("GROUP_ROSTER_UPDATE"); WoW.flushTimers()
 eq(petAnchor()[1], "CENTER", "and stay there when the roster changes")
+-- A pet drag that combat interrupts: saved, nothing protected touched, and
+-- placed there when combat ends (#78 F2).
+pm._scripts.OnDragStart(pm); pm._center = { 950, 320 }; pm._scripts.OnUpdate(pm)
+WoW.blocked = {}
+WoW.enterCombat()
+eq(GRF.Profile().petPos.x, 268, "the interrupted pet drag is saved (x)")
+eq(GRF.Profile().petPos.y, -64, "(y)")
+eq(#WoW.blocked, 0, "without touching the pet container")
+announced = {}
+WoW.leaveCombat()
+eq(petAnchor()[4], 268, "after combat the pets sit at the saved spot")
+check(#announced > 0, "and it's announced then")
 GRF.Movers.Lock()
 SlashCmdList.GLASSRAIDFRAMES("reset")
 eq(GRF.Profile().petPos, nil, "reset forgets the pets' spot too")

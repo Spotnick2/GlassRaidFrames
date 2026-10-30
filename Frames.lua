@@ -69,6 +69,17 @@ local function tooltipLeave(self)
     if not (tt and fn) or tt:IsForbidden() then return end
     pcall(fn, self)
 end
+-- A tile hidden while hovered (the header drops its member, in combat too):
+-- the client doesn't promise an OnLeave, so the tooltip state goes here (#78
+-- F5), and only a tooltip this tile OWNS is faded: UnitFrame_OnLeave fades
+-- whatever is showing, which may be another frame's.
+local function tooltipHide(self)
+    self.UpdateTooltip = nil
+    local tt = rawget(_G, "GameTooltip")
+    if not tt or tt:IsForbidden() then return end
+    local ok, owned = pcall(tt.IsOwned, tt, self)
+    if ok and owned == true then tooltipLeave(self) end
+end
 
 function Frames.Setup(b)
     b:RegisterForClicks(API.UnitButtonClicks())
@@ -169,6 +180,9 @@ function Frames.Setup(b)
     -- Insecure hooks on the secure button: fine in combat (no protected call).
     b:HookScript("OnEnter", function(self) self.hoverRim:SetAlpha(1); tooltipEnter(self) end)
     b:HookScript("OnLeave", function(self) self.hoverRim:SetAlpha(0); tooltipLeave(self) end)
+    -- Hidden while hovered: the rim and the tooltip go too (the secure wrap
+    -- clears the hover keys on OnHide for the same reason).
+    b:HookScript("OnHide", function(self) self.hoverRim:SetAlpha(0); tooltipHide(self) end)
 
     if GRF.Indicators then GRF.Indicators.Attach(b) end
     b.relayout = Frames.Layout
@@ -222,13 +236,39 @@ function Frames.DisplayName(full, style, nick)
     return first .. " " .. c .. "."
 end
 
+-- The client's surname separator when it exposes it (a compiled-in constant,
+-- not in the dump or FrameXML), else the space the measured names show.
+local function separator()
+    local C = rawget(_G, "Constants")
+    local t = type(C) == "table" and rawget(C, "CharacterNameSeparatorConsts")
+    local sep = type(t) == "table" and rawget(t, "CHARACTERNAME_SURNAME_SEPARATOR")
+    return type(sep) == "string" and sep or " "
+end
+
+-- The unit's full name, what GetUnitName(u, false) gives, built here from
+-- UnitName's two returns (the first name, then the surname where a realm
+-- would be). Blizzard's own GetUnitName is Lua on Forever
+-- (NameUtil.FormatUnitNameForDisplay) and truth-tests and concatenates those
+-- returns, so a SECRET surname threw inside our painter and the tile kept
+-- the previous person's name (#78 F1). Either part secret: the first return,
+-- unchanged (the client renders a secret; Lua can neither join nor split
+-- it). nil when the read fails, so SetText(nil) clears a stale name.
+function Frames.FullName(u)
+    local ok, first, surname = pcall(UnitName, u)
+    if not ok then return nil end
+    if API.IsSecret(first) or API.IsSecret(surname) then return first end
+    if type(first) ~= "string" then return nil end
+    if type(surname) == "string" and surname ~= "" then return first .. separator() .. surname end
+    return first
+end
+
 -- What a tile shows for unit `u`, whose plain GUID is `guid` (nil: unknown,
 -- so no nickname).
 function Frames.NameFor(u, guid)
     local db = GRF.db
     local nicks = db and db.nicknames
     local nick = type(guid) == "string" and nicks and nicks[guid]
-    return Frames.DisplayName(GetUnitName(u, false), db and db.nameStyle, nick and nick.nick)
+    return Frames.DisplayName(Frames.FullName(u), db and db.nameStyle, nick and nick.nick)
 end
 
 -- After a resize (Header.ApplySize): the bar follows the tile's height, the
@@ -252,8 +292,8 @@ end
 
 Engine.SetPainter("name", function(b, u)
     if not UnitExists(u) then return end
-    -- GetUnitName(u, false) (UnitName's second return is the surname on
-    -- Forever), shown in the chosen style, or the person's nickname (#18).
+    -- The full name from UnitName's two returns (Frames.FullName), shown in
+    -- the chosen style, or the person's nickname (#18).
     b.nameText:SetText(Frames.NameFor(u, b.guid))
 end)
 

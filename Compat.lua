@@ -232,11 +232,23 @@ function API.TriggerEvent(event, ...)
     return ok
 end
 
--- The one place failures are recorded (first error per key), read by
--- /grf failures and the tests.
+-- The one place failures are recorded, read by /grf failures and the tests:
+-- the first message per key (paintFailures), a count and the latest message
+-- (failureDetail), and a running total so a fight's summary can tell that
+-- something new happened. GRF.blocked counts the protected calls the client
+-- refused and blamed on us (ADDON_ACTION_BLOCKED/FORBIDDEN), by function
+-- (#78 F4).
 GRF.paintFailures = GRF.paintFailures or {}
+GRF.failureDetail = GRF.failureDetail or {}   -- key -> { count, last }
+GRF.failureTotal = GRF.failureTotal or 0
+GRF.blocked = GRF.blocked or {}
+GRF.blockedTotal = GRF.blockedTotal or 0
 function API.Fail(key, err)
-    if GRF.paintFailures[key] == nil then GRF.paintFailures[key] = tostring(err) end
+    err = tostring(err)
+    if GRF.paintFailures[key] == nil then GRF.paintFailures[key] = err end
+    local d = GRF.failureDetail[key]
+    if d then d.count, d.last = d.count + 1, err else GRF.failureDetail[key] = { count = 1, last = err } end
+    GRF.failureTotal = GRF.failureTotal + 1
 end
 
 -- Load a load-on-demand Blizzard addon. Returns true, or false and the reason

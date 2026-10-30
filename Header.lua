@@ -146,11 +146,22 @@ end
 -- it in the current role's profile. Out of combat.
 function Header.SetPosition(x, y, save)
     local c = Header.container
-    if not c or InCombatLockdown() then return false end
-    c:ClearAllPoints()
-    c:SetPoint("CENTER", UIParent, "CENTER", x, y)
+    if not c then return false end
+    -- Saving is plain Lua, so a drag that combat interrupts keeps its spot:
+    -- the lockdown is already on inside PLAYER_REGEN_DISABLED (#78 F2). The
+    -- move itself and the announcement wait for combat to end.
     local prof = save and GRF.Profile and GRF.Profile()
     if prof then prof.pos = { x = x, y = y } end
+    if InCombatLockdown() then
+        if save then
+            GRF.WhenOutOfCombat("rescale", function()
+                if Header.SetPosition(Header.PositionOf()) and GRF.Announce then GRF.Announce() end
+            end, false)
+        end
+        return false
+    end
+    c:ClearAllPoints()
+    c:SetPoint("CENTER", UIParent, "CENTER", x, y)
     -- Saved means settled (drag stop, combat mid-drag, reset): tell other
     -- addons. Live drag updates (save = false) don't spam them.
     if save and GRF.Announce then GRF.Announce() end
@@ -262,11 +273,21 @@ end
 -- in the current role's profile. Out of combat.
 function Header.SetPetPosition(x, y, save)
     local pc = Header.petContainer
-    if not pc or InCombatLockdown() then return false end
-    pc:ClearAllPoints()
-    pc:SetPoint("CENTER", UIParent, "CENTER", x, y)
+    if not pc then return false end
+    -- Saved first (plain Lua): a drag that combat interrupts keeps its spot,
+    -- and the pets are placed there, and announced, once combat ends (#78 F2).
     local prof = save and GRF.Profile and GRF.Profile()
     if prof then prof.petPos = { x = x, y = y } end
+    if InCombatLockdown() then
+        if save then
+            GRF.WhenOutOfCombat("placepets", function()
+                if Header.PlacePets() and GRF.Announce then GRF.Announce() end
+            end, false)
+        end
+        return false
+    end
+    pc:ClearAllPoints()
+    pc:SetPoint("CENTER", UIParent, "CENTER", x, y)
     -- Saved means settled: the announced rectangle includes the pets.
     if save and GRF.Announce then GRF.Announce() end
     return true

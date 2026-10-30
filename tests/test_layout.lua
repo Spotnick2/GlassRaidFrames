@@ -185,6 +185,30 @@ x1, y1 = H.PositionOf()
 check(near(x1, x0) and near(y1, y0), "back on the default")
 check(not GRF.Movers._test.petMover(), "the pets have no mover of their own")
 
+-- A drag that combat interrupts (the lockdown already on inside
+-- PLAYER_REGEN_DISABLED): the baseline is saved, nothing protected is
+-- touched, and the grid goes there when combat ends (#78 F2).
+UIParent._center = { 960, 540 }
+GRF.Movers.Unlock()
+local mv = GRF.Movers._test.mover()
+check(mv and mv._shown, "unlocked")
+local cx0, cy0 = H.PositionOf()
+local ax0, ay0 = L.state.ax, L.state.ay
+mv._scripts.OnDragStart(mv)
+mv._center = { 960 + cx0 + 70, 540 + cy0 + 30 }
+mv._scripts.OnUpdate(mv)
+WoW.blocked = {}
+WoW.enterCombat()
+check(not GRF.Movers.IsUnlocked(), "combat locks the mover")
+saved = GRF.Profile().layoutPos and GRF.Profile().layoutPos.hud
+check(saved and near(saved.x, ax0 + 70) and near(saved.y, ay0 + 30), "the interrupted drag is saved")
+eq(#WoW.blocked, 0, "without touching the grid")
+eq(L.live, nil, "and nothing lingers as a live drag")
+WoW.leaveCombat()
+check(near(L.state.ax, ax0 + 70), "after combat the grid sits on the saved baseline")
+GRF.Movers.Reset()
+UIParent._center = nil
+
 -- The side: anchored by its bottom-left, so it grows right.
 GRF.Settings.SetLayoutMode("side")
 eq(GRF.Profile().layout, "side", "the healer's side is saved")

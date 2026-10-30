@@ -76,6 +76,35 @@ WoW.secretFields.guid = nil
 WoW.fire("GROUP_ROSTER_UPDATE")
 flush()
 
+-- The full name from UnitName's two returns (Frames.FullName): Blizzard's
+-- GetUnitName is Lua on Forever and throws on a secret surname (#78 F1).
+eq(F.FullName("party1"), "Karuzo Éclair", "FullName: first and surname joined")
+WoW.SetUnit("focus", { name = "Draku", player = true })
+eq(F.FullName("focus"), "Draku", "no surname: the first name alone")
+WoW.secretFields.name = true
+check(WoW.IsSecret(F.FullName("party1")), "a secret surname: the first return, unchanged, no throw")
+check(WoW.IsSecret(F.FullName("focus")), "a secret first name with no surname: the same")
+WoW.fire("UNIT_NAME_UPDATE", "party1"); flush()
+check(WoW.IsSecret(shown("party1")), "the tile gets the secret whole")
+eq(next(GRF.paintFailures), nil, "without a failure")
+-- The target's nickname while its name is secret: never truth-tested, and
+-- the list keeps the name it had.
+check(S.SetTargetNickname("Hidden"), "a nickname for a target whose name is secret")
+eq(GRF.db.nicknames[UnitGUID("target")].nick, "Hidden", "saved")
+eq(GRF.db.nicknames[UnitGUID("target")].name, "Karuzo Memphisto", "with the list name kept from before")
+WoW.secretFields.name = nil
+S.SetTargetNickname("Healz")
+-- The read failing: a stale name is cleared, never kept.
+local unitName = UnitName
+rawset(_G, "UnitName", function() error("no") end)
+eq(F.FullName("party1"), nil, "a failing read gives nil")
+WoW.fire("UNIT_NAME_UPDATE", "party1"); flush()
+eq(shown("party1"), nil, "and the tile's text is cleared")
+rawset(_G, "UnitName", unitName)
+WoW.fire("UNIT_NAME_UPDATE", "party1"); flush()
+eq(shown("party1"), "Karuzo", "back: the first name")
+WoW.SetUnit("focus", nil)
+
 -- Refusals: no target, a non-player, a long nickname; the pipe is stripped.
 WoW.SetUnit("target", nil)
 local ok, why = S.SetTargetNickname("X")
