@@ -734,9 +734,10 @@ check(consoleHas("stillcursor: test live bindings: 1=nil"), "its live binding lo
 -- reach the client (the stub refuses them insecurely in combat).
 check(AU.assumptionsSetup(), "the probe's own frames are made")
 WoW.combat = true
-WoW.blocked = {}
 check(AU.assumptionsRun(), "the combat run completes")
-check(table.concat(WoW.blocked, ","):find("SetOverrideBindingClick"), "it tried the override binding in combat")
+check(consoleHas("assumptions %(combat=true%): IsMovable"), "the effects are logged, in combat")
+check(consoleHas("CTRL%-F11 live binding after the protected owner") and consoleHas("CTRL%-F12 live binding after the plain owner"),
+    "both override owners were tried (this file's own binding stubs stand in for the client's)")
 WoW.combat = false
 check(AU.assumptionsRun(), "and the baseline out of combat")
 
