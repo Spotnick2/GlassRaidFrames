@@ -37,8 +37,7 @@ eq(GRF.Profile().pos.y, 50, "(y)")
 eq(mv._points[#mv._points][2], c, "the mover re-anchors to the container")
 
 -- Combat locks; unlocking is refused in combat.
-WoW.combat = true
-WoW.fire("PLAYER_REGEN_DISABLED")
+WoW.enterCombat()
 check(not M.IsUnlocked(), "combat locks")
 check(not M.Unlock(), "and unlocking is refused in combat")
 WoW.combat = false

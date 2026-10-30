@@ -200,8 +200,7 @@ CC.Set("shift-2", true, 139)
 check(CC.pending, "a change in combat is pending")
 eq(c:GetAttribute("shift-spell2"), nil, "and not applied yet")
 eq(#WoW.blocked, 0, "nothing protected was touched in combat")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(c:GetAttribute("shift-spell2"), "Renew", "applied when combat ends")
 check(not CC.pending, "no longer pending")
 
@@ -279,8 +278,7 @@ WoW.combat = true
 CC.pending = false
 WoW.fire("UPDATE_BINDINGS")
 check(not CC.pending, "a hover's UPDATE_BINDINGS in combat isn't a pending change")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(#WoW.blocked, 0, "nothing protected was touched")
 -- A key list change drops keys a hovered tile still holds (out of combat).
 local before2 = clears
@@ -297,8 +295,7 @@ CC.pending = false
 GRF.Settings.SetRole("caster")
 check(CC.pending, "a role change in combat is pending for click-casting")
 check(hoverBinds()["1"] ~= nil, "the healer keys stay installed meanwhile")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(hoverBinds()["1"], nil, "switched when combat ends")
 GRF.Settings.SetRole("healer"); flush()
 
@@ -367,8 +364,7 @@ ClickCastFrames[late] = true
 WoW.flushTimers()
 eq(late:GetAttribute("shift-type1"), nil, "in combat: not yet")
 eq(#WoW.blocked, 0, "and nothing protected was touched")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(late:GetAttribute("shift-type1"), "spell", "when combat ends, it carries the rows")
 -- Unregistering: the frame gets its own clicks back on the next frame.
 ClickCastFrames[late] = false
@@ -415,8 +411,7 @@ WoW.combat = true
 GRF.Settings.SetRole("caster")
 eq(next(permKeys), nil, "in combat: nothing bound yet")
 eq(#WoW.blocked, 0, "and nothing protected touched")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 CC.Set("4", false, 589); flush()
 eq(permKeys["4"], kb["4"]:GetName(), "the caster's key is bound for good once combat ends")
 GRF.Settings.SetRole("healer"); flush()

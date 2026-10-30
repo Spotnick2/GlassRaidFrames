@@ -181,7 +181,7 @@ eq(dc._modelUnit, "party1", "the row follows its tile's unit")
 -- The client builds aura buttons with initializeFrame: they never take the mouse.
 local ab = CreateFrame("Button", nil, dc)
 dc._groups.grf_debuffs.spec.initializeFrame(ab)
-eq(ab._mouse, nil, "no scripts on aura buttons")
+eq(ab._mouse, false, "aura buttons don't take the mouse")
 check(WoW.methodsCalled["Button:EnableMouse"], "aura buttons are made click-through")
 
 -- Conversion to a raid IN COMBAT: the header reassigns, the frames follow,

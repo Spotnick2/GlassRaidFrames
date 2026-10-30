@@ -10,14 +10,13 @@ local GRF = loadAddon()
 eq(GRF.Header.container, nil, "no frames are built under lockdown")
 check(chatHas("frames will appear when combat ends"), "and it says so")
 eq(#WoW.blocked, 0, "nothing protected was touched")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 flush()
 eq(#GRF.Header.children, 40, "combat ends: the frames are built")
 check(childFor("party2") and childFor("party2").nameText._text == "Member", "and painted")
 
 -- In combat: members leave and join, the group converts; the header does it.
-WoW.combat = true
+WoW.enterCombat()
 WoW.blocked = {}
 WoW.SetUnit("party2", nil)
 WoW.layoutHeaders(); WoW.fire("GROUP_ROSTER_UPDATE"); flush()
@@ -39,8 +38,7 @@ SlashCmdList.GLASSRAIDFRAMES("reset")
 SlashCmdList.GLASSRAIDFRAMES("solo")
 eq(GRF.Header.headers[1]:GetAttribute("showSolo"), false, "showSolo waits for combat to end")
 eq(#WoW.blocked, 0, "the slash commands touched nothing protected in combat")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(GRF.Header.headers[1]:GetAttribute("showSolo"), true, "and applies after")
 
 -- One header failing to build doesn't cost the other groups or the Blizzard

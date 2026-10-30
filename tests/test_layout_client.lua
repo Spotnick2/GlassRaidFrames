@@ -120,8 +120,7 @@ for i = 1, 12 do WoW.units["raidpet" .. i] = nil end
 GRF.Settings.SetShowSolo(false)
 raid(6)
 roster()
-WoW.combat = true
-WoW.fire("PLAYER_REGEN_DISABLED")
+WoW.enterCombat()
 WoW.raid = nil
 for i = 1, 6 do WoW.units["raid" .. i] = nil end
 for i = 1, 4 do WoW.units["party" .. i] = nil end
@@ -136,8 +135,7 @@ roster()
 n, units = shown(L.cells)
 eq(table.concat(units, ","), "raid1,raid2", "converted in combat: the raid is listed")
 eq(#WoW.blocked, 0, "nothing blocked")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(L.set.name, "row", "after combat: the row")
 agrees("after combat", 2)
 
