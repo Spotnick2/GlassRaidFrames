@@ -489,6 +489,10 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     combat, and `/grf layout off` and back; `/fp steps raid glide` the preview with GUF
     following, the glide and names at 80; `/fp steps raid login` logs UIParent's size through a
     login.
+  - `Audit.lua` (#78) is the same module in a third file: section 18's procedures (`lockdown`,
+    `protected`, `identity`, `hidehover`, `dragcombat`, `dragcombatlegacy`, `stillcursor`,
+    `assumptions`) and `/fp raid reflows`, the per-roster-update counter of unit changes and
+    aura rebinds for a raid night.
 
 Forever is **Vanilla content running on Blizzard's Retail (Mainline) codebase**: assume Vanilla
 content and the Retail API. `WOW_PROJECT_ID == WOW_PROJECT_MAINLINE`. Advice that cites a TBC or

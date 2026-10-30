@@ -647,8 +647,10 @@ Glass Unit Frames loaded and following. Every answer was yes, and every check pa
 ### 18. The taint and combat-lockdown audit (#78): what the fixes rest on
 
 The audit (reviewed to consensus with Codex, 2026-10-30; the beta was closed) changed code and
-the test harness on assumptions this checklist measures. Guided procedures in RaidProbe,
-`/fp steps raid <name>`, from 2026-11-04. Each names the fix it decides.
+the test harness on assumptions this checklist measures. Guided procedures in RaidProbe
+(`Tools/RaidProbe/Audit.lua`), from 2026-11-04: `/fp steps raid lockdown | protected | identity
+| hidehover | dragcombat | dragcombatlegacy | stillcursor | assumptions`, and `/fp raid reflows`
+for 18.4. Each names the fix it decides.
 
 - [ ] **18.1 The lockdown's order.** Is `InCombatLockdown()` already true inside a
       `PLAYER_REGEN_DISABLED` handler (Retail's order, assumed by the harness's `enterCombat`

@@ -25,6 +25,7 @@ rawset(_G, "RaidProbeDB", { log = { "1.0 an earlier session's line" }, sessions 
 local ns = {}
 assert(loadfile("Tools/RaidProbe/RaidProbe.lua"))("RaidProbe", ns)
 assert(loadfile("Tools/RaidProbe/Layout.lua"))("RaidProbe", ns)
+assert(loadfile("Tools/RaidProbe/Audit.lua"))("RaidProbe", ns)
 local T = ns._test
 check(rawget(_G, "RaidProbe_test") == nil, "the test seam stays off _G")
 check(rawget(SlashCmdList, "RAIDPROBE") == nil, "no /rprobe any more: /fp raid")
@@ -608,5 +609,138 @@ GC.inCombat = 0
 rawset(_G, "GlassRaidFrames", nil)
 rawset(_G, "GlassRaidFramesGroup8", nil)
 check(#WoW.chat == 0, "the layout probe wrote nothing to chat")
+
+--------------------------------------------------------------------------------
+-- The audit's procedures (Audit.lua, #78, FOREVER-PROBE section 18): the
+-- checks that decide each step, on a fake Glass Raid Frames.
+--------------------------------------------------------------------------------
+local AU = ns._test.audit
+if not rawget(_G, "GetBindingAction") then rawset(_G, "GetBindingAction", function() return nil end) end
+
+-- 18.1: the lockdown's order. The client's order passes; the opposite fails;
+-- too few fights is "not yet".
+-- The audit's own event frame, driven directly (RaidProbe's manual tiles
+-- above would paint on a real regen event).
+local function regen(event, locked)
+    WoW.combat = locked
+    AU.regenEv._scripts.OnEvent(AU.regenEv, event)
+    WoW.combat = false
+end
+AU.regenReset()
+regen("PLAYER_REGEN_DISABLED", true); regen("PLAYER_REGEN_ENABLED", false)
+local okR, whyR = AU.regenCheck(1)()
+check(okR, "lockdown on inside DISABLED and off inside ENABLED: holds (" .. tostring(whyR) .. ")")
+okR, whyR = AU.regenCheck(3)()
+check(not okR and whyR:find("fights seen: 1 of 3"), "one fight of three asked: not yet")
+AU.regenReset()
+regen("PLAYER_REGEN_DISABLED", false); regen("PLAYER_REGEN_ENABLED", true)   -- the other order
+okR, whyR = AU.regenCheck(1)()
+check(not okR and whyR:find("off=1") and whyR:find("on=1"), "the other order fails: " .. tostring(whyR))
+check(consoleHas("regen: PLAYER_REGEN_DISABLED with InCombatLockdown%(%)=false"), "each event logs the lockdown it saw")
+
+-- A fake Glass Raid Frames with one dressed cell.
+local cell = CreateFrame("Button", "AuditCell", UIParent, "SecureUnitButtonTemplate")
+cell.body = CreateFrame("Frame", nil, cell)
+cell.hoverRim = cell.body:CreateTexture(); cell.hoverRim._alpha = 0
+cell.nameText = cell.body:CreateFontString()
+cell.grfInd = { byKey = { debuffs = { c = CreateFrame("Frame", nil, cell.body) } } }
+cell._attrs.unit = "party1"; cell.unit = "party1"
+local prof = {}
+local fakeL = {}
+local grf = {
+    Header = { container = {}, children = { cell }, AllChildren = function() return { cell } end },
+    paintFailures = {}, blockedTotal = 0, layoutOn = true, role = "HEALER",
+    Profile = function() return prof end,
+    Layout = { ModeOf = function() return "hud" end, _test = { L = fakeL } },
+    LayoutState = function() return { l = 1, b = 2, base = 3, mode = "hud" } end,
+    ClickCast = { _test = { keyButtons = { ["1"] = CreateFrame("Button", "GlassRaidFramesKey1", UIParent) } } },
+    Settings = { SetRole = function(r) grf.role = r:upper(); return true end },
+}
+rawset(_G, "GlassRaidFrames", grf)
+
+-- 18.2: the body unprotected passes; protected fails.
+check(AU.protectedReport(), "the protected report reads the frames")
+check(AU.bodyCheck(), "an unprotected body holds")
+cell.body._protected = true
+AU.protectedReport()
+check(not AU.bodyCheck(), "a protected body fails")
+cell.body._protected = nil
+check(consoleHas("protected: its body %-> "), "each frame's answer is logged")
+
+-- 18.3: identity. Plain names: no failure; a secret name is counted; a
+-- recorded name-painter failure fails.
+WoW.SetUnit("party1", { name = "Karuzo Elegia", class = "PRIEST", player = true })
+local okI, whyI, names = AU.identityReport()
+check(okI and names == "secret names=0", "plain names: holds (" .. tostring(names) .. ")")
+WoW.secretFields.name = true
+okI, whyI, names = AU.identityReport()
+check(okI and names == "secret names=2", "secret names are counted, GetUnitName's throw logged: " .. tostring(names))
+check(consoleHas("GetUnitName=THREW"), "Blizzard's GetUnitName threw on the secret surname")
+WoW.secretFields.name = nil
+grf.paintFailures["painter name"] = "boom"
+check(not AU.identityReport(), "a 'painter name' failure fails")
+grf.paintFailures["painter name"] = nil
+
+-- 18.4: reflows. Unit changes split into same/new token, aura rebinds counted.
+cell.onUnitChanged = function() end
+AU.toggleReflows()
+check(AU.reflows() ~= nil, "/fp raid reflows switches the counter on")
+cell._scripts.OnAttributeChanged(cell, "unit", "party1")
+cell._scripts.OnAttributeChanged(cell, "unit", "party2")
+cell:onUnitChanged("party2")
+AU.reflowEv._scripts.OnEvent(AU.reflowEv, "GROUP_ROSTER_UPDATE"); WoW.flushTimers()   -- the audit's frame alone
+local R = AU.reflows()
+eq(R.changes .. "/" .. R.same .. "/" .. R.changed .. "/" .. R.rebinds .. "/" .. R.rosters, "2/1/1/1/1",
+    "two unit changes (one same token), one rebind, one roster update")
+check(consoleHas("reflows: roster updates=1 unit changes=2"), "logged after the roster update")
+AU.toggleReflows()
+check(AU.reflows() == nil, "and off again")
+
+-- 18.5: a hidden tile. Rim out and no tooltip owned passes; a lit rim fails.
+check(AU.hoverHooks(), "the hover hooks go on")
+cell._scripts.OnEnter(cell, true)
+cell._scripts.OnHide(cell)
+local okH, rimH = AU.hiddenTileState()
+check(okH and rimH == "rim=0", "a hidden tile with its rim out holds (" .. tostring(rimH) .. ")")
+cell.hoverRim._alpha = 1
+okH = AU.hiddenTileState()
+check(not okH, "a lit rim on a hidden tile fails")
+cell.hoverRim._alpha = 0
+check(not AU.otherTooltipState(), "no tooltip up: the other-tooltip check fails")
+
+-- 18.6: an interrupted drag. The save must change, nothing blocked, no live drag.
+AU.dragSetup()
+local okD, whyD = AU.dragCheck("layout")()
+check(not okD and whyD:find("none %-> none"), "nothing saved: fails")
+prof.layoutPos = { hud = { x = 10, y = 20 } }
+okD, whyD = AU.dragCheck("layout")()
+check(okD and whyD:find("%-> 10,20"), "a new save holds: " .. tostring(whyD))
+grf.blockedTotal = 1
+check(not AU.dragCheck("layout")(), "a blocked action fails it")
+grf.blockedTotal = 0
+fakeL.live = { 1, 2 }
+check(not AU.dragCheck("layout")(), "a lingering live drag fails it")
+fakeL.live = nil
+check(AU.placedCheck(), "placed out of combat: holds")
+WoW.combat = true
+check(not AU.placedCheck(), "still in combat: not yet")
+WoW.combat = false
+
+-- 18.7: the bindings are read and the role switched and restored.
+eq(AU.keyBindings("test"), 1, "one key button read")
+check(consoleHas("stillcursor: test live bindings: 1=nil"), "its live binding logged")
+
+-- 18.8: the harness's assumptions, exercised in combat: the override calls
+-- reach the client (the stub refuses them insecurely in combat).
+check(AU.assumptionsSetup(), "the probe's own frames are made")
+WoW.combat = true
+WoW.blocked = {}
+check(AU.assumptionsRun(), "the combat run completes")
+check(table.concat(WoW.blocked, ","):find("SetOverrideBindingClick"), "it tried the override binding in combat")
+WoW.combat = false
+check(AU.assumptionsRun(), "and the baseline out of combat")
+
+rawset(_G, "GlassRaidFrames", nil)
+check(#WoW.chat == 0, "the audit probe wrote nothing to chat")
 
 done("test_probe")
