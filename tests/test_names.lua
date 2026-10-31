@@ -82,11 +82,35 @@ eq(F.FullName("party1"), "Karuzo Éclair", "FullName: first and surname joined")
 WoW.SetUnit("focus", { name = "Draku", player = true })
 eq(F.FullName("focus"), "Draku", "no surname: the first name alone")
 WoW.secretFields.name = true
-check(WoW.IsSecret(F.FullName("party1")), "a secret surname: the first return, unchanged, no throw")
-check(WoW.IsSecret(F.FullName("focus")), "a secret first name with no surname: the same")
+local f1, s1 = F.FullName("party1")
+check(WoW.IsSecret(f1) and WoW.IsSecret(s1), "a secret name: both returns, unchanged, no throw")
+local f2, s2 = F.FullName("focus")
+check(WoW.IsSecret(f2) and s2 == nil, "a secret first name with no surname: the first alone")
 WoW.fire("UNIT_NAME_UPDATE", "party1"); flush()
-check(WoW.IsSecret(shown("party1")), "the tile gets the secret whole")
+check(WoW.IsSecret(shown("party1")), "the default style: the tile gets the secret first name")
 eq(next(GRF.paintFailures), nil, "without a failure")
+-- The full and initial styles can't join or split a secret: both returns go
+-- to SetFormattedText, where the client joins them (Codex on #80: first
+-- names aren't unique, so a tile must not drop the surname).
+local function formatted(t)
+    return type(t) == "table" and t.secretFormat == "%s%s%s" and t.n == 3
+        and WoW.IsSecret(t.args[1]) and t.args[2] == " " and WoW.IsSecret(t.args[3])
+end
+S.SetNameStyle("full"); flush()
+check(formatted(shown("party1")), "full: first, the separator and the surname, formatted by the client")
+S.SetNameStyle("initial"); flush()
+check(formatted(shown("party1")), "initial: the same (a secret surname has no initial)")
+eq(next(GRF.paintFailures), nil, "without a failure")
+-- A plain first name with a secret surname: the first style needs no join.
+local unitName0 = UnitName
+rawset(_G, "UnitName", function(u) if u == "party1" then return "Karuzo", WoW.Secret("name") end return unitName0(u) end)
+WoW.fire("UNIT_NAME_UPDATE", "party1"); flush()
+local mixed = shown("party1")
+check(type(mixed) == "table" and mixed.args[1] == "Karuzo" and WoW.IsSecret(mixed.args[3]),
+    "initial, a plain first name and a secret surname: formatted by the client")
+S.SetNameStyle("first"); flush()
+eq(shown("party1"), "Karuzo", "first: the plain first name, the secret surname not needed")
+rawset(_G, "UnitName", unitName0)
 -- The target's nickname while its name is secret: never truth-tested, and
 -- the list keeps the name it had.
 check(S.SetTargetNickname("Hidden"), "a nickname for a target whose name is secret")

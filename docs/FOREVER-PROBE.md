@@ -661,7 +661,9 @@ the test harness on assumptions this checklist measures. Guided procedures in Ra
 - [ ] **18.3 Identity secrecy at 40, in combat.** Each `UnitName` return separately (player, a
       member, the target), `GetUnitName`, `UnitClass`, `UnitGUID`, roles, leader, `UnitIsUnit`,
       `UnitExists`, `IsInRaid` (item 5 was a raid of 2). The first return handed raw to
-      `SetText` renders; a tile whose token moves to another person replaces the old name (F1).
+      `SetText` renders, and both returns through `SetFormattedText("%s%s%s", first, sep,
+      surname)` render joined (`/grf names full` in combat); a tile whose token moves to
+      another person replaces the old name (F1).
       Also the value of `Constants.CharacterNameSeparatorConsts.CHARACTERNAME_SURNAME_SEPARATOR`
       (the fix falls back to a space).
 - [ ] **18.4 A raid night.** `/grf failures` afterwards (the blocked-action record, F4), fps with

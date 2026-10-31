@@ -48,6 +48,18 @@ for _, c in ipairs(GRF.Header.AllChildren()) do
 end
 check(shown >= 39, "the raid is shown (" .. shown .. ")")
 eq(secret, shown, "every shown tile got its secret name whole")
+-- The full style in combat: both returns formatted by the client, never
+-- joined in Lua (Codex on #80).
+GRF.Settings.SetNameStyle("full"); flush()
+local formatted = 0
+for _, c in ipairs(GRF.Header.AllChildren()) do
+    local t = c.unit and c:IsShown() and c.nameText._text
+    if type(t) == "table" and t.secretFormat == "%s%s%s" and WoW.IsSecret(t.args[1]) and WoW.IsSecret(t.args[3]) then
+        formatted = formatted + 1
+    end
+end
+eq(formatted, shown, "full style: every shown tile got first name and surname through SetFormattedText")
+GRF.Settings.SetNameStyle("first"); flush()
 eq(childFor("raid1").indicators.leader._shown, false, "a secret leader flag: no icon, no guess")
 check(childFor("raid7").health._color ~= nil, "a secret class: the fallback colour, no throw")
 

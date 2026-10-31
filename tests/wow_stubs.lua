@@ -487,7 +487,7 @@ function Methods.GetText(fs) return fs._text end
 function Methods.SetFormattedText(fs, fmt, ...)
     local n = select("#", ...)
     for i = 1, n do
-        if secrets[(select(i, ...))] then fs._text = { secretFormat = fmt, n = n }; return end
+        if secrets[(select(i, ...))] then fs._text = { secretFormat = fmt, n = n, args = { ... } }; return end
     end
     fs._text = string.format(fmt, ...)
 end

@@ -219,17 +219,22 @@ end
 -- The name display (#18): "first" (the default, above), "initial" (first
 -- name + surname initial: "Karuzo M.") or "full" (cut short by the tile).
 -- A nickname, keyed by GUID, wins over every style, a secret name included.
--- A secret name can't be split: every style shows it whole.
+-- A secret name can't be split or joined in Lua: "first" shows UnitName's
+-- first return as it is, and "initial" and "full" show the whole name from
+-- both returns, which Frames.SetName hands to SetFormattedText for the
+-- client to join (#78 F1; Codex on #80: first names aren't unique). So two
+-- returns: the text, then the surname only when the client has to join it.
 Frames.NAME_STYLES = { first = true, initial = true, full = true }
 
 -- The first character, whole when it takes several bytes (UTF-8: localized
 -- clients' surnames).
 local function firstChar(s) return s:match("^[%z\1-\127\194-\244][\128-\191]*") end
 
-function Frames.DisplayName(full, style, nick)
+function Frames.DisplayName(full, style, nick, surname)
     if nick then return nick end
     if style ~= "initial" and style ~= "full" then return Frames.ShortName(full) end
-    if API.IsSecret(full) or type(full) ~= "string" or style == "full" then return full end
+    if API.IsSecret(full) or API.IsSecret(surname) then return full, surname end
+    if type(full) ~= "string" or style == "full" then return full end
     local first, rest = full:match("^(%S+)%s+(%S.*)$")
     local c = rest and firstChar(rest)
     if not c then return Frames.ShortName(full) end
@@ -250,13 +255,14 @@ end
 -- would be). Blizzard's own GetUnitName is Lua on Forever
 -- (NameUtil.FormatUnitNameForDisplay) and truth-tests and concatenates those
 -- returns, so a SECRET surname threw inside our painter and the tile kept
--- the previous person's name (#78 F1). Either part secret: the first return,
--- unchanged (the client renders a secret; Lua can neither join nor split
--- it). nil when the read fails, so SetText(nil) clears a stale name.
+-- the previous person's name (#78 F1). Either part secret: both returns,
+-- unchanged (Lua can neither join nor split a secret; the client renders
+-- one, and joins two in SetFormattedText: Frames.SetName). nil when the
+-- read fails, so SetText(nil) clears a stale name.
 function Frames.FullName(u)
     local ok, first, surname = pcall(UnitName, u)
     if not ok then return nil end
-    if API.IsSecret(first) or API.IsSecret(surname) then return first end
+    if API.IsSecret(first) or API.IsSecret(surname) then return first, surname end
     if type(first) ~= "string" then return nil end
     if type(surname) == "string" and surname ~= "" then return first .. separator() .. surname end
     return first
@@ -268,7 +274,23 @@ function Frames.NameFor(u, guid)
     local db = GRF.db
     local nicks = db and db.nicknames
     local nick = type(guid) == "string" and nicks and nicks[guid]
-    return Frames.DisplayName(Frames.FullName(u), db and db.nameStyle, nick and nick.nick)
+    local first, surname = Frames.FullName(u)
+    return Frames.DisplayName(first, db and db.nameStyle, nick and nick.nick, surname)
+end
+
+-- Puts a name on a font string: one value to SetText, or a secret name's
+-- two returns to SetFormattedText, where the client joins them with the
+-- separator. The 70532 docs allow secret text there when tainted
+-- (SimpleFontStringAPIDocumentation: SecretArguments AllowedWhenTainted),
+-- and the porting guide measured "%s | %.0f%%" with secrets; this pair is
+-- probe item 18.3's.
+function Frames.SetName(fs, text, surname)
+    local join = API.IsSecret(surname) or (type(surname) == "string" and surname ~= "")
+    if join and (API.IsSecret(text) or type(text) == "string") then
+        fs:SetFormattedText("%s%s%s", text, separator(), surname)
+    else
+        fs:SetText(text)
+    end
 end
 
 -- After a resize (Header.ApplySize): the bar follows the tile's height, the
@@ -293,8 +315,9 @@ end
 Engine.SetPainter("name", function(b, u)
     if not UnitExists(u) then return end
     -- The full name from UnitName's two returns (Frames.FullName), shown in
-    -- the chosen style, or the person's nickname (#18).
-    b.nameText:SetText(Frames.NameFor(u, b.guid))
+    -- the chosen style, or the person's nickname (#18); a secret name's two
+    -- returns are joined by the client (Frames.SetName).
+    Frames.SetName(b.nameText, Frames.NameFor(u, b.guid))
 end)
 
 local function classColor(u)

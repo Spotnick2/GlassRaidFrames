@@ -338,8 +338,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     `SetAlphaFromBoolean`.
 - **The name is centred in the tile** (both ways) and shows the **first name** by default
   (`Frames.ShortName`), as Cell does: Forever's surnames only got a centred name cut short. A
-  secret name (grouped) can't be split in Lua, so it goes to `SetText` whole. Dead/Offline is
-  small in the top-right corner.
+  secret name (grouped) can't be split or joined in Lua: it goes to the client as it comes
+  (`Frames.SetName`, below). Dead/Offline is small in the top-right corner.
   - **Name display** (#18), account-wide: `db.nameStyle` `initial` ("Karuzo M.", a UTF-8
     initial kept whole) or `full`; `first` is the default and isn't saved.
   - **Nicknames** by GUID (`db.nicknames[guid] = {nick, name}`; `name` is only for the list).
@@ -348,8 +348,11 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - `Frames.NameFor(u, guid)` is the one place that decides, from `Frames.FullName(u)`: the
     name is built from `UnitName`'s two returns (first name, surname), **never `GetUnitName`**,
     which is Lua on Forever (`NameUtil.FormatUnitNameForDisplay`) and throws on a secret
-    surname (#78 F1); either part secret hands the first return straight to the client, and a
-    failed read gives nil, which clears a stale name. Settings repaint the `name`
+    surname (#78 F1). Either part secret, the two returns come back as they are: the `first`
+    style shows the first return, and `initial` and `full` show both through
+    `FontString:SetFormattedText("%s%s%s", first, sep, surname)` (`Frames.SetName`; the 70532
+    docs allow secret text there when tainted), so a tile never drops a surname (Codex on
+    #80). A failed read gives nil, which clears a stale name. Settings repaint the `name`
     channel (plain Lua: fine in combat). `/grf names`, `/grf nick`, and the main page's Names
     section, last on the page because the nickname list grows downwards.
 - **Pets** (#13): a `SecureGroupPetHeaderTemplate` (`Header.petHeader`, **measured working in

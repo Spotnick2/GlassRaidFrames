@@ -337,8 +337,10 @@ function Settings.SetTargetNickname(nick)
     local okG, guid = pcall(UnitGUID, "target")
     if not okG or API.IsSecret(guid) or type(guid) ~= "string" then return false, "can't tell who your target is right now" end
     -- The name is never truth-tested here: a secret one throws on `and`/`or`
-    -- (#78 F1). SetNickname keeps the old list name when it's secret or nil.
-    return Settings.SetNickname(guid, nick, GRF.Frames.FullName("target"))
+    -- (#78 F1). SetNickname keeps the old list name when it's secret or nil;
+    -- the first return only (a secret name comes back in two).
+    local name = GRF.Frames.FullName("target")
+    return Settings.SetNickname(guid, nick, name)
 end
 
 -- Every nickname, by name: { guid, name, nick }.
