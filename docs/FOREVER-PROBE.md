@@ -647,8 +647,10 @@ Glass Unit Frames loaded and following. Every answer was yes, and every check pa
 ### 18. The taint and combat-lockdown audit (#78): what the fixes rest on
 
 The audit (reviewed to consensus with Codex, 2026-10-30; the beta was closed) changed code and
-the test harness on assumptions this checklist measures. Guided procedures in RaidProbe,
-`/fp steps raid <name>`, from 2026-11-04. Each names the fix it decides.
+the test harness on assumptions this checklist measures. Guided procedures in RaidProbe
+(`Tools/RaidProbe/Audit.lua`), from 2026-11-04: `/fp steps raid lockdown | protected | identity
+| hidehover | dragcombat | dragcombatlegacy | stillcursor | assumptions`, and `/fp raid reflows`
+for 18.4. Each names the fix it decides.
 
 - [ ] **18.1 The lockdown's order.** Is `InCombatLockdown()` already true inside a
       `PLAYER_REGEN_DISABLED` handler (Retail's order, assumed by the harness's `enterCombat`
@@ -674,9 +676,11 @@ the test harness on assumptions this checklist measures. Guided procedures in Ra
       frame owns the tooltip (F5).
 - [ ] **18.6 Interrupted drags**, all three blocks (the layout grid, the legacy grid, the legacy
       pets): the saved coordinates, the placement and the announcement after combat (F2).
-- [ ] **18.7 A stationary cursor.** Change the role, a key row or the Anywhere mode, let it apply
-      after a fight, and reflow or hide/show tiles under a cursor that does not move; record the
-      bindings and the `OnEnter`/`OnLeave` `motion` argument (the accepted gap).
+- [ ] **18.7 A stationary cursor.** Add a key row for the current role (frames only; the probe
+      adds and removes its own), so the keys are re-applied under a cursor that does not move,
+      then reflow the tiles under it; record the live bindings and the `OnEnter`/`OnLeave`
+      `motion` argument (the accepted gap). Not a role switch: that changes the Anywhere mode
+      and the bindings with it (Codex on #81).
 - [ ] **18.8 Harness assumptions.** `RegisterForDrag` and `SetMovable` on a protected frame in
       combat (not flagged protected in the 70532 docs), and an insecure `SetOverrideBindingClick`
       / `ClearOverrideBindings` in combat on a protected and on a plain owner: the effect and

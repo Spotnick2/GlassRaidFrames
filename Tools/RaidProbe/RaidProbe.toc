@@ -10,3 +10,4 @@
 RaidProbe.xml
 RaidProbe.lua
 Layout.lua
+Audit.lua
