@@ -156,11 +156,11 @@ local function identityReport()
     sep = type(sep) == "table" and rawget(sep, "CHARACTERNAME_SURNAME_SEPARATOR")
     say(string.format("identity: combat=%s IsInRaid=%s GetNumGroupMembers=%s surname separator=%s",
         show(InCombatLockdown()), kind(IsInRaid), kind(GetNumGroupMembers), show(sep)))
-    local secretNames = 0
+    local secretNames, joinUnit = 0, nil
     for _, u in ipairs(groupUnits()) do
         local okN, first, sur = pcall(UnitName, u)
         local okC, _, class = pcall(UnitClass, u)
-        if okN and (secret(first) or secret(sur)) then secretNames = secretNames + 1 end
+        if okN and (secret(first) or secret(sur)) then secretNames = secretNames + 1; joinUnit = joinUnit or u end
         local function part(ok, v) if not ok then return "THREW" end if secret(v) then return "<secret>" end return show(v) end
         say(string.format("  %s: UnitName=%s / %s GetUnitName=%s class=%s guid=%s role=%s leader=%s isTarget=%s exists=%s",
             u, part(okN, first), part(okN, sur), kind(GetUnitName, u, false), part(okC, class), kind(UnitGUID, u),
@@ -177,20 +177,36 @@ local function identityReport()
             if okT and secret(t) then secretTiles = secretTiles + 1 end
         end
     end
-    say(string.format("  tiles shown=%d with a secret name=%d; units with a secret UnitName=%d; 'painter name' failure=%s",
-        tiles, secretTiles, secretNames, show(failure)))
-    A.identity = { tiles = tiles, secretTiles = secretTiles, secretNames = secretNames, failure = failure }
-    return failure == nil, "painter name failure=" .. show(failure), "secret names=" .. secretNames
+    -- A secret name's two returns joined by the client (Frames.SetName:
+    -- SetFormattedText with secret text; Codex on #80), on a probe text.
+    local joined = "no secret name"
+    if joinUnit then
+        local setName = G and G.Frames and G.Frames.SetName
+        if type(setName) ~= "function" then
+            joined = "no Frames.SetName"
+        else
+            A.text = A.text or UIParent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            local okJ, errJ = pcall(function() setName(A.text, UnitName(joinUnit)) end)
+            joined = okJ and "ok" or ("THREW " .. tostring(errJ))
+        end
+    end
+    say(string.format("  tiles shown=%d with a secret name=%d; units with a secret UnitName=%d; 'painter name' failure=%s; "
+        .. "SetName(first, surname) for %s=%s", tiles, secretTiles, secretNames, show(failure), show(joinUnit), joined))
+    A.identity = { tiles = tiles, secretTiles = secretTiles, secretNames = secretNames, failure = failure, joined = joined }
+    return failure == nil and not joined:find("^THREW"), "painter name failure=" .. show(failure),
+        "secret names=" .. secretNames, "joined=" .. joined
 end
 
 Probe:Steps("identity", {
-    rev = 1,
+    rev = 2,
     title = "Identity values in a group, in combat (#78, 18.3)",
     { text = "In a group (the bigger, the better), out of combat, a member targeted. Reading each unit's name, class, GUID, role and more.",
       auto = true, run = identityReport },
     { text = "Pull a mob. In combat, press Run.", button = "Read in combat", run = identityReport },
     { text = "Still in combat: do the tiles show every member's right name (compare with the raid roster)?",
       ask = true, screenshot = "identity in combat" },
+    { text = "Still in combat: type /grf names full. Do the tiles show first names AND surnames, none blank? Then /grf names first.",
+      ask = true, screenshot = "identity, full names in combat" },
     { text = "Still in combat, if you can: have a member leave and come back, or swap groups. Then press Run.",
       button = "Read again", run = identityReport },
     { text = "Do the tiles still show the right names (no tile keeps someone who moved)?",
@@ -213,6 +229,7 @@ local function reflowsLine()
 end
 local reflowEv = CreateFrame("Frame")
 reflowEv:SetScript("OnEvent", function()
+    A.rosters = (A.rosters or 0) + 1   -- the stillcursor's reflow step waits on it
     if not reflows then return end
     reflows.rosters = reflows.rosters + 1
     C_Timer.After(0, reflowsLine)   -- after the headers' own update
@@ -260,61 +277,83 @@ Probe:Command("reflows", toggleReflows, "toggle: count unit changes and aura reb
 local function hoverHooks()
     local G = addon()
     if not (G and G.Header and G.Header.AllChildren) then say("hidehover: Glass Raid Frames isn't built") return false end
-    A.hover = { leaves = 0, hides = 0 }
+    A.hover = { leaves = 0, hides = 0, enters = 0 }
     for _, c in ipairs(G.Header.AllChildren()) do
         if not c.raidProbeHover then
             c.raidProbeHover = true
             c:HookScript("OnEnter", function(self, motion)
-                if A.hover then A.hover.entered, A.hover.enterMotion = self, motion end
+                local h = A.hover
+                if h then h.entered, h.enterMotion, h.enters = self, motion, h.enters + 1 end
             end)
             c:HookScript("OnLeave", function(self, motion)
-                if A.hover then A.hover.leaves = A.hover.leaves + 1; A.hover.leaveMotion = motion end
+                local h = A.hover
+                if h then
+                    h.leaves, h.leaveMotion = h.leaves + 1, motion
+                    if h.entered == self then h.entered = nil end
+                end
             end)
             c:HookScript("OnHide", function(self)
-                if A.hover then A.hover.hides = A.hover.hides + 1; A.hover.lastHide = self end
+                local h = A.hover
+                if h then h.hides, h.lastHide, h.hideInCombat = h.hides + 1, self, InCombatLockdown() == true end
             end)
         end
     end
     return true
 end
 
--- The last hidden tile: its rim out, its tooltip state cleared, the tooltip
--- not owned by it any more.
-local function hiddenTileState()
-    local h = A.hover or {}
-    local t = h.lastHide
-    local tt = rawget(_G, "GameTooltip")
-    local okR, rim = pcall(function() return t.hoverRim:GetAlpha() end)
-    local okO, owned = pcall(function() return tt:IsOwned(t) end)
-    rim = okR and rim or nil
-    owned = okO and owned or nil
-    say(string.format("hidehover: hides=%d leaves=%d (last leave motion=%s) hidden tile=%s rim alpha=%s UpdateTooltip=%s "
-        .. "tooltip owned by it=%s shown=%s combat=%s", h.hides or 0, h.leaves or 0, show(h.leaveMotion),
-        show(t and t:GetName()), show(rim), show(t and rawget(t, "UpdateTooltip") ~= nil), show(owned),
-        show(tt and tt:IsShown()), show(InCombatLockdown())))
-    return t ~= nil and rim == 0 and not owned, "rim=" .. show(rim), "owned=" .. show(owned), "leaves=" .. (h.leaves or 0)
+-- Each check consumes what the hooks saw since the previous one, so a later
+-- step can't pass on an earlier hide (Codex on #81).
+local function consumeHover()
+    local h = A.hover
+    if h then h.hides, h.leaves, h.lastHide, h.hideInCombat, h.leaveMotion = 0, 0, nil, nil, nil end
 end
 
--- Another frame's tooltip, still up after an unrelated tile hid.
+-- The tile hidden since the previous check: its rim out, its tooltip state
+-- cleared, the tooltip not owned by it any more, and hidden in combat
+-- exactly when `inCombat` asks for it.
+local function hiddenTileState(inCombat)
+    return function()
+        local h = A.hover or {}
+        local t, hidInCombat = h.lastHide, h.hideInCombat
+        local tt = rawget(_G, "GameTooltip")
+        local okR, rim = pcall(function() return t.hoverRim:GetAlpha() end)
+        local okO, owned = pcall(function() return tt:IsOwned(t) end)
+        rim = okR and rim or nil
+        owned = okO and owned or nil
+        say(string.format("hidehover: since the last check hides=%d leaves=%d (last leave motion=%s); hidden tile=%s in combat=%s "
+            .. "rim alpha=%s UpdateTooltip=%s tooltip owned by it=%s shown=%s", h.hides or 0, h.leaves or 0, show(h.leaveMotion),
+            show(t and t:GetName()), show(hidInCombat), show(rim), show(t and rawget(t, "UpdateTooltip") ~= nil), show(owned),
+            show(tt and tt:IsShown())))
+        consumeHover()
+        return t ~= nil and rim == 0 and not owned and (hidInCombat == true) == (inCombat == true),
+            "rim=" .. show(rim), "owned=" .. show(owned), "hidden in combat=" .. show(hidInCombat)
+    end
+end
+
+-- Another frame's tooltip, still up after an unrelated tile hid (that hide
+-- is consumed too).
 local function otherTooltipState()
     local tt = rawget(_G, "GameTooltip")
     local okS, shown = pcall(function() return tt:IsShown() end)
     local okO, owner = pcall(function() return tt:GetOwner() end)
-    say(string.format("hidehover: tooltip shown=%s owner=%s", okS and show(shown) or "ERR",
-        okO and show(owner and owner.GetName and owner:GetName()) or "ERR"))
-    return okS and shown == true, "shown=" .. (okS and show(shown) or "ERR")
+    local h = A.hover or {}
+    local hid = (h.hides or 0) > 0
+    say(string.format("hidehover: tooltip shown=%s owner=%s; hides since the last check=%d", okS and show(shown) or "ERR",
+        okO and show(owner and owner.GetName and owner:GetName()) or "ERR", h.hides or 0))
+    consumeHover()
+    return okS and shown == true and hid, "shown=" .. (okS and show(shown) or "ERR"), "a tile hid=" .. tostring(hid)
 end
 
 Probe:Steps("hidehover", {
-    rev = 1,
+    rev = 2,
     title = "A hovered tile that hides (#78, 18.5)",
     { text = "Out of combat, in a party of two. Hooking the tiles' OnEnter, OnLeave and OnHide.", auto = true, run = hoverHooks },
     { text = "Hover your partner's tile and hold the cursor there. Have them leave the group. Then Next, without moving the mouse.",
-      check = hiddenTileState },
+      check = hiddenTileState(false) },
     { text = "Invite them back. Hover YOUR tile (its tooltip up) and hold still; have them leave again. Then Next.",
       check = otherTooltipState },
-    { text = "Invite them back. Pull a mob; in combat hover their tile, hold still, and have them leave. Then Next.",
-      check = hiddenTileState },
+    { text = "Invite them back. Pull a mob; in combat hover their tile, hold still, and have them leave. Then Next "
+        .. "(the fight may have ended by then).", check = hiddenTileState(true) },
     { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
 })
 
@@ -393,44 +432,142 @@ Probe:Steps("dragcombatlegacy", {
 --------------------------------------------------------------------------------
 -- 18.7 A cursor that doesn't move while the keys change (the accepted gap):
 -- a key-list change clears the hovered frame's bindings and waits for the
--- next OnEnter, whose secure pre-snippet needs `motion`.
+-- next OnEnter, whose secure pre-snippet needs `motion`. The change is one
+-- key row more for this very role (PROBE_KEY, bound to the spell of an
+-- existing key row), so the role, the mode (frames only) and the key
+-- pressed stay the same; a role switch changed the mode and the bindings
+-- with it (Codex on #81). The hover steps complete by themselves (`wait`)
+-- while the cursor rests on a tile: no click moves it off.
 --------------------------------------------------------------------------------
 
-local function keyBindings(label)
+local PROBE_KEY = "CTRL-F10"
+
+-- The live keys: those whose binding, overrides included, clicks one of our
+-- hidden key buttons, as the tile's SetBindingClick sets it. The count, the
+-- number of key buttons, and the lines for the log.
+local function countLive()
     local G = addon()
     local keys = G and G.ClickCast and G.ClickCast._test and G.ClickCast._test.keyButtons or {}
-    local parts = {}
-    for key in pairs(keys) do parts[#parts + 1] = key .. "=" .. kind(GetBindingAction, key, true) end
-    table.sort(parts)
-    local h = A.hover or {}
-    say(string.format("stillcursor: %s live bindings: %s | last OnEnter motion=%s", label,
-        #parts > 0 and table.concat(parts, " ") or "no key buttons", show(h.enterMotion)))
-    return #parts
-end
-local function switchRole(to)
-    return function()
-        local G = addon()
-        if not (G and G.Settings and G.Settings.SetRole) then return false, "no Glass Raid Frames" end
-        local ok = G.Settings.SetRole(to)
-        return ok and keyBindings("after /grf role " .. to .. " under the cursor") >= 0, "role " .. show(G.role)
+    local parts, live, n = {}, 0, 0
+    for key, b in pairs(keys) do
+        n = n + 1
+        local action = kind(GetBindingAction, key, true)
+        local okN, name = pcall(function() return b:GetName() end)
+        if okN and type(name) == "string" and action:find(name, 1, true) then live = live + 1 end
+        parts[#parts + 1] = key .. "=" .. action
     end
+    table.sort(parts)
+    return live, n, n > 0 and table.concat(parts, " ") or "no key buttons"
+end
+local function liveKeys(label)
+    local live, n, lines = countLive()
+    local h = A.hover or {}
+    say(string.format("stillcursor: %s: live bindings %d of %d (%s) | tile under the cursor=%s last OnEnter motion=%s",
+        label, live, n, lines, show(h.entered and h.entered:GetName()), show(h.enterMotion)))
+    return live, n
+end
+
+local function removeProbeRow(CC)
+    for _, row in ipairs(CC.Rows()) do
+        if row.key == PROBE_KEY then CC.Remove(row); return true end
+    end
+    return false
+end
+
+-- Frames-only mode, a spell key row to copy, and no probe row left over
+-- from an abandoned run.
+local function stillSetup()
+    if not hoverHooks() then return false end
+    local G = addon()
+    local CC = G.ClickCast
+    if not (CC and CC.Rows and CC.Set and CC.Remove and CC.Anywhere) then return false, "no click-cast module" end
+    if CC.Anywhere() then return false, "this role (" .. show(G.role) .. ") binds its keys anywhere: /grf keys frames first" end
+    if removeProbeRow(CC) then say("stillcursor: a leftover " .. PROBE_KEY .. " row removed") end
+    local model
+    for _, row in ipairs(CC.Rows()) do
+        if row.key and row.spell and not row.action then model = row; break end
+    end
+    if not model then return false, "no spell key row for " .. show(G.role) .. ": bind a hover key to a spell first" end
+    A.still = { model = model, rostersAt = A.rosters or 0 }
+    local _, n = liveKeys("start, the cursor off the tiles")
+    say(string.format("stillcursor: role %s, frames only; the change adds %s with the spell of %s (%s)",
+        show(G.role), PROBE_KEY, show(model.key), show(model.spell)))
+    return n > 0, "key buttons=" .. n, "model key=" .. show(model.key)
+end
+
+-- The cursor rests on a tile and the hover bound the keys.
+local function hoveredWithKeys()
+    local h = A.hover or {}
+    if not h.entered then return false, "hover a tile" end
+    local live, n = countLive()
+    if live == 0 then return false, "on " .. show(h.entered:GetName()) .. ", no live key yet" end
+    liveKeys("under the cursor")
+    return true, "live=" .. live .. " of " .. n
+end
+
+-- One key row more for this role (its reconciliation runs out of combat),
+-- then the keys under the resting cursor, on the next poll.
+local function keysChange()
+    local G, S, h = addon(), A.still, A.hover or {}
+    if not (S and S.model and G and G.ClickCast) then return false, "run the first step" end
+    if not S.row then
+        S.before = liveKeys("before the change, the cursor still")
+        S.row = G.ClickCast.Set(PROBE_KEY, false, S.model.spell, S.model.pinned)
+        S.entersAt = h.enters or 0
+        return false, "one key row more; reading the keys on the next poll"
+    end
+    local live, n = liveKeys("after one key row more, the cursor still")
+    return true, "live before=" .. show(S.before) .. " after=" .. live .. " of " .. n
+end
+
+-- Re-entered since the change, with the keys bound again.
+local function reEntered()
+    local h, S = A.hover or {}, A.still or {}
+    if not (h.entered and (h.enters or 0) > (S.entersAt or 0)) then return false, "move off the tile and back on" end
+    local live, n = countLive()
+    if live == 0 then return false, "re-entered, no live key yet" end
+    liveKeys("after re-entering")
+    return true, "live=" .. live .. " of " .. n
+end
+
+local function restoreRows()
+    local G, S = addon(), A.still
+    if not (G and G.ClickCast and G.ClickCast.Remove and S) then return false, "run the first step" end
+    if S.row then G.ClickCast.Remove(S.row); S.row = nil end
+    S.rostersAt, S.reflowSeen = A.rosters or 0, nil
+    local live, n = liveKeys("after the probe row's removal")
+    return true, PROBE_KEY .. " removed", "live=" .. live .. " of " .. n
+end
+
+-- A roster change under the resting cursor: the keys read on the poll
+-- after it, once the headers have reflowed.
+local function reflowed()
+    local h, S = A.hover or {}, A.still or {}
+    if (A.rosters or 0) <= (S.rostersAt or 0) then
+        return false, h.entered and "waiting for a member to join or leave" or "hover a tile first"
+    end
+    if not S.reflowSeen then S.reflowSeen = true; return false, "reflowed; reading the keys on the next poll" end
+    local live, n = liveKeys("after a reflow under the cursor")
+    return true, "live=" .. live .. " of " .. n, "tile under the cursor=" .. show(h.entered and h.entered:GetName())
 end
 
 Probe:Steps("stillcursor", {
-    rev = 1,
+    rev = 2,
     title = "A cursor that doesn't move while the keys change (#78, 18.7)",
-    { text = "Out of combat, in a group, hover keys set for this role (frames only). Hooking the tiles.",
-      auto = true, run = function() return hoverHooks() and keyBindings("start") > 0 end },
-    { text = "Hover a member's tile and hold still. Press Run: it switches your role to tank, so the keys are re-applied under the cursor.",
-      button = "Switch role", run = switchRole("tank") },
-    { text = "Still holding still over the tile: press your hover key once. Did it cast on the member?", ask = true,
-      check = function() return keyBindings("after the press, still") >= 0 end },
-    { text = "Move the cursor off the tile and back on; press the key once. Did it cast on them now?", ask = true,
-      check = function() return keyBindings("after re-entering") > 0 end },
-    { text = "Restoring your role (from the talents).", auto = true, run = switchRole("auto") },
-    { text = "Hover a tile and hold still; have a member join or leave so the tiles reflow under the cursor. Press the key once. "
-        .. "Did it cast on whoever the tile shows now?", ask = true,
-      check = function() return keyBindings("after a reflow under the cursor") >= 0 end },
+    { text = "Out of combat, in a group, hover keys set for this role, frames only. Hooking the tiles.",
+      auto = true, run = stillSetup },
+    { text = "Hover a member's tile and hold still: this step completes by itself once the keys are bound under the cursor.",
+      wait = hoveredWithKeys, timeout = 60 },
+    { text = "Keep still. One key row (" .. PROBE_KEY .. ") is added for this role, so the keys are re-applied under the cursor; "
+        .. "completes by itself.", wait = keysChange, timeout = 30 },
+    { text = "Still holding still over the tile: press your hover key once. Did it cast on the member?", ask = true },
+    { text = "Move the cursor off the tile and back on, and hold still: completes by itself once the keys are bound again.",
+      wait = reEntered, timeout = 60 },
+    { text = "Press the key once. Did it cast on them now?", ask = true },
+    { text = "Removing the probe's key row.", auto = true, run = restoreRows },
+    { text = "Hover a tile and hold still; have a member join or leave, so the tiles reflow under the cursor. Completes by itself.",
+      wait = reflowed, timeout = 120 },
+    { text = "Press the key once. Did it cast on whoever the tile shows now?", ask = true },
     { text = "Type /reload (or press Reload now) so the log reaches the disk.", reload = true },
 })
 
@@ -498,4 +635,6 @@ NS._test.audit = { A = A, regenEv = regenEv, regenReset = regenReset, regenCheck
     bodyCheck = bodyCheck, identityReport = identityReport, toggleReflows = toggleReflows,
     reflows = function() return reflows end, reflowEv = reflowEv, hoverHooks = hoverHooks, hiddenTileState = hiddenTileState,
     otherTooltipState = otherTooltipState, spots = spots, dragSetup = dragSetup, dragCheck = dragCheck,
-    placedCheck = placedCheck, keyBindings = keyBindings, assumptionsSetup = assumptionsSetup, assumptionsRun = assumptionsRun }
+    placedCheck = placedCheck, liveKeys = liveKeys, stillSetup = stillSetup, hoveredWithKeys = hoveredWithKeys,
+    keysChange = keysChange, reEntered = reEntered, restoreRows = restoreRows, reflowed = reflowed,
+    assumptionsSetup = assumptionsSetup, assumptionsRun = assumptionsRun }

@@ -676,9 +676,11 @@ for 18.4. Each names the fix it decides.
       frame owns the tooltip (F5).
 - [ ] **18.6 Interrupted drags**, all three blocks (the layout grid, the legacy grid, the legacy
       pets): the saved coordinates, the placement and the announcement after combat (F2).
-- [ ] **18.7 A stationary cursor.** Change the role, a key row or the Anywhere mode, let it apply
-      after a fight, and reflow or hide/show tiles under a cursor that does not move; record the
-      bindings and the `OnEnter`/`OnLeave` `motion` argument (the accepted gap).
+- [ ] **18.7 A stationary cursor.** Add a key row for the current role (frames only; the probe
+      adds and removes its own), so the keys are re-applied under a cursor that does not move,
+      then reflow the tiles under it; record the live bindings and the `OnEnter`/`OnLeave`
+      `motion` argument (the accepted gap). Not a role switch: that changes the Anywhere mode
+      and the bindings with it (Codex on #81).
 - [ ] **18.8 Harness assumptions.** `RegisterForDrag` and `SetMovable` on a protected frame in
       combat (not flagged protected in the 70532 docs), and an insecure `SetOverrideBindingClick`
       / `ClearOverrideBindings` in combat on a protected and on a plain owner: the effect and

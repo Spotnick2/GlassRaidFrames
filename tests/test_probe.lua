@@ -655,6 +655,7 @@ local grf = {
     LayoutState = function() return { l = 1, b = 2, base = 3, mode = "hud" } end,
     ClickCast = { _test = { keyButtons = { ["1"] = CreateFrame("Button", "GlassRaidFramesKey1", UIParent) } } },
     Settings = { SetRole = function(r) grf.role = r:upper(); return true end },
+    Frames = { SetName = function(fs, first, surname) fs:SetFormattedText("%s%s%s", first, " ", surname) end },
 }
 rawset(_G, "GlassRaidFrames", grf)
 
@@ -676,6 +677,11 @@ WoW.secretFields.name = true
 okI, whyI, names = AU.identityReport()
 check(okI and names == "secret names=2", "secret names are counted, GetUnitName's throw logged: " .. tostring(names))
 check(consoleHas("GetUnitName=THREW"), "Blizzard's GetUnitName threw on the secret surname")
+check(consoleHas("SetName%(first, surname%) for %w+=ok"), "both secret returns joined by the client on a probe text")
+grf.Frames.SetName = function() error("no secrets here") end
+local okJ, _, _, joined = AU.identityReport()
+check(not okJ and joined:find("^joined=THREW .*no secrets here"), "a throwing join fails the step: " .. tostring(joined))
+grf.Frames.SetName = function(fs, first, surname) fs:SetFormattedText("%s%s%s", first, " ", surname) end
 WoW.secretFields.name = nil
 grf.paintFailures["painter name"] = "boom"
 check(not AU.identityReport(), "a 'painter name' failure fails")
@@ -696,17 +702,34 @@ check(consoleHas("reflows: roster updates=1 unit changes=2"), "logged after the 
 AU.toggleReflows()
 check(AU.reflows() == nil, "and off again")
 
--- 18.5: a hidden tile. Rim out and no tooltip owned passes; a lit rim fails.
+-- 18.5: a hidden tile. Rim out and no tooltip owned passes; a lit rim fails;
+-- each check consumes the hides it saw, so the next needs a fresh one; a
+-- hide in combat passes only the combat step (Codex on #81).
 check(AU.hoverHooks(), "the hover hooks go on")
 cell._scripts.OnEnter(cell, true)
 cell._scripts.OnHide(cell)
-local okH, rimH = AU.hiddenTileState()
+local okH, rimH = AU.hiddenTileState(false)()
 check(okH and rimH == "rim=0", "a hidden tile with its rim out holds (" .. tostring(rimH) .. ")")
+check(not AU.hiddenTileState(false)(), "the same hide can't pass a second check")
+cell._scripts.OnHide(cell)
 cell.hoverRim._alpha = 1
-okH = AU.hiddenTileState()
-check(not okH, "a lit rim on a hidden tile fails")
+check(not AU.hiddenTileState(false)(), "a lit rim on a hidden tile fails")
 cell.hoverRim._alpha = 0
+WoW.combat = true; cell._scripts.OnHide(cell); WoW.combat = false
+check(not AU.hiddenTileState(false)(), "a hide in combat isn't the out-of-combat step's")
+cell._scripts.OnHide(cell)
+check(not AU.hiddenTileState(true)(), "nor an out-of-combat hide the combat step's")
+WoW.combat = true; cell._scripts.OnHide(cell); WoW.combat = false
+check(AU.hiddenTileState(true)(), "a hide in combat passes the combat step")
+check(consoleHas("hidden tile=\"AuditCell\" in combat=true") or consoleHas("hidden tile=AuditCell in combat=true"),
+    "the hide's combat state is logged")
 check(not AU.otherTooltipState(), "no tooltip up: the other-tooltip check fails")
+local tooltip0 = rawget(_G, "GameTooltip")
+rawset(_G, "GameTooltip", { IsShown = function() return true end, GetOwner = function() return nil end })
+cell._scripts.OnHide(cell)
+check(AU.otherTooltipState(), "another frame's tooltip up after a tile hid: holds")
+check(not AU.otherTooltipState(), "without a fresh hide: fails")
+rawset(_G, "GameTooltip", tooltip0)
 
 -- 18.6: an interrupted drag. The save must change, nothing blocked, no live drag.
 AU.dragSetup()
@@ -726,9 +749,51 @@ WoW.combat = true
 check(not AU.placedCheck(), "still in combat: not yet")
 WoW.combat = false
 
--- 18.7: the bindings are read and the role switched and restored.
-eq(AU.keyBindings("test"), 1, "one key button read")
-check(consoleHas("stillcursor: test live bindings: 1=nil"), "its live binding logged")
+-- 18.7: the key-list change is one row more for this role, frames only; the
+-- live keys are those bound to our key buttons; the hover steps complete by
+-- themselves (Codex on #81: a role switch changed the mode and the rows).
+local rows = { { key = "1", spell = 2061 } }
+local anywhere = true
+grf.ClickCast.Rows = function() return rows end
+grf.ClickCast.Anywhere = function() return anywhere end
+grf.ClickCast.Set = function(bind, isMouse, spell, pinned)
+    local r = { key = bind, spell = spell, pinned = pinned }; rows[#rows + 1] = r; return r
+end
+grf.ClickCast.Remove = function(row) for i, r in ipairs(rows) do if r == row then table.remove(rows, i) end end end
+local liveB = {}
+local gba = rawget(_G, "GetBindingAction")
+rawset(_G, "GetBindingAction", function(key) return liveB[key] end)
+eq((AU.liveKeys("test")), 0, "no binding: none live")
+liveB["1"] = "CLICK GlassRaidFramesKey1:LeftButton"
+local live, n = AU.liveKeys("test")
+eq(live .. "/" .. n, "1/1", "a binding that clicks our key button is live")
+check(consoleHas("stillcursor: test: live bindings 1 of 1"), "logged")
+check(not AU.stillSetup(), "keys anywhere: the setup refuses")
+anywhere = false
+rows[2] = { key = "CTRL-F10", spell = 2061 }
+check(AU.stillSetup(), "frames only with a spell key row: set up")
+eq(#rows, 1, "a leftover probe row is removed first")
+local okW, whyW = AU.hoveredWithKeys()
+check(not okW, "no tile under the cursor: waiting (" .. tostring(whyW) .. ")")
+cell._scripts.OnEnter(cell, true)
+check(AU.hoveredWithKeys(), "hovered with a live key: completes")
+check(not AU.keysChange(), "the change: one row more, read on the next poll")
+eq(#rows, 2, "the probe row is saved")
+eq(rows[2].key .. "/" .. rows[2].spell, "CTRL-F10/2061", "under the probe key, with the model's spell")
+check(AU.keysChange(), "the next poll reads the keys and completes")
+check(consoleHas("after one key row more, the cursor still: live bindings 1 of 1"), "the keys after the change are logged")
+local okE, whyE = AU.reEntered()
+check(not okE and whyE == "move off the tile and back on", "not re-entered yet")
+cell._scripts.OnLeave(cell, true); cell._scripts.OnEnter(cell, true)
+check(AU.reEntered(), "re-entered with the key live: completes")
+check(AU.restoreRows(), "the probe row goes")
+eq(#rows, 1, "the saved rows are as before")
+check(not AU.reflowed(), "no roster change yet")
+AU.reflowEv._scripts.OnEvent(AU.reflowEv, "GROUP_ROSTER_UPDATE")
+check(not AU.reflowed(), "a roster change: seen, read on the next poll")
+check(AU.reflowed(), "then completes")
+check(consoleHas("after a reflow under the cursor: live bindings 1 of 1"), "the keys after the reflow are logged")
+rawset(_G, "GetBindingAction", gba)
 
 -- 18.8: the harness's assumptions, exercised in combat: the override calls
 -- reach the client (the stub refuses them insecurely in combat).
