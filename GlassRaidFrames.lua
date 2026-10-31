@@ -78,6 +78,35 @@ local function runPending()
     end
 end
 
+-- What this fight cost, said once after it: the protected calls the client
+-- refused and blamed on us, and the failures recorded, since
+-- PLAYER_REGEN_DISABLED (#78 F4). Quiet when nothing happened.
+local fightBlocked, fightFailed = 0, 0
+local function fightSummary()
+    local blocked = GRF.blockedTotal - fightBlocked
+    local failed = GRF.failureTotal - fightFailed - blocked   -- a block is recorded as a failure too
+    if blocked <= 0 and failed <= 0 then return end
+    local parts = {}
+    if blocked > 0 then parts[#parts + 1] = blocked .. " protected action" .. (blocked > 1 and "s" or "") .. " refused" end
+    if failed > 0 then parts[#parts + 1] = failed .. " failure" .. (failed > 1 and "s" or "") end
+    say("this fight: " .. table.concat(parts, ", ") .. " (/grf failures)")
+end
+
+-- The lockdown normally ends with PLAYER_REGEN_ENABLED. Should it outlive the
+-- event (unmeasured; FOREVER-PROBE item 18.1), one retry re-checks until it
+-- is off, never two at once (#78 F3).
+local draining = false
+local function drain()
+    if InCombatLockdown() then
+        if draining then return end
+        draining = true
+        C_Timer.After(0.1, function() draining = false; drain() end)
+        return
+    end
+    runPending()
+    fightSummary()
+end
+
 --------------------------------------------------------------------------------
 -- Role and profile (#7)
 --------------------------------------------------------------------------------
@@ -307,8 +336,11 @@ function Settings.SetTargetNickname(nick)
     if not (okP and not API.IsSecret(isPlayer) and isPlayer) then return false, "target a player first" end
     local okG, guid = pcall(UnitGUID, "target")
     if not okG or API.IsSecret(guid) or type(guid) ~= "string" then return false, "can't tell who your target is right now" end
-    local okN, name = pcall(GetUnitName, "target", false)
-    return Settings.SetNickname(guid, nick, okN and name or nil)
+    -- The name is never truth-tested here: a secret one throws on `and`/`or`
+    -- (#78 F1). SetNickname keeps the old list name when it's secret or nil;
+    -- the first return only (a secret name comes back in two).
+    local name = GRF.Frames.FullName("target")
+    return Settings.SetNickname(guid, nick, name)
 end
 
 -- Every nickname, by name: { guid, name, nick }.
@@ -491,7 +523,8 @@ local function failures()
     local any = false
     for key, err in pairs(GRF.paintFailures) do
         any = true
-        say(key .. ": " .. err)
+        local d = GRF.failureDetail[key]
+        say(key .. (d and d.count > 1 and (" (x" .. d.count .. ")") or "") .. ": " .. err)
     end
     for _, line in ipairs(GRF.eventFailures) do
         any = true
@@ -698,7 +731,7 @@ SLASH_GLASSRAIDFRAMES1 = "/grf"
 SlashCmdList.GLASSRAIDFRAMES = slash
 
 local boot = CreateFrame("Frame")
-boot:SetScript("OnEvent", function(_, event, arg1)
+boot:SetScript("OnEvent", function(_, event, arg1, arg2)
     if event == "ADDON_LOADED" then
         if arg1 ~= ADDON then return end
         GRF.db, GRF.char = ensureDefaults()
@@ -745,12 +778,26 @@ boot:SetScript("OnEvent", function(_, event, arg1)
                 .. GRF.MEASURED_ON_BUILD .. "). Things may misbehave until it is re-checked.")
         end
     elseif event == "PLAYER_REGEN_DISABLED" then
+        -- The lockdown is already on here (Retail's order; FOREVER-PROBE item
+        -- 18.1 measures it on Forever): plain Lua and insecure frames only.
+        fightBlocked, fightFailed = GRF.blockedTotal, GRF.failureTotal
         GRF.Movers.OnCombat()   -- unlock mode ends: the grid can't move in combat
     elseif event == "PLAYER_REGEN_ENABLED" then
-        if InCombatLockdown() then return end   -- trust the lockdown state, not the event
-        runPending()
+        drain()   -- trusts the lockdown state, not the event
+    elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
+        -- The client refused a protected call and blamed us (arg1 the addon,
+        -- arg2 the function). No pcall sees these: recorded for /grf failures
+        -- and the post-fight line (#78 F4).
+        if arg1 == ADDON then
+            local fn = tostring(arg2)
+            GRF.blocked[fn] = (GRF.blocked[fn] or 0) + 1
+            GRF.blockedTotal = GRF.blockedTotal + 1
+            API.Fail((event == "ADDON_ACTION_FORBIDDEN" and "forbidden " or "blocked ") .. fn,
+                InCombatLockdown() and "refused by the client in combat" or "refused by the client")
+        end
     end
 end)
-API.RegisterEvents(boot, { "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" })
+API.RegisterEvents(boot, { "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+                           "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" })
 
 GRF._test = { runPending = runPending, pending = function() return pending, order end }

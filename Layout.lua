@@ -554,13 +554,15 @@ end
 -- With save = nil, it re-places from the role's own saves: that's what
 -- every other caller means by "put it where it belongs".
 function Layout.SetPosition(x, y, save)
-    if not L.grid or InCombatLockdown() then return false end
-    Layout.EndPreview()   -- a drag moves the real grid
+    if not L.grid then return false end
+    Layout.EndPreview()   -- a drag moves the real grid (insecure frames: fine in combat)
     if save == nil then
+        if InCombatLockdown() then return false end
         L.live = nil
         place()
         return true
     end
+    if not L.state then return false end
     local cx, cy = centreFor(L.state.ax, L.state.ay)
     local ax, ay = L.state.ax + (x - cx), L.state.ay + (y - cy)
     if save then
@@ -572,6 +574,13 @@ function Layout.SetPosition(x, y, save)
         end
     else
         L.live = { ax, ay }
+    end
+    -- The save above is plain Lua, so a drag that combat interrupts keeps its
+    -- spot: the lockdown is already on inside PLAYER_REGEN_DISABLED (#78 F2).
+    -- The grid is placed from the save, and announced, once combat ends.
+    if InCombatLockdown() then
+        if save then GRF.WhenOutOfCombat("layout", Layout.Refresh, false) end
+        return false
     end
     place()
     if save and GRF.Announce then GRF.Announce() end
@@ -689,7 +698,8 @@ function Layout.Preview(n)
 end
 
 -- Back to the real grid, which never moved: its state is announced again.
--- Safe as combat starts (PLAYER_REGEN_DISABLED comes before the lockdown).
+-- Safe as combat starts: the mocks are insecure and SetAlpha isn't protected,
+-- so the lockdown (already on inside PLAYER_REGEN_DISABLED) doesn't matter.
 -- The mocks gone and the real grid shown, without announcing.
 function Layout.ClearPreview()
     if not L.preview then return false end
@@ -764,8 +774,9 @@ login:SetScript("OnEvent", function(_, event)
 end)
 API.RegisterEvents(login, { "PLAYER_LOGIN", "LOADING_SCREEN_ENABLED", "LOADING_SCREEN_DISABLED" })
 
--- Combat: the preview ends before the lockdown, and a capture waiting for a
--- refresh is stale by the time it runs.
+-- Combat (the lockdown is already on here; nothing below is protected): the
+-- preview ends, and a capture waiting for a refresh is stale by the time it
+-- runs.
 local combat = CreateFrame("Frame")
 combat:SetScript("OnEvent", function()
     L.from = nil

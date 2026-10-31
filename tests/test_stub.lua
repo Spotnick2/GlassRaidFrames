@@ -131,7 +131,15 @@ WoW.secureCode = true
 first, sur = UnitName("party1")
 WoW.secureCode = false
 eq(first .. "|" .. sur, "Karuzo|Elegia", "the client's own code reads the plain parts")
-check(issecretvalue(GetUnitName("party1")), "GetUnitName: the full name, secret whole")
+-- Blizzard's GetUnitName (Lua on Forever) throws on a secret surname, as in
+-- the client; a secret first name alone passes through.
+local okG, got = pcall(GetUnitName, "party1")
+check(not okG and tostring(got):find("secret"), "GetUnitName throws on a secret surname (the concatenation)")
+okG, got = pcall(GetUnitName, "party2")
+check(okG and issecretvalue(got), "and returns the secret first name when there is no surname")
+WoW.secretFields.isUnit = true
+check(issecretvalue(UnitIsUnit("party1", "target")), "UnitIsUnit can come back secret")
+WoW.secretFields.isUnit = nil
 WoW.secretFields.name = nil
 eq(GetUnitName("party1"), "Karuzo Elegia", "plain: first and surname joined")
 eq(GetUnitName("party2"), "Kaleid", "plain, no surname")

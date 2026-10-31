@@ -487,7 +487,7 @@ function Methods.GetText(fs) return fs._text end
 function Methods.SetFormattedText(fs, fmt, ...)
     local n = select("#", ...)
     for i = 1, n do
-        if secrets[(select(i, ...))] then fs._text = { secretFormat = fmt, n = n }; return end
+        if secrets[(select(i, ...))] then fs._text = { secretFormat = fmt, n = n, args = { ... } }; return end
     end
     fs._text = string.format(fmt, ...)
 end
@@ -776,10 +776,15 @@ function UnitName(u)
     end
     return first, sur
 end
--- The full name, secret whole when the field is. (Blizzard's GetUnitName is
--- Lua on Forever, Camelot NameUtil.lua:4-12, and throws on a secret surname;
--- the addon stops calling it in #78's fix, which makes this mirror it.)
-function GetUnitName(u) return unitField(u, "name") end
+-- Blizzard's GetUnitName is Lua on Forever (Camelot NameUtil.lua:4-12): it
+-- truth-tests and concatenates UnitName's returns, so a secret surname throws
+-- here as in the client (Lua can't make the truth test throw; the
+-- concatenation does). The addon builds the name itself (Frames.FullName).
+function GetUnitName(u)
+    local name, surname = UnitName(u)
+    if surname then return name .. " " .. surname end
+    return name
+end
 function UnitClass(u) return unitField(u, "name"), unitField(u, "class"), 1 end
 function UnitIsPlayer(u) return unitField(u, "player") end
 function UnitReaction(u) return unitField(u, "reaction") end
@@ -835,8 +840,11 @@ C_PetInfo = { GetPetHappiness = function()
     return WoW.petHappiness, 0, 0
 end }
 function HasPetUI() return WoW.units.pet ~= nil, WoW.hunterPet == true end
+-- SecretWhenUnitComparisonRestricted in the docs: secret with
+-- WoW.secretFields.isUnit (for an existing unit, to insecure code).
 function UnitIsUnit(a, b)
     local ua, ub = WoW.units[a], WoW.units[b]
+    if ua ~= nil and WoW.secretFields.isUnit and not WoW.secureCode then return WoW.Secret(a .. "=" .. b) end
     return ua ~= nil and ua == ub
 end
 -- Retail's Settings framework (names from the dump's _G walk; signatures as

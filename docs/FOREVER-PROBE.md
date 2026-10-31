@@ -641,4 +641,43 @@ Glass Unit Frames loaded and following. Every answer was yes, and every check pa
 - **The glide:** the owner judged the cells' glide to the side and back as smooth as Glass Unit
   Frames' zoom.
 - **Combat starting ended the preview** at once, before the lockdown. Nothing was blocked, and
-  nothing was announced in combat.
+  nothing was announced in combat. (The preview's end touches only insecure frames and alpha,
+  so this says nothing about whether the lockdown was already on: item 18.1.)
+
+### 18. The taint and combat-lockdown audit (#78): what the fixes rest on
+
+The audit (reviewed to consensus with Codex, 2026-10-30; the beta was closed) changed code and
+the test harness on assumptions this checklist measures. Guided procedures in RaidProbe,
+`/fp steps raid <name>`, from 2026-11-04. Each names the fix it decides.
+
+- [ ] **18.1 The lockdown's order.** Is `InCombatLockdown()` already true inside a
+      `PLAYER_REGEN_DISABLED` handler (Retail's order, assumed by the harness's `enterCombat`
+      and by the position setters, F2)? Does `PLAYER_REGEN_ENABLED` ever arrive with it still
+      true (the queue's retry, F3)? Log both at every fight of a session.
+- [ ] **18.2 Protection by parent.** `IsProtected()` of a tile's `body` with indicators attached
+      (does an `AuraContainer` child protect its parent?), of the party-pet holder, the layout
+      box (`GlassRaidFramesLayoutBox`) and the key owner. Decides whether the glide may ever
+      run into a lockdown.
+- [ ] **18.3 Identity secrecy at 40, in combat.** Each `UnitName` return separately (player, a
+      member, the target), `GetUnitName`, `UnitClass`, `UnitGUID`, roles, leader, `UnitIsUnit`,
+      `UnitExists`, `IsInRaid` (item 5 was a raid of 2). The first return handed raw to
+      `SetText` renders, and both returns through `SetFormattedText("%s%s%s", first, sep,
+      surname)` render joined (`/grf names full` in combat); a tile whose token moves to
+      another person replaces the old name (F1).
+      Also the value of `Constants.CharacterNameSeparatorConsts.CHARACTERNAME_SURNAME_SEPARATOR`
+      (the fix falls back to a space).
+- [ ] **18.4 A raid night.** `/grf failures` afterwards (the blocked-action record, F4), fps with
+      roster churn, and a dev counter of `childUnitChanged` calls per `GROUP_ROSTER_UPDATE` and
+      the cost of `UpdateAllAuras` on a same-token reflow (F6/F7, deferred until this).
+- [ ] **18.5 Hide while hovered.** Does `OnLeave` fire when a hovered tile hides? The rim and
+      the tooltip after a hovered tile hides, and after an unrelated tile hides while another
+      frame owns the tooltip (F5).
+- [ ] **18.6 Interrupted drags**, all three blocks (the layout grid, the legacy grid, the legacy
+      pets): the saved coordinates, the placement and the announcement after combat (F2).
+- [ ] **18.7 A stationary cursor.** Change the role, a key row or the Anywhere mode, let it apply
+      after a fight, and reflow or hide/show tiles under a cursor that does not move; record the
+      bindings and the `OnEnter`/`OnLeave` `motion` argument (the accepted gap).
+- [ ] **18.8 Harness assumptions.** `RegisterForDrag` and `SetMovable` on a protected frame in
+      combat (not flagged protected in the 70532 docs), and an insecure `SetOverrideBindingClick`
+      / `ClearOverrideBindings` in combat on a protected and on a plain owner: the effect and
+      the blocked-action event, since the client can refuse silently.

@@ -48,6 +48,14 @@
 -- - Everything protected happens out of combat, through the addon's one combat
 --   queue, in ONE reconciliation that only changes what differs, so our own
 --   binding changes (UPDATE_BINDINGS) can't loop.
+-- - ONE CLICK-CASTER AT A TIME (#78 F8): Clique replaces the ClickCastFrames
+--   global and migrates it with pairs(), which can't see our entries behind
+--   __index; both would wrap Blizzard's frames and clear each other's
+--   frame-owned bindings. Not supported, by design: the owner runs one.
+-- - A key-list change out of combat (a role applied after a fight, a row
+--   edited) clears every hovered frame's bindings and waits for the next
+--   OnEnter: a cursor that sits still on a tile has no hover keys until it
+--   moves off and back (frames-only mode; probe item 18.7). Accepted.
 
 GlassRaidFrames = GlassRaidFrames or {}
 local GRF = GlassRaidFrames

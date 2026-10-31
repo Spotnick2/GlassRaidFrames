@@ -49,8 +49,11 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - `UnitButtonClicks`;
   - `HealthPercent` via a 0..100 curve;
   - `ClassColor`, `LoadBlizzardAddOn`;
-  - `Fail(key, err)`, the **one** failure recorder (`GlassRaidFrames.paintFailures`, read by
-    `/grf failures`);
+  - `Fail(key, err)`, the **one** failure recorder: the first message per key
+    (`GlassRaidFrames.paintFailures`), a count and the latest (`failureDetail`), and
+    `GRF.blocked`, the protected calls the client refused and blamed on us
+    (`ADDON_ACTION_BLOCKED`/`FORBIDDEN`, by function); all read by `/grf failures`, and one chat
+    line after a fight sums up what it cost (#78 F4);
   - `MEASURED_ON_BUILD`.
 
   It is a subset of GlassUnitFrames' `Compat.lua`; lift more from there when needed rather than
@@ -278,7 +281,13 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     `Apply`, so a role change in combat shows the new role's rows plus "pending" at once.
     `ClickCast.onApplied` lets the page repaint after a queued apply. **Known limit:** with a
     bar addon that binds through overrides (Bartender, ElvUI), the fallback clicks Blizzard's
-    button for the key's base binding, not the addon's.
+    button for the key's base binding, not the addon's. **One click-caster at a time** (#78
+    F8): Clique replaces the `ClickCastFrames` global and migrates it with `pairs`, which can't
+    see our entries behind `__index`; both would wrap Blizzard's frames and clear each other's
+    frame-owned bindings. Not supported, by design. **Accepted gap:** a key-list change out of
+    combat (a role applied after a fight, a row edited) in frames-only mode clears every
+    hovered frame's bindings and waits for the next `OnEnter`; a cursor that sits still on a
+    tile has no hover keys until it moves off and back (probe item 18.7).
   - Warnings (`ClickCast.Warnings`): a mouse row on the SELFCAST modifier (clicks self-cast,
     keys don't, measured), a row replacing the plain target/menu click, an unknown spell, a
     macro too long, a key bound to a non-action command.
@@ -329,14 +338,21 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
     `SetAlphaFromBoolean`.
 - **The name is centred in the tile** (both ways) and shows the **first name** by default
   (`Frames.ShortName`), as Cell does: Forever's surnames only got a centred name cut short. A
-  secret name (grouped) can't be split in Lua, so it goes to `SetText` whole. Dead/Offline is
-  small in the top-right corner.
+  secret name (grouped) can't be split or joined in Lua: it goes to the client as it comes
+  (`Frames.SetName`, below). Dead/Offline is small in the top-right corner.
   - **Name display** (#18), account-wide: `db.nameStyle` `initial` ("Karuzo M.", a UTF-8
     initial kept whole) or `full`; `first` is the default and isn't saved.
   - **Nicknames** by GUID (`db.nicknames[guid] = {nick, name}`; `name` is only for the list).
     They win over every style, a secret name included, through the tile's plain `b.guid`
     (GUIDs are plain in combat, probe item 5). A secret GUID shows the name.
-  - `Frames.NameFor(u, guid)` is the one place that decides. Settings repaint the `name`
+  - `Frames.NameFor(u, guid)` is the one place that decides, from `Frames.FullName(u)`: the
+    name is built from `UnitName`'s two returns (first name, surname), **never `GetUnitName`**,
+    which is Lua on Forever (`NameUtil.FormatUnitNameForDisplay`) and throws on a secret
+    surname (#78 F1). Either part secret, the two returns come back as they are: the `first`
+    style shows the first return, and `initial` and `full` show both through
+    `FontString:SetFormattedText("%s%s%s", first, sep, surname)` (`Frames.SetName`; the 70532
+    docs allow secret text there when tainted), so a tile never drops a surname (Codex on
+    #80). A failed read gives nil, which clears a stale name. Settings repaint the `name`
     channel (plain Lua: fine in combat). `/grf names`, `/grf nick`, and the main page's Names
     section, last on the page because the nickname list grows downwards.
 - **Pets** (#13): a `SecureGroupPetHeaderTemplate` (`Header.petHeader`, **measured working in
@@ -448,7 +464,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - bootstrap and `GlassRaidFramesDB`;
   - **the addon's one combat queue**, `GlassRaidFrames.WhenOutOfCombat(key, fn, message)`,
     which is ordered and runs the build first; `message = false` makes it silent. Don't add a
-    second one;
+    second one. It drains on `PLAYER_REGEN_ENABLED`, with one retry should the lockdown outlive
+    the event (#78 F3), then says in one line what the fight cost (refused calls, failures);
+  - the `ADDON_ACTION_BLOCKED` / `FORBIDDEN` record, ours only (#78 F4);
   - the `/grf` command;
   - the login warning (dev copies only) when the build differs from `MEASURED_ON_BUILD`.
 - **`Media/dispel.ogg`**: the dispel alert, generated by `Tools/make_sound.py`. Never
@@ -691,8 +709,12 @@ not port cleanly.
   parents secure buttons is protected: hiding, moving, re-anchoring or unclamping it in combat
   is silently refused, with `ADDON_ACTION_BLOCKED` blamed on someone else's taint. Parking it
   off screen at alpha 0 doesn't work either. Record the request and apply it on
-  `PLAYER_REGEN_ENABLED`. A mid-combat roster change can point a `party2`/`raid3` token at a
-  different player; nothing fixes that until combat ends.
+  `PLAYER_REGEN_ENABLED`. **Assume the lockdown is already on inside `PLAYER_REGEN_DISABLED`**
+  (Retail's order; probe item 18.1 measures it here): a handler there may save and touch
+  insecure frames, never a protected one. The position setters save first (plain Lua) and
+  place when allowed, so a drag that combat interrupts keeps its spot (#78 F2). A mid-combat
+  roster change can point a `party2`/`raid3` token at a different player; nothing fixes that
+  until combat ends.
 - **Click edges depend on the template.** For `SecureActionButtonTemplate` (spell buttons),
   register **both** mouse edges: its handler acts on exactly one, according to
   `ActionButtonUseKeyDown` (measured in Priestly). For **`SecureUnitButtonTemplate`** (our unit

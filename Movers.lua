@@ -112,8 +112,9 @@ function Movers.Lock()
         if m.dragging then
             m:StopMovingOrSizing()
             m.dragging = false
-            -- The block already followed the drag: keep and save where it is.
-            -- (Combat locks on PLAYER_REGEN_DISABLED, before lockdown applies.)
+            -- The block already followed the drag: save where it is. The
+            -- lockdown is already on inside PLAYER_REGEN_DISABLED, so the
+            -- setter saves now and places it after combat (#78 F2).
             follow(m, true)
             reattach(m)
         end

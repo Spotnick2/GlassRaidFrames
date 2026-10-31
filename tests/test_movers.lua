@@ -46,19 +46,26 @@ local announced = {}
 rawset(_G, "EventRegistry", { TriggerEvent = function(_, event, ...) announced[#announced + 1] = { event, ... } end })
 UIParent._width, UIParent._height = 1024, 768
 
--- Combat starting mid-drag keeps and SAVES the spot the grid followed to
--- (PLAYER_REGEN_DISABLED fires before lockdown; code review).
+-- Combat starting mid-drag: the lockdown is already on inside
+-- PLAYER_REGEN_DISABLED, so the grid can't be placed, but the spot it followed
+-- to is SAVED (plain Lua), nothing protected is touched, and it is placed and
+-- announced when combat ends (#78 F2).
 M.Unlock()
 mv._scripts.OnDragStart(mv)
 mv._center = { 312, 184 }
 mv._scripts.OnUpdate(mv)
-WoW.fire("PLAYER_REGEN_DISABLED")
-WoW.combat = true
+WoW.blocked = {}
+WoW.enterCombat()
 check(not M.IsUnlocked(), "combat mid-drag locks")
 eq(GRF.Profile().pos.x, -200, "the dragged-to position is saved (x)")
 eq(GRF.Profile().pos.y, -200, "(y)")
-check(#announced > 0 and announced[#announced][1] == GRF.LAYOUT_EVENT, "and announces it (code review)")
-WoW.combat = false
+eq(#WoW.blocked, 0, "without touching the protected container")
+local before = #announced
+WoW.leaveCombat()
+p = c._points[#c._points]
+eq(p[4], -200, "after combat the grid is placed at the saved spot (x)")
+eq(p[5], -200, "(y)")
+check(#announced > before and announced[#announced][1] == GRF.LAYOUT_EVENT, "and announced then")
 eq(mv._width, select(1, H.Size()), "the mover has an explicit size")
 check(WoW.methodsCalled["Frame:SetDontSavePosition"], "the client doesn't save the mover's position")
 
