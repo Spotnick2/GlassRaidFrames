@@ -770,16 +770,25 @@ eq(live .. "/" .. n, "1/1", "a binding that clicks our key button is live")
 check(consoleHas("stillcursor: test: live bindings 1 of 1"), "logged")
 check(not AU.stillSetup(), "keys anywhere: the setup refuses")
 anywhere = false
-rows[2] = { key = "CTRL-F10", spell = 2061 }
+rows[2] = { key = "CTRL-F10", spell = 2061, raidProbe = true }   -- an abandoned run's
+rows[3] = { key = "CTRL-F10", spell = 139 }                      -- the owner's own (Codex on #81)
 check(AU.stillSetup(), "frames only with a spell key row: set up")
-eq(#rows, 1, "a leftover probe row is removed first")
+eq(#rows, 2, "the leftover probe row is removed first")
+eq(rows[2].key .. "/" .. rows[2].spell, "CTRL-F10/139", "the owner's CTRL-F10 row survives")
+rows[3] = { key = "CTRL-F9", spell = 139 }
+rows[4] = { key = "CTRL-F8", spell = 139 }
+check(not AU.stillSetup(), "every probe key bound by the owner: the setup refuses")
+eq(#rows, 4, "and removes nothing")
+rows[3], rows[4] = nil, nil
+check(AU.stillSetup(), "CTRL-F10 taken: set up on the next key")
 local okW, whyW = AU.hoveredWithKeys()
 check(not okW, "no tile under the cursor: waiting (" .. tostring(whyW) .. ")")
 cell._scripts.OnEnter(cell, true)
 check(AU.hoveredWithKeys(), "hovered with a live key: completes")
 check(not AU.keysChange(), "the change: one row more, read on the next poll")
-eq(#rows, 2, "the probe row is saved")
-eq(rows[2].key .. "/" .. rows[2].spell, "CTRL-F10/2061", "under the probe key, with the model's spell")
+eq(#rows, 3, "the probe row is saved")
+eq(rows[3].key .. "/" .. rows[3].spell .. "/" .. tostring(rows[3].raidProbe), "CTRL-F9/2061/true",
+    "under the free probe key, with the model's spell, flagged as the probe's")
 check(AU.keysChange(), "the next poll reads the keys and completes")
 check(consoleHas("after one key row more, the cursor still: live bindings 1 of 1"), "the keys after the change are logged")
 local okE, whyE = AU.reEntered()
@@ -787,7 +796,9 @@ check(not okE and whyE == "move off the tile and back on", "not re-entered yet")
 cell._scripts.OnLeave(cell, true); cell._scripts.OnEnter(cell, true)
 check(AU.reEntered(), "re-entered with the key live: completes")
 check(AU.restoreRows(), "the probe row goes")
-eq(#rows, 1, "the saved rows are as before")
+eq(#rows, 2, "the saved rows are as before")
+eq(rows[2].key .. "/" .. rows[2].spell, "CTRL-F10/139", "the owner's row still there")
+rows[2] = nil
 check(not AU.reflowed(), "no roster change yet")
 AU.reflowEv._scripts.OnEvent(AU.reflowEv, "GROUP_ROSTER_UPDATE")
 check(not AU.reflowed(), "a roster change: seen, read on the next poll")

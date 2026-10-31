@@ -433,14 +433,16 @@ Probe:Steps("dragcombatlegacy", {
 -- 18.7 A cursor that doesn't move while the keys change (the accepted gap):
 -- a key-list change clears the hovered frame's bindings and waits for the
 -- next OnEnter, whose secure pre-snippet needs `motion`. The change is one
--- key row more for this very role (PROBE_KEY, bound to the spell of an
--- existing key row), so the role, the mode (frames only) and the key
--- pressed stay the same; a role switch changed the mode and the bindings
--- with it (Codex on #81). The hover steps complete by themselves (`wait`)
--- while the cursor rests on a tile: no click moves it off.
+-- key row more for this very role (a free key of PROBE_KEYS, bound to the
+-- spell of an existing key row and flagged as the probe's, so only that
+-- row is ever removed: a key the owner bound stays), so the role, the mode
+-- (frames only) and the key pressed stay the same; a role switch changed
+-- the mode and the bindings with it (Codex on #81). The hover steps
+-- complete by themselves (`wait`) while the cursor rests on a tile: no
+-- click moves it off.
 --------------------------------------------------------------------------------
 
-local PROBE_KEY = "CTRL-F10"
+local PROBE_KEYS = { "CTRL-F10", "CTRL-F9", "CTRL-F8" }
 
 -- The live keys: those whose binding, overrides included, clicks one of our
 -- hidden key buttons, as the tile's SetBindingClick sets it. The count, the
@@ -467,32 +469,46 @@ local function liveKeys(label)
     return live, n
 end
 
-local function removeProbeRow(CC)
-    for _, row in ipairs(CC.Rows()) do
-        if row.key == PROBE_KEY then CC.Remove(row); return true end
+-- The probe's own rows (flagged raidProbe), left by an abandoned run, go;
+-- never a row the owner bound (Codex on #81).
+local function removeProbeRows(CC)
+    local n = 0
+    for i = #CC.Rows(), 1, -1 do
+        local row = CC.Rows()[i]
+        if row.raidProbe then CC.Remove(row); n = n + 1 end
     end
-    return false
+    return n
 end
 
--- Frames-only mode, a spell key row to copy, and no probe row left over
--- from an abandoned run.
+-- A key of PROBE_KEYS with no row for this role, or nil.
+local function freeProbeKey(CC)
+    local taken = {}
+    for _, row in ipairs(CC.Rows()) do if row.key then taken[row.key] = true end end
+    for _, key in ipairs(PROBE_KEYS) do if not taken[key] then return key end end
+end
+
+-- Frames-only mode, a spell key row to copy, a free probe key, and no probe
+-- row left over from an abandoned run.
 local function stillSetup()
     if not hoverHooks() then return false end
     local G = addon()
     local CC = G.ClickCast
     if not (CC and CC.Rows and CC.Set and CC.Remove and CC.Anywhere) then return false, "no click-cast module" end
     if CC.Anywhere() then return false, "this role (" .. show(G.role) .. ") binds its keys anywhere: /grf keys frames first" end
-    if removeProbeRow(CC) then say("stillcursor: a leftover " .. PROBE_KEY .. " row removed") end
+    local gone = removeProbeRows(CC)
+    if gone > 0 then say("stillcursor: " .. gone .. " leftover probe row(s) removed") end
     local model
     for _, row in ipairs(CC.Rows()) do
         if row.key and row.spell and not row.action then model = row; break end
     end
     if not model then return false, "no spell key row for " .. show(G.role) .. ": bind a hover key to a spell first" end
-    A.still = { model = model, rostersAt = A.rosters or 0 }
+    local key = freeProbeKey(CC)
+    if not key then return false, table.concat(PROBE_KEYS, ", ") .. " are all bound for " .. show(G.role) .. ": free one first" end
+    A.still = { model = model, key = key, rostersAt = A.rosters or 0 }
     local _, n = liveKeys("start, the cursor off the tiles")
     say(string.format("stillcursor: role %s, frames only; the change adds %s with the spell of %s (%s)",
-        show(G.role), PROBE_KEY, show(model.key), show(model.spell)))
-    return n > 0, "key buttons=" .. n, "model key=" .. show(model.key)
+        show(G.role), key, show(model.key), show(model.spell)))
+    return n > 0, "key buttons=" .. n, "model key=" .. show(model.key), "probe key=" .. key
 end
 
 -- The cursor rests on a tile and the hover bound the keys.
@@ -512,7 +528,8 @@ local function keysChange()
     if not (S and S.model and G and G.ClickCast) then return false, "run the first step" end
     if not S.row then
         S.before = liveKeys("before the change, the cursor still")
-        S.row = G.ClickCast.Set(PROBE_KEY, false, S.model.spell, S.model.pinned)
+        S.row = G.ClickCast.Set(S.key, false, S.model.spell, S.model.pinned)
+        S.row.raidProbe = true   -- the saved row is ours: the one removeProbeRows may take
         S.entersAt = h.enters or 0
         return false, "one key row more; reading the keys on the next poll"
     end
@@ -536,7 +553,7 @@ local function restoreRows()
     if S.row then G.ClickCast.Remove(S.row); S.row = nil end
     S.rostersAt, S.reflowSeen = A.rosters or 0, nil
     local live, n = liveKeys("after the probe row's removal")
-    return true, PROBE_KEY .. " removed", "live=" .. live .. " of " .. n
+    return true, show(S.key) .. " removed", "live=" .. live .. " of " .. n
 end
 
 -- A roster change under the resting cursor: the keys read on the poll
@@ -558,7 +575,7 @@ Probe:Steps("stillcursor", {
       auto = true, run = stillSetup },
     { text = "Hover a member's tile and hold still: this step completes by itself once the keys are bound under the cursor.",
       wait = hoveredWithKeys, timeout = 60 },
-    { text = "Keep still. One key row (" .. PROBE_KEY .. ") is added for this role, so the keys are re-applied under the cursor; "
+    { text = "Keep still. One key row (a free Ctrl-F key) is added for this role, so the keys are re-applied under the cursor; "
         .. "completes by itself.", wait = keysChange, timeout = 30 },
     { text = "Still holding still over the tile: press your hover key once. Did it cast on the member?", ask = true },
     { text = "Move the cursor off the tile and back on, and hold still: completes by itself once the keys are bound again.",
