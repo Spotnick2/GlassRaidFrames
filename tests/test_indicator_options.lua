@@ -163,8 +163,7 @@ WoW.flushTimers()
 eq(find("received").size, 20, "saved at once in combat")
 check(ui.status._text:find("combat ends"), "the page says it waits for combat")
 eq(#WoW.blocked, 0, "nothing touched in combat")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(ui.status._text, "", "repainted when it lands")
 eq(slots(p1, "received").s1.frame._width, 20, "and the tiles follow")
 
@@ -274,8 +273,7 @@ GRF.Settings.EditIndicator(deb, "anchor", "BOTTOMLEFT")
 WoW.combat = true
 SlashCmdList.GLASSRAIDFRAMES("ind received off")
 check(ui.rows[2].text._text and ui.status._text:find("combat ends"), "the open page shows it pending")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 SlashCmdList.GLASSRAIDFRAMES("ind received on")
 
 -- Reset while renaming drops the draft, on the first row and on another

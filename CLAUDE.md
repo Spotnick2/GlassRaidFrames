@@ -724,9 +724,25 @@ not port cleanly.
 The `tests\` harness is modelled on Priestly's: plain Lua 5.1 scripts with no dependencies, a
 `tests\wow_stubs.lua` API mock driven through an exported `WoW` table, `tests\harness.lua`
 (`check` / `eq` / `loadAddon` / `standardUnits`), and `tests\run.ps1` to run them all. The stub
-does four more things:
+does more than mock:
 - It validates event names against the API dump when the dump is present.
-- It records any touch of a protected frame in combat in `WoW.blocked`.
+- It records any **insecure** touch of a protected frame in combat in `WoW.blocked`: the methods
+  in `WoW.PROTECTED_METHODS`, taken from the 70532 API docs' `IsProtectedFunction` flags
+  (`test_protected.lua` checks the list against the `wow-ui-source` clone), plus `SetAttribute`
+  (not flagged, measured to do nothing in combat). The state-driver, unit-watch and
+  override-binding APIs are refused to insecure code in combat too, whatever the target frame;
+  the SecureHandler API errors in combat for anyone, as the client's does.
+- Every handler the addon sets or hooks runs with `WoW.secureCode` off, whoever fired it: the
+  client's header code setting a child's unit fires our `OnAttributeChanged` hook as insecure
+  code, so a protected touch there shows in `WoW.blocked` under the client-header tests too.
+  Only Blizzard's own header code runs secure, and it reads plain values where the addon gets
+  secrets (`WoW.secretFields`).
+- `WoW.enterCombat()` / `WoW.leaveCombat()` fire the regen events in the client's order: the
+  lockdown is already **on** inside `PLAYER_REGEN_DISABLED` (Retail's order; `FOREVER-PROBE.md`
+  item 18.1 measures it on Forever) and off inside `PLAYER_REGEN_ENABLED`. Don't fire those
+  events by hand with the flag the other way.
+- `UnitName` returns the first name and the surname (the unit field `name` holds
+  "First Surname"); `GetUnitName` returns the whole.
 - It models `FontString:SetFormattedText` taking secrets without formatting them in Lua.
 - It records every widget method called. `test_methods.lua` checks each one exists in the dump,
   closing the gap where a catch-all stub silently swallows a method Forever lacks.
@@ -736,6 +752,10 @@ does four more things:
   `SecureGroupHeaders.lua`** (`test_layout_client.lua`, from `$env:WOW_UI_SOURCE` or
   `..\wow-ui-source`; CI has none and skips it with `WOW_UI_SOURCE_OPTIONAL=1`, so run the tests
   locally before a layout PR).
+- `test_taint.lua` loads every addon file under an environment that records global writes: only
+  our own globals may be written, `SlashCmdList` by field (the porting guide's "Never reassign a
+  Blizzard global"). `test_stub.lua` checks the stub's own model; a model change goes with a
+  check there.
 
 `GlassRaidFrames.paintFailures` collects the errors that painters swallow, so a
 secrets test should assert it stays empty. Before trusting a new test, **mutation-test it**:

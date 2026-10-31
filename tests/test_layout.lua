@@ -147,8 +147,7 @@ GRF.Settings.SetSize(nil, nil)
 -- In combat nothing of ours moves or is set; after it, once.
 raid(6)
 roster()
-WoW.combat = true
-WoW.fire("PLAYER_REGEN_DISABLED")
+WoW.enterCombat()
 announced = {}
 local before = { L.grid:GetPoint(1) }
 WoW.raid = nil
@@ -160,8 +159,7 @@ eq(#announced, 0, "nothing announced in combat")
 eq(select(4, L.grid:GetPoint(1)), before[4], "the grid didn't move")
 GRF.Announce()
 eq(#announced, 0, "an announcement in combat waits too")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(L.set, Lay.ROW, "after combat: the row")
 check(#announced >= 1, "and announced")
 eq(last()[1], GRF.LAYOUT_EVENT, "the complete state")
@@ -266,15 +264,14 @@ eq(Lay.Previewing(), nil, "a roster change ends the preview")
 eq(L.grid._alpha, 1, "the real grid is back")
 check(not M[1]:IsVisible() and not MP[1]:IsVisible(), "the mocks are hidden")
 check(near(GRF.LayoutState().w, 3 * 96 + 2 * 6), "the real party announced again: " .. GRF.LayoutState().w)
--- Combat ends it, before the lockdown.
+-- Combat ends it (the lockdown is already on: SetAlpha isn't protected).
 GRF.Settings.Preview(20)
-WoW.fire("PLAYER_REGEN_DISABLED")
+WoW.enterCombat()
 eq(Lay.Previewing(), nil, "combat starting ends the preview")
 eq(L.grid._alpha, 1, "and shows the real grid")
-WoW.combat = true
 local okP, whyP = GRF.Settings.Preview(10)
 check(not okP and whyP:find("combat"), "no preview in combat")
-WoW.combat = false
+WoW.leaveCombat()
 check(not GRF.Settings.Preview(30), "only 10, 20 or 40")
 SlashCmdList.GLASSRAIDFRAMES("preview 10")
 check(chatHas("preview: a raid of 10"), "/grf preview 10")
@@ -324,15 +321,18 @@ check(not Lay._test.glider._shown, "and the glide stops")
 rect(c1.body, 500, 300, 96, 60)
 WoW.fire("GROUP_ROSTER_UPDATE")
 check(L.from and L.from[c1] and near(L.from[c1][1], 452), "a roster change captures where the visuals were")
-WoW.fire("PLAYER_REGEN_DISABLED")
+WoW.enterCombat()
 eq(L.from, nil, "combat drops a capture waiting for its refresh")
+WoW.leaveCombat()
 -- Combat starting halfway through a glide snaps it (Codex P2 on #74).
 Lay._test.glideFrom({ [c1] = { 452 - 40, 270 } })
 WoW.tick(0.15)
 check(Lay._test.gliding()[c1], "halfway through a glide")
-WoW.fire("PLAYER_REGEN_DISABLED")
+WoW.enterCombat()
 check(not Lay._test.gliding()[c1] and not Lay._test.glider._shown, "combat starting stops it")
-eq(c1.body:GetPoint(1), "ALL", "with the body on its tile")
+eq(c1.body:GetPoint(1), "ALL", "with the body on its tile (an insecure child: fine under the lockdown)")
+eq(#WoW.blocked, 0, "nothing protected touched as combat starts")
+WoW.leaveCombat()
 WoW.flushTimers()
 check(L.placed, "the first placement is behind us")
 -- Apply glides from what was captured; the session's first placement snaps.

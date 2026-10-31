@@ -41,7 +41,7 @@ eq(pt2[1] .. " " .. pt2[4] .. " " .. pt2[5], "TOPRIGHT -17 -3", "Shield next to 
 check(pt1[2] == p1.body, "placed on the tile's body, never on the container")
 eq(s1.frame._width, 12, "icons sized from the setup")
 check(s1.frame.grf and s1.frame.grf.cd and s1.frame._cooldown == s1.frame.grf.cd, "the swipe is the client's")
-eq(s1.frame._mouse, nil, "aura buttons take no scripts")
+eq(s1.frame._mouse, false, "aura buttons don't take the mouse")
 
 -- Received: one spot, the first spell present wins (stacked levels).
 local rec = entries(p1).received
@@ -75,7 +75,7 @@ eq(deb.c._modelUnit, "party1", "the row follows its tile")
 eq(heals.c._modelUnit, "party1", "my heals follow the tile")
 local first = deb.c._groups.grf_debuffs.frames[1]   -- built by AddAuraGroup, before e.ind exists
 check(first.grf and not first.grf.timer._shown, "debuff buttons show no timer text, the first batch included")
-eq(first._mouse, nil, "debuff buttons take no scripts")
+eq(first._mouse, false, "debuff buttons don't take the mouse")
 
 -- Pets: only the debuff row.
 local pet = H.petChildren[1]
@@ -140,8 +140,7 @@ eq(#WoW.blocked, 0, "nothing protected or locked touched in combat")
 check(Ind.Apply() == false, "a direct Apply in combat refuses")
 eq(entries(p1).received, nil, "(and changes nothing)")
 eq(#WoW.blocked, 0, "(nothing touched)")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 check(entries(p1).received, "applied when combat ends")
 
 -- A unit change in combat moves every indicator (tokens move between tiles).
@@ -152,8 +151,7 @@ WoW.fire("GROUP_ROSTER_UPDATE"); flush()
 local r7 = childFor("raid7")
 eq(entries(r7).myheals.c._modelUnit, "raid7", "my heals moved to the new unit in combat")
 eq(entries(r7).received.c._modelUnit, "raid7", "received too")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 
 -- One failing tile costs no other.
 local broken = H.children[2]

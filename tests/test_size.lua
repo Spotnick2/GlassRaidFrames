@@ -75,8 +75,7 @@ eq(child(1):GetWidth(), H.DEFAULT_W, "no resize in combat")
 eq(#WoW.blocked, 0, "and nothing protected touched")
 check(not H.ApplySize(), "a direct resize is refused in combat")
 eq(#WoW.blocked, 0, "without touching the protected tiles")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(child(1):GetWidth(), 70, "resized when combat ends")
 
 -- An unlocked mover follows the new grid size.
@@ -150,8 +149,7 @@ WoW.flushTimers()
 local spam = 0
 for _, line in ipairs(newChat()) do if line:find("combat ends") then spam = spam + 1 end end
 eq(spam, 0, "no chat line per slider tick in combat")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(child(1):GetWidth(), 100, "applied when combat ends")
 
 -- A role still on its side default is re-placed from the new grid size (the

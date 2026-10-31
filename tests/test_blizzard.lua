@@ -45,8 +45,7 @@ pf:SetParent(UIParent)
 WoW.combat = true
 for _ = 1, 3 do WoW.flushTimers() end
 eq(pf:GetParent(), UIParent, "a protected frame waits out combat")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(pf:GetParent(), hidden, "and is repaired when combat ends")
 
 -- A frame this client lacks is skipped, not an error.
@@ -74,8 +73,7 @@ eq(rawget(_G, "PartyFrame"):GetParent(), UIParent, "hideBlizzard off: nothing hi
 WoW.combat = true
 SlashCmdList.GLASSRAIDFRAMES("blizzard")
 SlashCmdList.GLASSRAIDFRAMES("blizzard")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(GRF.db.hideBlizzard, false, "the setting ends off")
 eq(rawget(_G, "PartyFrame"):GetParent(), UIParent, "and the queued hide did nothing")
 

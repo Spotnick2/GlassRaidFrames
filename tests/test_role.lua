@@ -144,8 +144,7 @@ eq(GRF.role, "CASTER", "the role changes in combat")
 x, y = at()
 eq(y, -84, "but the grid doesn't move in combat")
 eq(#WoW.blocked, 0, "and nothing protected was touched")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 x = at()
 eq(x, sx, "it moves when combat ends")
 
@@ -251,8 +250,7 @@ GRF.Settings.ResetPosition()             -- caster
 GRF.Settings.SetRole("healer")
 GRF.db.profiles.HEALER.pos = { x = 11, y = 11 }
 GRF.Settings.ResetPosition()             -- healer
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(GRF.db.profiles.CASTER.pos, nil, "the caster reset happened")
 eq(GRF.db.profiles.HEALER.pos, nil, "and the healer reset too")
 

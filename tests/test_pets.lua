@@ -109,8 +109,7 @@ WoW.SetUnit("raidpet3", { name = "Imp", class = "WARLOCK", health = 100, maxHeal
 WoW.combat = true
 WoW.layoutHeaders(); WoW.fire("GROUP_ROSTER_UPDATE"); WoW.flushTimers(); flush()
 eq(petAnchor()[4], 3 * (tw + H.GAP), "a roster change in combat: the pet column waits")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 eq(petAnchor()[4], 5 * (tw + H.GAP), "and moves after the fifth group when combat ends")
 
 -- Moved on their own: a saved spot wins over the dynamic column.
@@ -155,8 +154,7 @@ WoW.blocked = {}
 SlashCmdList.GLASSRAIDFRAMES("pets")
 check(pets._shown, "the pet row stays until combat ends")
 eq(#WoW.blocked, 0, "nothing protected touched")
-WoW.combat = false
-WoW.fire("PLAYER_REGEN_ENABLED")
+WoW.leaveCombat()
 check(not pets._shown, "hidden when combat ends")
 
 -- Solo: your pet follows "show solo" (no lone pet under an empty grid).
