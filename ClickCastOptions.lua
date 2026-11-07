@@ -875,9 +875,65 @@ function CCO.Open(parent)
     return root
 end
 function CCO.Toggle() if root and root:IsVisible() then CCO.RequestClose() else CCO.Open() end end
+
+-- The role notice (#84): the role changed by itself onto an empty binding
+-- list while the one we left has rows. Offers a one-time copy, the editor on
+-- the new role, or nothing. Insecure and outside the editor: fine in combat.
+local notice
+local function buildNotice()
+    notice = CreateFrame("Frame", "GlassRaidFramesRoleNotice", UIParent)
+    notice:Hide(); notice:SetFrameStrata("DIALOG"); notice:SetClampedToScreen(true); notice:EnableMouse(true)
+    notice:SetSize(460, 176); notice:SetPoint("TOP", UIParent, "TOP", 0, -140)
+    surface(notice, false)
+    notice.title = font(notice.glass.top, "", 15)
+    notice.title:SetPoint("TOPLEFT", notice, "TOPLEFT", 20, -18); notice.title:SetPoint("TOPRIGHT", notice, "TOPRIGHT", -20, -18)
+    notice.text = font(notice.glass.top, "", 12); notice.text:SetWordWrap(true); notice.text:SetJustifyV("TOP")
+    notice.text:SetPoint("TOPLEFT", notice, "TOPLEFT", 20, -44); notice.text:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", -20, 54)
+    -- Every role change dismisses the notice; a button still checks that its
+    -- role is the current one before acting.
+    local function pick(fn) return function()
+        notice:Hide()
+        if notice.to ~= GRF.role then return end
+        fn(notice.from, notice.to)
+    end end
+    notice.copy = button(notice, "", pick(function(from, to)
+        local n, why = GRF.Settings.CopyBindings(from, to)
+        API.Print(n and ("copied " .. n .. " click-cast bindings from " .. from:lower() .. " to " .. to:lower()) or why)
+    end))
+    notice.open = button(notice, "Open editor", pick(function(_, to)
+        CCO.Open()
+        if state and state.role ~= to then
+            guard(function() state = E.New(to); message = nil; ui.rankList:Hide(); refresh() end)
+        end
+    end))
+    notice.close = button(notice, "Not now", pick(function() end))
+    for i, b in ipairs({ notice.copy, notice.open, notice.close }) do
+        b:SetSize(132, 28); b:SetPoint("BOTTOMLEFT", notice, "BOTTOMLEFT", 20 + (i - 1) * 142, 18)
+    end
+end
+function CCO.DismissOffer() if notice then notice:Hide() end end
+function CCO.OfferCopy(from, to, count)
+    if not notice then buildNotice() end
+    notice.from, notice.to = from, to
+    local old, new = ROLE_NAMES[from] or from, ROLE_NAMES[to] or to
+    notice.title:SetText("Role: " .. new .. " (was " .. old .. ")")
+    local text = new .. " has no click-cast bindings yet. " .. old .. " has " .. count
+        .. ": copy them? Each role keeps its own list afterwards."
+    local anywhere = CC.Anywhere(to)
+    if anywhere ~= CC.Anywhere(from) then
+        text = text .. "\n\n" .. (anywhere
+            and (new .. " keys work anywhere under the cursor, not only on frames (/grf keys frames changes it).")
+            or (new .. " keys work on frames only (/grf keys anywhere changes it)."))
+    end
+    notice.text:SetText(text)
+    notice.copy.text:SetText("Copy " .. old .. "'s")
+    notice:Show()
+    return notice
+end
 CCO.MIN_WIDTH, CCO.MIN_HEIGHT = 900, 600
 CC.onApplied = function() externalWarnings = nil; if root and root:IsVisible() then refresh() end end
 CCO._test = { ui = ui, state = function() return state end, root = function() return root end,
+    notice = function() return notice end,
     material = material,
     keyboard = function() return keyboard end,
     recording = function() return recording end, armed = function() return armed end, shell = function() return shell end }

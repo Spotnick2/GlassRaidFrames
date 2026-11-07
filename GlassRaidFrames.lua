@@ -159,19 +159,48 @@ local function applyRole()
     reportSuite()   -- the layout's mode is per role
 end
 
+-- How many click-cast rows a role has, without creating its profile.
+local function bindingCount(role)
+    local prof = GRF.char and type(GRF.char.profiles) == "table" and GRF.char.profiles[role]
+    local rows = type(prof) == "table" and prof.bindings
+    return type(rows) == "table" and #rows or 0
+end
+
+-- A role that changed by itself (#84): bindings are per role, so landing on a
+-- role with none looks like they were lost. When the role we left has some,
+-- say so and offer to copy them (the notice; `/grf clickcast copy <role>`).
+-- Returns true when it spoke.
+local function offerCopy(from, to)
+    local count = bindingCount(from)
+    if count == 0 or bindingCount(to) > 0 then return false end
+    say("role: " .. to:lower() .. " (was " .. from:lower() .. "), which has no click-cast bindings; "
+        .. from:lower() .. " has " .. count .. ". /grf clickcast copy " .. from:lower() .. " copies them.")
+    if GRF.ClickCastOptions and GRF.ClickCastOptions.OfferCopy then
+        local ok, err = pcall(GRF.ClickCastOptions.OfferCopy, from, to, count)
+        if not ok then API.Fail("role notice", err) end
+    end
+    return true
+end
+
 -- Work out the role again (talents may have changed, or the manual pick);
 -- re-apply only when it changed. Chat only for a real respec: talents
--- changing a role that talents gave before. Settling at login (class or
--- remembered role, then the first talent answer) stays quiet.
+-- changing a role that talents gave before, or a talent event landing on an
+-- empty binding list (offerCopy). `quiet` is a player's pick (`/grf role`,
+-- "auto" included: Codex P2 on #85) or the first answer at load: no chat, no
+-- notice. Settling at login (class or remembered role, then the first talent
+-- answer) stays quiet otherwise.
 local function evaluateRole(quiet)
-    local previousSource = GRF.roleSource
+    local previousSource, previous = GRF.roleSource, GRF.role
     local role, source = Role.Get(GRF.char.role, GRF.char.talentRole)
     if source == "talents" then GRF.char.talentRole = role end
     GRF.roleSource = source
-    if role == GRF.role then return end
+    if role == previous then return end
     local respec = source == "talents" and (previousSource == "talents" or previousSource == "remembered")
     GRF.role = role
-    if respec and not quiet then say("role: " .. role:lower() .. " (talents)") end
+    -- An open notice describes the role we just left: it goes (Codex P2 on #85).
+    if GRF.ClickCastOptions and GRF.ClickCastOptions.DismissOffer then GRF.ClickCastOptions.DismissOffer() end
+    local offered = previous and not quiet and source ~= "manual" and offerCopy(previous, role)
+    if respec and not quiet and not offered then say("role: " .. role:lower() .. " (talents)") end
     -- The bindings are per role: request them now, so a change in combat
     -- shows as pending while the old role's stay installed.
     if GRF.ClickCast then GRF.ClickCast.Request() end
@@ -219,6 +248,25 @@ function Settings.SetRole(pick)
     GRF.char.role = pick
     evaluateRole(true)
     return true
+end
+
+-- Copy role `from`'s click-cast rows into `to` (default: the current role),
+-- once: only into an empty list, and the two stay separate afterwards (#84).
+-- Returns the number copied, or false and why.
+function Settings.CopyBindings(from, to)
+    from = type(from) == "string" and from:upper() or ""
+    to = to or GRF.role
+    if not (Role.VALID[from] and Role.VALID[to]) or from == to then
+        return false, "copy from: healer, caster, melee or tank (not " .. tostring(to):lower() .. ")"
+    end
+    if bindingCount(from) == 0 then return false, from:lower() .. " has no click-cast bindings" end
+    if bindingCount(to) > 0 then
+        return false, to:lower() .. " already has click-cast bindings (/grf clickcast edits them)"
+    end
+    local rows, copy = GRF.ClickCast.Rows(to), GRF.ClickCastEditor.Copy
+    for _, row in ipairs(GRF.ClickCast.Rows(from)) do rows[#rows + 1] = copy(row) end
+    GRF.ClickCast.Request()
+    return #rows
 end
 
 -- The group layout (#69), account-wide: on (the default, not saved) or the
@@ -687,6 +735,14 @@ local function slash(msg)
     elseif cmd == "clickcast" and (arg == "all" or arg == "ours") then
         Settings.SetClickCastOthers(arg == "all")
         say(arg == "all" and "click-casting: every unit frame" or "click-casting: Glass Raid Frames' tiles only")
+    elseif cmd == "clickcast" and arg == "copy" then
+        local from = (msg or ""):lower():match("^%s*%S+%s+%S+%s+(%S+)")
+        local n, why = Settings.CopyBindings(from)
+        if n then
+            say("copied " .. n .. " click-cast bindings from " .. from .. " to " .. tostring(GRF.role):lower())
+        else
+            say(why .. "  (/grf clickcast copy <role>)")
+        end
     elseif cmd == "clickcast" then
         GRF.ClickCastOptions.Toggle()
     elseif cmd == "keys" then
@@ -702,7 +758,7 @@ local function slash(msg)
         say("client " .. API.ClientBuild() .. ", measured on " .. GRF.MEASURED_ON_BUILD)
     else
         say("/grf options - the settings (Options > AddOns)")
-        say("/grf clickcast - the click-casting editor; /grf clickcast all|ours - on every unit frame, or our tiles only")
+        say("/grf clickcast - the click-casting editor; /grf clickcast all|ours - on every unit frame, or our tiles only; /grf clickcast copy <role> - that role's bindings into an empty list")
         say("/grf keys frames|anywhere - this role's hover keys: on frames only, or the world too")
         say("/grf role [auto|healer|caster|melee|tank] - settings follow your role; " .. roleLine())
         say("/grf unlock | lock - move the group frames for this role (out of combat)")

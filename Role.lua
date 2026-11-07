@@ -7,7 +7,7 @@
 --
 -- Roles: HEALER, CASTER, MELEE, TANK. Priority:
 --   1. the player's manual pick (per character, saved by the caller);
---   2. the talent tree with the most points;
+--   2. the most talent points, the trees of one role added up (#84);
 --   3. a class default (a character with no talent points yet).
 --
 -- Measured on 1.60.1.70009 (docs/FOREVER-PROBE.md, item 9):
@@ -106,17 +106,33 @@ function Role.TreePoints()
     return sums
 end
 
+-- The role with the most points, adding up the trees that share a role
+-- (#84: a priest's Discipline and Holy are both healing, so a few leveling
+-- points in Shadow mustn't outweigh them). Pure: roles = Role.TREES[class],
+-- sums = points per tree. Ties go to the role whose first tree is leftmost;
+-- zero points everywhere means no answer.
+function Role.FromPoints(roles, sums)
+    local total, order = {}, {}
+    for i, points in ipairs(sums) do
+        local role = roles[i]
+        if role then
+            if total[role] == nil then total[role] = 0; order[#order + 1] = role end
+            total[role] = total[role] + points
+        end
+    end
+    local best, bestPoints = nil, 0
+    for _, role in ipairs(order) do
+        if total[role] > bestPoints then best, bestPoints = role, total[role] end
+    end
+    return best
+end
+
 -- The role from talents, or nil (no points, unknown class, unexpected layout).
 function Role.FromTalents(class)
     local roles = Role.TREES[class]
     local sums = roles and Role.TreePoints()
     if not sums then return nil end
-    local best, bestPoints = nil, 0
-    for i, points in ipairs(sums) do
-        -- Ties keep the leftmost tree; zero points everywhere means no answer.
-        if points > bestPoints then best, bestPoints = i, points end
-    end
-    return best and roles[best] or nil
+    return Role.FromPoints(roles, sums)
 end
 
 -- The role in effect and where it came from: "manual", "talents",
