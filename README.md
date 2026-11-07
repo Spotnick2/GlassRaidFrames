@@ -137,5 +137,5 @@ pwsh Tools\deploy.ps1     # the addon and its LibGlass into your AddOns folder
 
 ## Licence
 
-GNU GPL v3; see [LICENSE](LICENSE). LibGlass-1.0 (MIT) and the LibStub it bundles (public domain)
-ship under their own terms, listed there.
+MIT; see [LICENSE](LICENSE). LibGlass-1.0 (MIT) and the LibStub it bundles (public domain) ship
+under their own terms, listed there.
