@@ -31,6 +31,8 @@ ignore:
   - CLAUDE.md
   - README.md
   - CHANGELOG.md
+  # Untracked (.git/info/exclude): the CurseForge and Wago description.
+  - README.curseforge.md
   # CurseForge's packager, which builds the release, does NOT honour the
   # library's own .pkgmeta ignores (measured in Priestly's published zip,
   # Priestly #53), so they are named from here. CI asserts what the zip holds

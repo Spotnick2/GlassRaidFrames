@@ -279,7 +279,7 @@ check(GRF.Settings.Preview(40), "a preview of 40")
 eq(M[1]._width, 80, "40: cells 80 wide")
 s = GRF.LayoutState()
 check(near(s.w, 8 * 80 + 7 * 6 + 2 * 70), "8 columns of 80 and 2 of pets: " .. s.w)
-eq(M[1].label._text, "Karuzo", "mock cells have names")
+eq(M[1].label._text, GRF.Layout.PREVIEW_NAMES[1], "mock cells have names")
 -- A real roster change ends it, and the real state is announced again.
 announced = {}
 party(2)

@@ -6,6 +6,8 @@
 ## SavedVariables: GlassRaidFramesDB
 ## SavedVariablesPerCharacter: GlassRaidFramesCharDB
 ## OptionalDeps: GlassUI
+## X-Curse-Project-ID: 1788834
+## X-Wago-ID: b6XyBPKp
 
 Libs\LibGlass-1.0\LibGlass-1.0.xml
 Compat.lua

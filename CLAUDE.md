@@ -31,7 +31,7 @@ a new idiom.
 **Status: milestone 1 (glass party and raid frames).** Milestone 0's probe settled the
 design (`docs/FOREVER-PROBE.md`); the approved plan is `docs/PLAN.md`. Next: click-casting (#3),
 then the dispel box and sound (#4). Work goes through GitHub issues and PRs at
-`github.com/Spotnick2/GlassRaidFrames` (private), one issue per milestone.
+`github.com/Spotnick2/GlassRaidFrames` (public), one issue per milestone.
 
 ## Layout
 
@@ -842,15 +842,25 @@ break the behaviour and confirm it goes red.
 - **Fable** is worth using for long-context reading across many files, such as the SUF-vs-DinoUF
   feature inventory. Review use is default-on. Implementation use needs the owner's explicit
   approval each turn.
-- Releases are built by **CurseForge's own packager from the tag webhook**, reading `.pkgmeta`.
-  Don't add a GitHub release workflow. CI (`package-check.yml`) only dry-runs
-  `BigWigsMods/packager` with `-d`. The packager derives the `forever` flavor from
-  `## Interface: 16001`.
-- **Every tag needs a `CHANGELOG.md` entry committed first**, written for players. The tag name
-  sets the channel: `alpha` / `beta` / anything else → Release. That's a distribution channel,
-  not a stability claim.
-- `.pkgmeta` ignores `.github`, `.claude`, `docs`, `tests`, `Tools`, `CLAUDE.md`, `README.md` and
-  `CHANGELOG.md` (`LICENSE` ships), plus LibGlass's `tests`, `docs`, `Tools` and notes under
+- **Releasing follows `C:\Projects\WoW\References\Docs\RELEASING.md`** (first release v0.1.0, #86):
+  - **CurseForge** project **1788834** (`## X-Curse-Project-ID`) builds with its own packager
+    from the tag webhook, reading `.pkgmeta`. No CurseForge key lives in the repo.
+  - **Wago Addons** project **`b6XyBPKp`** (`## X-Wago-ID`): CI's `wago` job uploads the zip
+    `check` built, with the `WAGO_API_TOKEN` repo secret.
+  - **GitHub Releases:** CI's `release` job publishes the same zip plus `release.json`
+    (`tests/release_files.sh`, the template's copy, unchanged).
+  - `package-check.yml` is the guide's template (`References\Docs\release\`) around this repo's
+    own test and allowlist steps; `check` runs the packager with `-d` only. `test_toc` asserts
+    both IDs. The packager derives the `forever` flavor from `## Interface: 16001`.
+  - `README.md` is the GitHub page; `README.curseforge.md` is **untracked**
+    (`.git/info/exclude`, and `.pkgmeta`-ignored), pasted by the owner into CurseForge and
+    Wago. A release tag updates both in its prep PR (the guide, §3).
+- **Every tag needs a `CHANGELOG.md` entry committed first** (`## vX.Y.Z - <date>`), written for
+  players: the tag's section is the GitHub notes and the Wago changelog. The tag name sets the
+  channel: `alpha` / `beta` / anything else → Release. That's a distribution channel, not a
+  stability claim.
+- `.pkgmeta` ignores `.github`, `.claude`, `docs`, `tests`, `Tools`, `CLAUDE.md`, `README.md`,
+  `README.curseforge.md` and `CHANGELOG.md` (`LICENSE` ships), plus LibGlass's `tests`, `docs`, `Tools` and notes under
   `Libs/LibGlass-1.0/` (CurseForge's packager ignores an external's own list). CI asserts the
   zip holds exactly the addon and the library's shipped files.
 
