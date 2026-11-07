@@ -889,7 +889,13 @@ local function buildNotice()
     notice.title:SetPoint("TOPLEFT", notice, "TOPLEFT", 20, -18); notice.title:SetPoint("TOPRIGHT", notice, "TOPRIGHT", -20, -18)
     notice.text = font(notice.glass.top, "", 12); notice.text:SetWordWrap(true); notice.text:SetJustifyV("TOP")
     notice.text:SetPoint("TOPLEFT", notice, "TOPLEFT", 20, -44); notice.text:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", -20, 54)
-    local function pick(fn) return function() notice:Hide(); fn(notice.from, notice.to) end end
+    -- Every role change dismisses the notice; a button still checks that its
+    -- role is the current one before acting.
+    local function pick(fn) return function()
+        notice:Hide()
+        if notice.to ~= GRF.role then return end
+        fn(notice.from, notice.to)
+    end end
     notice.copy = button(notice, "", pick(function(from, to)
         local n, why = GRF.Settings.CopyBindings(from, to)
         API.Print(n and ("copied " .. n .. " click-cast bindings from " .. from:lower() .. " to " .. to:lower()) or why)
@@ -905,6 +911,7 @@ local function buildNotice()
         b:SetSize(132, 28); b:SetPoint("BOTTOMLEFT", notice, "BOTTOMLEFT", 20 + (i - 1) * 142, 18)
     end
 end
+function CCO.DismissOffer() if notice then notice:Hide() end end
 function CCO.OfferCopy(from, to, count)
     if not notice then buildNotice() end
     notice.from, notice.to = from, to

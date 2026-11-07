@@ -117,12 +117,37 @@ check(not notice:IsShown(), "no notice for a manual pick")
 SlashCmdList.GLASSRAIDFRAMES("clickcast copy healer")
 eq(#GRF.char.profiles.TANK.bindings, 3, "the command copies into the current role")
 
--- "Open editor" opens it on the new role.
+-- Back to auto is a pick too: talents pointing at an empty role say nothing
+-- (Codex P2 on #85).
+ranks = { 0, 0, 9 }
+GRF.char.profiles.CASTER.bindings = {}
+newChat()
 GRF.Settings.SetRole("auto")
-eq(GRF.role, "HEALER", "auto: the talents again")
-GRF.char.profiles.MELEE = nil
-ranks = { 0, 0, 0 }
-GRF.char.talentRole = nil
+eq(GRF.role, "CASTER", "auto: the talents again (Shadow)")
+check(not notice:IsShown(), "no notice for /grf role auto")
+eq(#newChat(), 0, "and no chat")
+
+-- A notice outlived by another role change goes, and its buttons do
+-- nothing for a role that isn't current (Codex P2 on #85).
+ranks = { 0, 9, 0 }
+WoW.fire("PLAYER_TALENT_UPDATE")
+eq(GRF.role, "HEALER", "Holy: healer")
+ranks = { 0, 0, 9 }
+WoW.fire("PLAYER_TALENT_UPDATE")
+eq(GRF.role, "CASTER", "Shadow: caster again")
+check(notice:IsShown() and notice.to == "CASTER", "the empty caster list is offered")
+ranks = { 0, 9, 0 }
+WoW.fire("PLAYER_TALENT_UPDATE")
+eq(GRF.role, "HEALER", "Holy again before answering")
+check(not notice:IsShown(), "the stale notice is dismissed")
+notice:Show()
+notice.copy:GetScript("OnClick")(notice.copy, "LeftButton")
+eq(#GRF.char.profiles.CASTER.bindings, 0, "a stale copy button doesn't copy into the inactive role")
+check(not notice:IsShown(), "it only closes")
+
+-- "Open editor" opens it on the new role.
+GRF.Settings.SetRole("melee")
+eq(GRF.role, "MELEE", "melee by hand")
 CCO.OfferCopy("HEALER", "MELEE", 3)
 notice.open:GetScript("OnClick")(notice.open, "LeftButton")
 eq(CCO._test.state().role, "MELEE", "the editor shows the new role's list")

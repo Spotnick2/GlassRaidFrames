@@ -173,12 +173,14 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   (`API.RegisterEvents`).
 
   **A role that changes by itself onto an empty binding list (#84)**: bindings are per role, so
-  it looks like they were lost. When the role changes without a manual pick, the new role has
-  no click-cast rows and the old one has some, one chat line names both roles and
+  it looks like they were lost. When a talent event changes the role (never a `/grf role` pick,
+  `auto` included), the new role has no click-cast rows and the old one has some, one chat
+  line names both roles and
   `/grf clickcast copy <role>`, and `ClickCastOptions.OfferCopy` shows a glass notice: copy
   the old role's rows (`GRF.Settings.CopyBindings`: a deep, one-time copy, only into an empty
   list), open the editor on the new role, or nothing. It notes when the two roles' keys differ
-  (frames only vs anywhere).
+  (frames only vs anywhere). Any later role change dismisses it, and its buttons act only while
+  their role is the current one.
 
   **Self-contained** (no engine, frames, saved variables or libraries), so GlassUnitFrames
   can lift it for its #35. Forever has one spec per class (always DAMAGER), so the spec API is

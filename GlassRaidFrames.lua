@@ -184,10 +184,11 @@ end
 
 -- Work out the role again (talents may have changed, or the manual pick);
 -- re-apply only when it changed. Chat only for a real respec: talents
--- changing a role that talents gave before, or any change that isn't a
--- manual pick and lands on an empty binding list (offerCopy). Settling at
--- login (class or remembered role, then the first talent answer) stays quiet
--- otherwise.
+-- changing a role that talents gave before, or a talent event landing on an
+-- empty binding list (offerCopy). `quiet` is a player's pick (`/grf role`,
+-- "auto" included: Codex P2 on #85) or the first answer at load: no chat, no
+-- notice. Settling at login (class or remembered role, then the first talent
+-- answer) stays quiet otherwise.
 local function evaluateRole(quiet)
     local previousSource, previous = GRF.roleSource, GRF.role
     local role, source = Role.Get(GRF.char.role, GRF.char.talentRole)
@@ -196,7 +197,9 @@ local function evaluateRole(quiet)
     if role == previous then return end
     local respec = source == "talents" and (previousSource == "talents" or previousSource == "remembered")
     GRF.role = role
-    local offered = previous and source ~= "manual" and offerCopy(previous, role)
+    -- An open notice describes the role we just left: it goes (Codex P2 on #85).
+    if GRF.ClickCastOptions and GRF.ClickCastOptions.DismissOffer then GRF.ClickCastOptions.DismissOffer() end
+    local offered = previous and not quiet and source ~= "manual" and offerCopy(previous, role)
     if respec and not quiet and not offered then say("role: " .. role:lower() .. " (talents)") end
     -- The bindings are per role: request them now, so a change in combat
     -- shows as pending while the old role's stay installed.
