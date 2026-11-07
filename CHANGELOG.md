@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Glass Raid Frames is now MIT licensed, like the other Glass addons (v0.1.0 said GPL v3).
+
 ## v0.1.0 - 2026-11-07
 
 The first release: glass party and raid frames with click-casting, for WoW: Forever.
