@@ -672,3 +672,21 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
+
+--------------------------------------------------------------------------
+
+THIRD-PARTY COMPONENTS
+
+The GNU GPL v3 above covers Glass Raid Frames' own code. It does NOT
+relicense the library bundled under Libs/, which is redistributed under its
+own terms and remains the work of its authors:
+
+  Libs/LibGlass-1.0        LibGlass-1.0, copyright (c) 2026 Spotnick2.
+                           MIT License; its own LICENSE ships beside it.
+                           Fetched at build time, not kept in this
+                           repository.
+
+  Libs/LibGlass-1.0/LibStub
+                           LibStub, bundled by LibGlass-1.0. By Kaelten,
+                           Cladhaire, ckknight, Mikk, Ammo, Nevcairiel and
+                           joshborke. Public domain.

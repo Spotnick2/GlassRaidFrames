@@ -631,8 +631,9 @@ end
 
 Layout.PREVIEWS = { [10] = 3, [20] = 6, [40] = 12 }   -- members, and the pets shown with them
 -- Names of every length, so the 80-wide cells show the client shortening them.
-Layout.PREVIEW_NAMES = { "Karuzo", "Kaleid", "Morphisto", "Elegiadelamar", "Awlie", "Tarthosuk", "Drakuzamephis",
-    "Grol", "Sumnerwind", "Ivy" }
+-- Made up: this list ships, so no real character's name (#86).
+Layout.PREVIEW_NAMES = { "Aldric", "Brenna", "Corvanthe", "Isoldemarwynn", "Elwyn", "Thandrel", "Galathremundo",
+    "Orm", "Seraphielle", "Ivo" }
 local mocks, mockPets = {}, {}
 
 local function mock(list, i, w, h, label)
