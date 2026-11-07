@@ -7,8 +7,9 @@
 - Each frame shows the name, a class-coloured health bar, Dead and Offline, the leader, raid
   mark and tank/healer role icons, and up to three debuffs. Out-of-range members fade.
 - Left-click targets, right-click opens the menu.
-- Settings per role: healer, caster, melee, tank. The role follows the talent tree with the
-  most points, or pick it yourself per character (`/grf role`). The healer layout sits in the
+- Settings per role: healer, caster, melee, tank. The role follows your talent points (a
+  priest's Discipline and Holy count together as healer), or pick it yourself per character
+  (`/grf role`). The healer layout sits in the
   lower middle; the others default to the left side. Moving the frames only moves them for
   your current role.
 - Options under Game Menu > Options > AddOns > Glass Raid Frames (`/grf options`).

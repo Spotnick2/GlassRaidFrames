@@ -161,7 +161,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
 - **`Role.lua`** (#7): which role you play. `HEALER`, `CASTER`, `MELEE` or `TANK`, in
   priority order:
   1. the per-character manual pick (`GlassRaidFramesCharDB.role`, `"auto"` = none);
-  2. the talent tree with the most points;
+  2. the most talent points, **the trees of one role added up** (`Role.FromPoints`, #84: a
+     priest's Discipline and Holy together, so a few leveling points in Shadow don't flip it);
   3. **the last role the talents gave** (`GlassRaidFramesCharDB.talentRole`): the talent API
      doesn't answer at `ADDON_LOADED` or during a loading screen, and a build doesn't change
      without a talent event, so this beats guessing;
@@ -170,6 +171,14 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   Settling at login is quiet. Chat says "role: … (talents)" only on a respec (talents changing a
   talent-given role). `Role.Watch(onChange, register)` takes the caller's reporting registrar
   (`API.RegisterEvents`).
+
+  **A role that changes by itself onto an empty binding list (#84)**: bindings are per role, so
+  it looks like they were lost. When the role changes without a manual pick, the new role has
+  no click-cast rows and the old one has some, one chat line names both roles and
+  `/grf clickcast copy <role>`, and `ClickCastOptions.OfferCopy` shows a glass notice: copy
+  the old role's rows (`GRF.Settings.CopyBindings`: a deep, one-time copy, only into an empty
+  list), open the editor on the new role, or nothing. It notes when the two roles' keys differ
+  (frames only vs anywhere).
 
   **Self-contained** (no engine, frames, saved variables or libraries), so GlassUnitFrames
   can lift it for its #35. Forever has one spec per class (always DAMAGER), so the spec API is
