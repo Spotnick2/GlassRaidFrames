@@ -28,7 +28,8 @@ rim, and hovering shows the tooltip. Left-click targets, right-click opens the m
 bind those clicks to something else).
 
 **Pets**, if you want them (`/grf pets`, per role): in a raid, a column of their own beside the
-grid; in a party, under their owners.
+grid; in a party, under their owners. A pet's frame shows your own heals on it (your Renew)
+and up to two debuffs.
 
 **Names** show the first name by default, or the first name and surname initial
 ("Aldric B."), or the full name (`/grf names first|initial|full`). Give anyone a nickname with
