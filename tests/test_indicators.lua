@@ -77,10 +77,11 @@ local first = deb.c._groups.grf_debuffs.frames[1]   -- built by AddAuraGroup, be
 check(first.grf and not first.grf.timer._shown, "debuff buttons show no timer text, the first batch included")
 eq(first._mouse, false, "debuff buttons don't take the mouse")
 
--- Pets: only the debuff row.
+-- Pets get the same indicators as players: your Renew on a pet shows.
 local pet = H.petChildren[1]
-eq(count(entries(pet)), 1, "a pet tile gets one indicator")
-check(entries(pet).debuffs, "(the debuff row)")
+eq(count(entries(pet)), count(entries(p1)), "a pet tile gets every indicator a player's does")
+check(entries(pet).myheals and entries(pet).received and entries(pet).debuffs, "(my heals, received, the debuff row)")
+check(slots(entries(pet).myheals).s1.filter:find("|PLAYER", 1, true), "only mine on a pet too")
 
 -- Weakened Soul by ID can't be matched (ContextuallySecret, measured): the
 -- indicator is reported, not built. NeverSecret would build it.

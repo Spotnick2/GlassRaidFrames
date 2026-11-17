@@ -489,7 +489,7 @@ local function sync(b)
     if not st then return end
     local want = {}
     for _, ind in ipairs(Ind.Setup() or {}) do
-        if ind.enabled and (not b.isPet or ind.kind == "debuffs") and Ind.Supported(ind) then
+        if ind.enabled and Ind.Supported(ind) then
             want[ind.key] = ind
         end
     end
