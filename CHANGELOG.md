@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## v0.1.1 - 2026-11-17
 
+- Pet frames show your own heals on the pet: your Renew and Power Word: Shield (Rejuvenation and
+  Regrowth for druids), and any indicator you set to "only mine". A pet frame is small, so it
+  shows up to two debuffs, and buffs from others (Thorns, Blessing of Protection...) stay on
+  players' frames.
 - Glass Raid Frames is now MIT licensed, like the other Glass addons (v0.1.0 said GPL v3).
 
 ## v0.1.0 - 2026-11-07
