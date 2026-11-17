@@ -77,10 +77,31 @@ local first = deb.c._groups.grf_debuffs.frames[1]   -- built by AddAuraGroup, be
 check(first.grf and not first.grf.timer._shown, "debuff buttons show no timer text, the first batch included")
 eq(first._mouse, false, "debuff buttons don't take the mouse")
 
--- Pets: only the debuff row.
+-- Pets (#92): what you cast on them (your Renew) and a short debuff row; a
+-- 28-tall tile has room for one row, so Received (anyone's) stays off it.
 local pet = H.petChildren[1]
-eq(count(entries(pet)), 1, "a pet tile gets one indicator")
-check(entries(pet).debuffs, "(the debuff row)")
+eq(count(entries(pet)), 2, "a pet tile gets two indicators")
+check(entries(pet).myheals and entries(pet).debuffs, "(my heals and the debuff row)")
+check(not entries(pet).received, "no Received on a pet: it would sit over the debuff row")
+check(slots(entries(pet).myheals).s1.filter:find("|PLAYER", 1, true), "only mine on a pet too")
+eq(entries(pet).debuffs.c._groups.grf_debuffs.spec.maxFrameCount, GRF.Indicators.PET_DEBUFFS, "a pet's debuff row is capped")
+eq(deb.c._groups.grf_debuffs.spec.maxFrameCount, 3, "a player's row keeps its max")
+check(find("debuffs").max == 3, "the saved setup is untouched")
+-- The defaults on a raid pet tile (64x28): the two debuffs end left of My
+-- heals' second icon, so nothing overlaps.
+do
+    local hs, ds, rowEnd = find("myheals").size, find("debuffs").size, nil
+    rowEnd = find("debuffs").x + GRF.Indicators.PET_DEBUFFS * ds + (GRF.Indicators.PET_DEBUFFS - 1) * GRF.Indicators.GAP
+    local secondLeft = 64 + find("myheals").x - (hs + GRF.Indicators.GAP) - hs
+    check(rowEnd < secondLeft, "debuffs end at " .. rowEnd .. ", My heals' second icon starts at " .. secondLeft)
+end
+-- Edits reach pets through the cap: a smaller max as is, a larger one capped.
+GRF.Settings.EditIndicator(find("debuffs"), "max", 1); flush()
+eq(entries(pet).debuffs.c._groups.grf_debuffs.spec.maxFrameCount, 1, "a max under the cap reaches the pet")
+GRF.Settings.EditIndicator(find("debuffs"), "max", 5); flush()
+eq(entries(pet).debuffs.c._groups.grf_debuffs.spec.maxFrameCount, GRF.Indicators.PET_DEBUFFS, "a larger one is capped")
+eq(deb.c._groups.grf_debuffs.spec.maxFrameCount, 5, "while the player's row takes it")
+GRF.Settings.EditIndicator(find("debuffs"), "max", 3); flush()
 
 -- Weakened Soul by ID can't be matched (ContextuallySecret, measured): the
 -- indicator is reported, not built. NeverSecret would build it.

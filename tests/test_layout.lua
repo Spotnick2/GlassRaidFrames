@@ -36,7 +36,7 @@ eq(#L.cells .. " " .. #L.petCells .. " " .. #L.partyPets, "40 40 5", "40 cells, 
 eq(H.children, L.cells, "Header.children are the grid's")
 eq(#H.AllChildren(), 85, "click-casting and indicators reach all 85")
 check(L.cells[1].body and L.petCells[1].body and L.partyPets[1].body, "every tile is dressed")
-check(L.petCells[1].isPet and L.partyPets[3].isPet and not L.cells[1].isPet, "pet tiles are flagged (the debuff row only)")
+check(L.petCells[1].isPet and L.partyPets[3].isPet and not L.cells[1].isPet, "pet tiles are flagged")
 eq(L.petCells[1]._width .. "x" .. L.petCells[1]._height, "64x28", "raid-pet cells are 64x28")
 eq(L.cells[1]._width .. "x" .. L.cells[1]._height, "96x60", "cells are 96x60")
 eq(GRF.Frames.NameSize(60), 15, "names are 15 at the layout's 60")

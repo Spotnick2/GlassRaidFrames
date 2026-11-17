@@ -45,6 +45,7 @@ Ind.MAX_SPELLS = 8        -- the page shows 8 rows
 Ind.MAX_INDICATORS = 10   -- the page lists 10
 Ind.MIN_SIZE, Ind.MAX_SIZE = 6, 32
 Ind.MAX_DEBUFFS = 10
+Ind.PET_DEBUFFS = 2       -- a 64x28 pet tile: two debuffs end left of My heals' second icon
 Ind.OFFSET = 200        -- |x|, |y| bound
 
 -- Call obj:method(...); a missing method or a throw is recorded, never raised.
@@ -483,15 +484,27 @@ local function acquire(b, st, ind)
     return e
 end
 
+-- What tile b shows of indicator ind, or nil. A pet tile (28 tall in a raid)
+-- has room for one row of icons: it shows what you cast on it (the "only
+-- mine" indicators) and a debuff row of at most Ind.PET_DEBUFFS (#92).
+local function forTile(b, ind)
+    if not (ind.enabled and Ind.Supported(ind)) then return nil end
+    if not b.isPet then return ind end
+    if ind.kind ~= "debuffs" then return ind.mine and ind or nil end
+    if ind.max <= Ind.PET_DEBUFFS then return ind end
+    local v = {}
+    for k, val in pairs(ind) do v[k] = val end
+    v.max = Ind.PET_DEBUFFS
+    return v
+end
+
 -- Bring tile b in line with the saved setup. Out of combat.
 local function sync(b)
     local st = b.grfInd
     if not st then return end
     local want = {}
     for _, ind in ipairs(Ind.Setup() or {}) do
-        if ind.enabled and (not b.isPet or ind.kind == "debuffs") and Ind.Supported(ind) then
-            want[ind.key] = ind
-        end
+        want[ind.key] = forTile(b, ind)
     end
     for key, e in pairs(st.byKey) do
         if not want[key] or want[key].kind ~= e.kind then retire(st, key, e) end

@@ -444,7 +444,10 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` (the embedded material) →
   - Every button region is made in `initializeFrame` (backing, icon or square, client swipe,
     timer and stack texts) and only sized, placed, coloured or toggled later; `EnableMouse(false)`.
     The client hides the buttons' shown state (secret even out of combat).
-  - Pet tiles (`child.isPet`, set by `Header`) get only the debuff row. Units follow
+  - Pet tiles (`child.isPet`) show what you cast on them: the "only mine" indicators (your
+    Renew) and the debuff row capped at `Ind.PET_DEBUFFS` 2 (`forTile`, #92). A 64x28 raid pet
+    tile has room for one row of 12px icons, so Received (anyone's) would cover the debuffs
+    and stays off. Units follow
     `onUnitChanged` (`SetUnit` + `UpdateAllAuras`, in combat too). Per-tile and per-indicator
     `pcall`. `/grf ind` lists, `/grf ind <n|key> on|off`, `/grf ind reset` (`GRF.Settings`).
 - **`IndicatorOptions.lua`**: the "Indicators" sub-page (owner's pick over a window of our own:
