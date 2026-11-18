@@ -53,7 +53,7 @@ eq(secret, shown, "every shown tile got its secret name whole")
 GRF.Settings.SetNameStyle("full"); flush()
 local formatted = 0
 for _, c in ipairs(GRF.Header.AllChildren()) do
-    local t = c.unit and c:IsShown() and c.nameText._text
+    local t = c.unit and c:IsShown() and formattedText(c.nameText)
     if type(t) == "table" and t.secretFormat == "%s%s%s" and WoW.IsSecret(t.args[1]) and WoW.IsSecret(t.args[3]) then
         formatted = formatted + 1
     end

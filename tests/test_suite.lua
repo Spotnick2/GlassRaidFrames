@@ -202,7 +202,7 @@ eq(O.controls.suiteNote and O.controls.suiteNote:GetText(), "Look: following Gla
 -- Off, and seen to be off (in game the label and the radio art stayed bright).
 for _, group in ipairs({ O.controls.look, O.controls.body }) do
     for _, rb in ipairs(group) do
-        eq(rb._enabled, false, "radio " .. rb.value .. " off")
+        eq(rb:IsEnabled(), false, "radio " .. rb.value .. " off")
         eq(rb._alpha, 0.5, "radio " .. rb.value .. " dimmed")
         eq(rb.label._textColor and rb.label._textColor[1], 0.5, "radio " .. rb.value .. "'s label grey")
     end
@@ -227,7 +227,7 @@ GRF = boot(glassUI(pearl()), saved(), 10)
 O = GRF.Options._test
 O.panel._scripts.OnShow(O.panel)
 eq(O.controls.suiteNote and O.controls.suiteNote:GetText(), "own look: library-too-old", "the page says why")
-check(O.controls.look[1]._enabled ~= false, "the radios stay on")
+check(O.controls.look[1]:IsEnabled(), "the radios stay on")
 eq(O.controls.look[1]._alpha, nil, "and bright")
 eq(O.controls.look[1].label._textColor, nil, "their labels too")
 O.controls.look[1]._scripts.OnClick(O.controls.look[1])

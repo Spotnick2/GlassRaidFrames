@@ -1,26 +1,12 @@
--- Every widget method the addon calls must exist on this client.
+-- Every widget method the addon calls must exist on this client, for that
+-- widget type (WowTestKit's Kit.checkMethods against the pinned build).
 --
--- The stub answers any method call (a no-op for ones it does not implement),
--- so a call to a method Forever lacks would otherwise pass silently. This
--- checks each recorded "Type:Method" against the API dump's widget-method
--- walk, falling back to the documented functions.
+-- A method the build lacks reads as nil on the stub's widgets, but one the
+-- stub implements answers on any type, and an AuraContainer (a type the
+-- build's lists lack) answers everything: so the exercise below runs the
+-- addon as widely as is cheap, then every recorded "Type:Method" is checked.
 dofile("tests/wow_stubs.lua")
 dofile("tests/harness.lua")
-
-local DUMP = os.getenv("GLASSRF_API_DUMP") or "C:/Projects/WoW/References/Forever/api/forever-api-1.60.1.70338.md"
-local f = io.open(DUMP, "r")
-if not f then
-    io.write("test_methods: SKIPPED (no API dump at " .. DUMP .. ")\n")
-    os.exit(0)
-end
-local widget, documented = {}, {}
-for line in f:lines() do
-    local wm = line:match("^(%a+:%a+)%s*$")
-    if wm then widget[wm] = true end
-    local fn = line:match("^([%a_]+)%(")
-    if fn then documented[fn] = true end
-end
-f:close()
 
 -- Exercise everything so every method is recorded.
 loadAddon()
@@ -107,37 +93,48 @@ GlassRaidFrames.Layout.Apply()
 WoW.tick(1)
 
 -- Methods the dump cannot list: Blizzard_AuraContainer is a load-on-demand
--- Blizzard addon the dump did not capture. Evidence they exist on Forever:
--- GlassUnitFrames and DinoUnitFrames call every one of them in game, and the
--- probe built these containers on 70009 (FOREVER-PROBE items 1 and 7).
--- Keep this list exact: anything else missing from the dump still fails.
-local AURA_CONTAINER_API = {
-    ["AuraContainer:AddAuraGroup"] = true, ["AuraContainer:UpdateAllAuras"] = true,
-    ["AuraContainer:SetUnit"] = true,
-    ["Button:SetIcon"] = true,   -- on the buttons the container creates
-    -- The indicators (#19). In Forever's own Blizzard_CustomAuraContainer.lua /
-    -- Blizzard_CustomAuraButton.lua / Blizzard_AuraContainerFlowLayout.lua
-    -- (wow-ui-source, forever branch); slots, slot filters/enable/size, the
-    -- duration texts and the flow growth were used by RaidProbe in game
-    -- (FOREVER-PROBE item 10). The group setters are source-only so far.
-    ["AuraContainer:AddAuraSlot"] = true, ["AuraContainer:GetAuraSlotFrame"] = true,
-    ["AuraContainer:SetAuraSlotEnabled"] = true, ["AuraContainer:SetAuraSlotFilterString"] = true,
-    ["AuraContainer:SetAuraSlotCandidateFilters"] = true,
-    ["AuraContainer:SetAuraGroupFilterString"] = true, ["AuraContainer:SetAuraGroupMaxFrameCount"] = true,
-    ["AuraContainer:SetAuraGroupLayout"] = true, ["AuraContainer:SetAuraGroupEnabled"] = true,
-    ["AuraContainer:GetAuraGroupFrameCount"] = true, ["AuraContainer:GetAuraGroupFrame"] = true,
-    ["AuraContainer:SetFlowLayoutAnchorPoint"] = true, ["AuraContainer:SetFlowLayoutGrowthDirection"] = true,
-    ["Button:SetDurationCooldown"] = true, ["Button:SetDurationText"] = true, ["Button:SetApplicationCount"] = true,
+-- Blizzard addon the dump did not capture, so neither its widget type nor
+-- the methods of the buttons it creates are in the build's lists. Each is a
+-- mixin method in Forever's own source (wow-ui-source, forever branch,
+-- 70959; Blizzard_AuraContainer.xml:5 declares AuraContainer an intrinsic
+-- Frame); GlassUnitFrames and DinoUnitFrames call them in game, and the
+-- probe built these containers (FOREVER-PROBE items 1, 7 and 10). Keep this
+-- list exact: anything else missing from the build still fails.
+local SRC = "Interface/AddOns/Blizzard_AuraContainer/"
+local allow = {
+    ["AuraContainer:SetUnit"] = SRC .. "Blizzard_AuraContainer.lua:40 (AuraContainerSharedMixin)",
+    ["AuraContainer:UpdateAllAuras"] = SRC .. "Blizzard_AuraContainer.lua:50 (AuraContainerSharedMixin)",
+    ["AuraContainer:SetFlowLayoutAnchorPoint"] = SRC .. "Blizzard_AuraContainerFlowLayout.lua:19",
+    ["AuraContainer:SetFlowLayoutGrowthDirection"] = SRC .. "Blizzard_AuraContainerFlowLayout.lua:31",
+    ["AuraContainer:AddAuraGroup"] = SRC .. "Blizzard_CustomAuraContainer.lua:286 (CustomAuraContainerSharedMixin)",
+    ["AuraContainer:GetAuraGroupFrame"] = SRC .. "Blizzard_CustomAuraContainer.lua:335",
+    ["AuraContainer:GetAuraGroupFrameCount"] = SRC .. "Blizzard_CustomAuraContainer.lua:348",
+    ["AuraContainer:SetAuraGroupEnabled"] = SRC .. "Blizzard_CustomAuraContainer.lua:363",
+    ["AuraContainer:SetAuraGroupFilterString"] = SRC .. "Blizzard_CustomAuraContainer.lua:370",
+    ["AuraContainer:SetAuraGroupMaxFrameCount"] = SRC .. "Blizzard_CustomAuraContainer.lua:381",
+    ["AuraContainer:SetAuraGroupLayout"] = SRC .. "Blizzard_CustomAuraContainer.lua:409",
+    ["AuraContainer:AddAuraSlot"] = SRC .. "Blizzard_CustomAuraContainer.lua:417",
+    ["AuraContainer:GetAuraSlotFrame"] = SRC .. "Blizzard_CustomAuraContainer.lua:441",
+    ["AuraContainer:SetAuraSlotEnabled"] = SRC .. "Blizzard_CustomAuraContainer.lua:452",
+    ["AuraContainer:SetAuraSlotFilterString"] = SRC .. "Blizzard_CustomAuraContainer.lua:459",
+    ["AuraContainer:SetAuraSlotCandidateFilters"] = SRC .. "Blizzard_CustomAuraContainer.lua:470",
+    -- On the buttons the container creates (a Button in the tests).
+    ["Button:SetApplicationCount"] = SRC .. "Blizzard_CustomAuraButton.lua:87 (CustomAuraButtonSharedMixin)",
+    ["Button:SetDurationCooldown"] = SRC .. "Blizzard_CustomAuraButton.lua:159",
+    ["Button:SetDurationText"] = SRC .. "Blizzard_CustomAuraButton.lua:178",
+    ["Button:SetIcon"] = SRC .. "Blizzard_CustomAuraButton.lua:243",
 }
-
-local n = 0
+-- Any other method on an AuraContainer must be a Frame method in the pinned
+-- build (an intrinsic Frame); one that isn't stays unallowed, and fails.
+local known = Kit.data("widgetMethods")
 for name in pairs(WoW.methodsCalled) do
-    n = n + 1
-    local method = name:match(":(%a+)$")
-    local wtype = name:match("^(%a+):")
-    local ok = widget[name] or documented[method] or AURA_CONTAINER_API[name]
-        or (wtype == "AuraContainer" and widget["Frame:" .. method])   -- a Frame underneath
-    check(ok, "method exists on Forever: " .. name)
+    local method = name:match("^AuraContainer:(%a+)$")
+    if method and not allow[name] and known["Frame:" .. method] then
+        allow[name] = "an AuraContainer is an intrinsic Frame (Frame:" .. method .. ")"
+    end
 end
-check(n >= 2, "recorded the addon's method calls (" .. n .. ")")
+
+local recorded = Kit.checkMethods({ allow = allow })
+-- The floor: what the exercise records today (207), rounded down, so it can't quietly shrink.
+check(recorded >= 200, "the exercise reached the frames, options pages, movers and layout (" .. recorded .. " recorded)")
 done("test_methods")

@@ -2,24 +2,20 @@
 dofile("tests/wow_stubs.lua")
 dofile("tests/harness.lua")
 
-local toc = io.open("GlassRaidFrames.toc"):read("*a")
-check(toc:find("## Interface: 16001", 1, true), "interface 16001 (1.60.1; 11601 is the transposed-digit bug)")
-check(toc:find("## Version: @project-version@", 1, true), "packager version token kept")
+-- The kit's: interface 16001, the version token, every listed .lua file
+-- exists, every line listed once.
+Kit.checkToc(TOC)
+local toc = io.open(TOC):read("*a")
 check(toc:find("## SavedVariables: GlassRaidFramesDB", 1, true), "saved variables declared")
 check(toc:find("## X%-Curse%-Project%-ID: 1788834\r?\n"), "the CurseForge project ID")
 check(toc:find("## X%-Wago%-ID: b6XyBPKp\r?\n"), "the Wago project ID (the wago job uploads to it)")
-for _, f in ipairs(tocFiles()) do
-    check(io.open(f, "r") ~= nil, "TOC file exists: " .. f)
-end
+-- Kit.checkToc checks the .lua lines only: our template XML too (the
+-- library's XML line comes from the checkout, read by libGlassScripts).
+check(io.open("GlassRaidFrames.xml", "r") ~= nil, "TOC file exists: GlassRaidFrames.xml")
 -- The embedded material loads before any of our files: Glass.lua calls
 -- LibStub("LibGlass-1.0") at file scope.
 eq(tocLines()[1], LIBGLASS_XML, "LibGlass-1.0 loads first")
 eq(tocFiles()[1], "Compat.lua", "Compat is the first of our own files")
-local seen = {}
-for _, f in ipairs(tocFiles()) do
-    check(not seen[f], "TOC lists each file once: " .. f)
-    seen[f] = true
-end
 
 -- Every kind of file the TOC loads is one Tools/deploy.ps1 copies (it once
 -- skipped the XML template, and the headers would have had no children).
@@ -29,22 +25,6 @@ check(deploy:find("-Addon GlassRaidFrames", 1, true), "deploy.ps1 calls LibGlass
 for _, line in ipairs(tocLines()) do
     local ext = line ~= LIBGLASS_XML and line:match("(%.%a+)$")
     if ext then check(deploy:find('"' .. ext .. '"', 1, true), "deploy.ps1 copies " .. ext .. " files (" .. line .. ")") end
-end
-
--- The checked-in event list (the stub's fallback when the dump is absent, as
--- on CI) must match the dump's documented events exactly.
-if WoW.dumpAvailable then
-    local listed, n = {}, 0
-    for line in io.lines("tests/events-70338.txt") do
-        local name = line:match("^([A-Z][A-Z0-9_]+)%s*$")
-        if name then listed[name] = true; n = n + 1 end
-    end
-    local missing, extra = {}, {}
-    for e in pairs(WoW.KNOWN_EVENTS) do if not listed[e] then missing[#missing + 1] = e end end
-    for e in pairs(listed) do if not WoW.KNOWN_EVENTS[e] then extra[#extra + 1] = e end end
-    eq(#missing, 0, "every dump event is in tests/events-70338.txt (regenerate it): " .. table.concat(missing, ","))
-    eq(#extra, 0, "no event in tests/events-70338.txt is missing from the dump: " .. table.concat(extra, ","))
-    check(n > 1000, "the fixture holds the full event list (" .. n .. ")")
 end
 
 -- Two places that must agree, never derived from each other (porting guide §0).

@@ -624,7 +624,8 @@ not a newer Lua that may be first on `PATH`.
 
 ```powershell
 & 'C:\Program Files (x86)\Lua\5.1\luac.exe' -p File.lua             # syntax check; silent on success
-pwsh tests\run.ps1                                                   # luac -p on TOC files + probe + every tests\test_*.lua
+pwsh tests\run.ps1                                                   # luac -p on TOC files + probe + every tests\test_*.lua (WowTestKit at its pin)
+pwsh tests\run.ps1 -KitDev                                           # the same against the ..\WowTestKit working copy
 & 'C:\Program Files (x86)\Lua\5.1\lua.exe' tests\test_boot.lua      # one test, run from the repo root
 python Tools\make_sound.py                                           # regenerate Media\dispel.ogg (numpy + ffmpeg/libvorbis)
 pwsh Tools\deploy.ps1 -Probe                                         # copy the addon, its LibGlass (+ ForeverProbe and RaidProbe) into AddOns
@@ -761,15 +762,28 @@ not port cleanly.
 
 ## Testing
 
-The `tests\` harness is modelled on Priestly's: plain Lua 5.1 scripts with no dependencies, a
-`tests\wow_stubs.lua` API mock driven through an exported `WoW` table, `tests\harness.lua`
-(`check` / `eq` / `loadAddon` / `standardUnits`), and `tests\run.ps1` to run them all. The stub
-does more than mock:
-- It validates event names against the API dump when the dump is present.
-- It records any **insecure** touch of a protected frame in combat in `WoW.blocked`: the methods
-  in `WoW.PROTECTED_METHODS`, taken from the 70532 API docs' `IsProtectedFunction` flags
-  (`test_protected.lua` checks the list against the `wow-ui-source` clone), plus `SetAttribute`
-  (not flagged, measured to do nothing in combat). The state-driver, unit-watch and
+The test scaffolding is WowTestKit (`C:\Projects\WoW\WowTestKit`; its README is the reference)
+at the commit and client build `tests\kit.pin` names (build 70959, the kit's newest: our
+`MEASURED_ON_BUILD`, 70338, is older than any build the kit has data for).
+`tests\run.ps1` puts that commit in `%LOCALAPPDATA%\WowTestKit\<sha>` and hands off to the kit's
+runner; CI fetches it with `tests\fetch_kit.sh`. `tests\kit.lua`, `kit.ps1` and `fetch_kit.sh` are
+the kit's bootstrap copies: never edit them here. A kit need is an issue on the kit, worked around
+in `tests\wow_stubs.lua` with a `-- WowTestKit #N:` comment meanwhile. `tests\run.ps1 -KitDev`
+runs against the `..\WowTestKit` working copy instead of the pin.
+
+The kit holds the mechanics: `check` / `eq` / `done` (with its stray-`|` check on every printed
+line, and its check that no pcall swallowed a secret touch), strict globals, secrets, event names
+checked against the pinned build's data, widgets that record every method called (and log each
+call with its arguments: `w._log`, read by `calls(w, name)` and `formattedText(fs)` in the
+harness), protected frames refusing changes in combat (`WoW.blocked`), timers, `fire` / `tick`.
+`tests\wow_stubs.lua` adds this addon's own client APIs (units, the roster, secrets per field,
+the aura container, Blizzard's unit frames, ...), and `tests\harness.lua` the loader
+(`loadAddon`, `xmlTemplates`, `libGlassScripts`, `loadForeverProbe`, `party` / `raid`). The
+stub does more than mock:
+- It records any **insecure** touch of a protected frame in combat in `WoW.blocked`: the kit's
+  list plus the methods in `WoW.PROTECTED_METHODS`, taken from the 70532 API docs'
+  `IsProtectedFunction` flags (`test_protected.lua` checks the list against the `wow-ui-source`
+  clone), and `SetAttribute` (not flagged, measured to do nothing in combat). The state-driver, unit-watch and
   override-binding APIs are refused to insecure code in combat too, whatever the target frame;
   the SecureHandler API errors in combat for anyone, as the client's does.
 - Every handler the addon sets or hooks runs with `WoW.secureCode` off, whoever fired it: the
@@ -783,9 +797,13 @@ does more than mock:
   events by hand with the flag the other way.
 - `UnitName` returns the first name and the surname (the unit field `name` holds
   "First Surname"); `GetUnitName` returns the whole.
-- It models `FontString:SetFormattedText` taking secrets without formatting them in Lua.
-- It records every widget method called. `test_methods.lua` checks each one exists in the dump,
-  closing the gap where a catch-all stub silently swallows a method Forever lacks.
+- `test_methods.lua` exercises the addon, then `Kit.checkMethods` checks each recorded
+  `Type:Method` exists on that widget type in the pinned build; the aura container's mixin
+  methods are allowed one by one, each citing Blizzard's source.
+- `WoW.fireAllRegistered()` fires every registered event once per modelled unit and once for
+  `"player"` (the engine registers its unit events plainly; WowTestKit #94).
+- **FINDING (#97):** the harness's `done` lets through exactly the `/grf` help and usage lines
+  with a bare `|`, until #97 doubles them; any other stray still fails.
 - `loadAddon` loads with the group layout **off** (the tests before #69 cover the legacy grid);
   `loadAddon({ layout = true })` turns it on (`test_layout.lua`).
 - `WoW.useClientHeaders(file)` swaps the stub's header model for **Forever's own
@@ -826,9 +844,7 @@ break the behaviour and confirm it goes red.
   the owner). Never commit to `main`.
   Commit or push only when asked. Before committing, `luac -p` must be clean and the tests green.
   **After pushing, check the PR's `package-check` run** (`gh run list`, then `gh run view`).
-  CI has no API dump: the stub validates events against `tests/events-70338.txt` instead, so
-  run a new test once with `GLASSRF_API_DUMP` pointing at a missing file. Milestone 1 sat red
-  on CI for several pushes before a review caught it.
+  Milestone 1 sat red on CI for several pushes before a review caught it.
 - Review policy: use the shared `$wow-addon-review` skill for PR reviews.
 - **The owner merges and closes PRs, and launches reviews.** Claude opens the issue, branch and
   PR, runs the tests, and stops there: never `gh pr merge` or close a PR, and never start a Codex

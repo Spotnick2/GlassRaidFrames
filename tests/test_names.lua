@@ -11,7 +11,7 @@ local GRF = loadAddon()
 local F, S = GRF.Frames, GRF.Settings
 flush()
 
-local function shown(unit) return childFor(unit).nameText._text end
+local function shown(unit) return formattedText(childFor(unit).nameText) end
 
 -- The styles, on their own.
 eq(F.DisplayName("Karuzo Memphisto"), "Karuzo", "default: the first name")

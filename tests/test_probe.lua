@@ -682,6 +682,11 @@ grf.Frames.SetName = function() error("no secrets here") end
 local okJ, _, _, joined = AU.identityReport()
 check(not okJ and joined:find("^joined=THREW .*no secrets here"), "a throwing join fails the step: " .. tostring(joined))
 grf.Frames.SetName = function(fs, first, surname) fs:SetFormattedText("%s%s%s", first, " ", surname) end
+-- The probe measures GetUnitName throwing on a secret surname, under pcall:
+-- the two reports above, one throw each, swallowed on purpose (the kit's
+-- done() fails on a swallowed secret touch otherwise).
+eq(WoW.secretBlocked, 2, "the probe's GetUnitName reads were the only secret touches it swallowed")
+WoW.secretBlocked, WoW.secretBlockedFirst = 0, nil
 WoW.secretFields.name = nil
 grf.paintFailures["painter name"] = "boom"
 check(not AU.identityReport(), "a 'painter name' failure fails")

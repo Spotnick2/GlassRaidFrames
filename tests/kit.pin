@@ -1,0 +1,6 @@
+# WowTestKit for these tests: the commit, and the client build to test against.
+# build: 70959, the kit's newest. GlassRaidFrames' MEASURED_ON_BUILD is 70338,
+# older than any build the kit has data for (its oldest is 70450).
+sha=3cba24fd68e35758c19671bcedfefa9ad228c60f
+build=70959
+api=2

@@ -17,7 +17,7 @@ for _, name in ipairs(B.FRAMES) do
     local f = rawget(_G, name)
     eq(f:GetParent(), hidden, name .. " is reparented away")
     check(not f._shown, name .. " is hidden")
-    check(f._silenced, name .. " stops listening to events")
+    check(#calls(f, "UnregisterAllEvents") > 0, name .. " stops listening to events")
 end
 check(B.active, "Blizzard.active records the hide")
 
@@ -54,7 +54,7 @@ eq(B.HideFrame("NoSuchBlizzardFrame"), false, "a missing frame is skipped")
 -- The raid manager (leader tools: ready check, world markers) stays (code review).
 local mgr = rawget(_G, "CompactRaidFrameManager")
 eq(mgr:GetParent(), UIParent, "the raid manager side panel is left alone")
-check(not mgr._silenced, "and keeps its events")
+check(#calls(mgr, "UnregisterAllEvents") == 0, "and keeps its events")
 
 -- /grf blizzard turns it off for the next session.
 SlashCmdList.GLASSRAIDFRAMES("blizzard")
