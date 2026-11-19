@@ -1,104 +1,42 @@
--- wow_stubs.lua: a minimal WoW: Forever mock for Lua 5.1 unit tests.
+-- wow_stubs.lua: GlassRaidFrames' WoW: Forever mock for Lua 5.1 unit tests,
+-- on WowTestKit (tests/kit.pin; the kit's README is the reference).
 -- dofile("tests/wow_stubs.lua") FIRST in every test; drive it via the WoW table.
 --
--- What it models, on purpose:
--- - STRICT globals: reading any global it does not define is an error. The
---   stub is the allowlist of APIs verified present in the API dump; defining
---   something Forever lacks is how a missing API survives into a build.
--- - SECRETS as newproxy userdata: arithmetic, ordering, tostring, concat and
---   string.format on one throw. Lua 5.1 cannot make a truth test or == throw,
---   so those two misuses are NOT caught here (only in game / in review).
--- - PROTECTED frames: secure-template frames and their ancestors. An insecure
---   call of a protected method (WoW.PROTECTED_METHODS: the 70532 API docs'
---   IsProtectedFunction flags) under InCombatLockdown() is recorded in
---   WoW.blocked instead of applied. So is an insecure combat call of the
---   state-driver, unit-watch and override-binding APIs; the SecureHandler API
---   errors in combat for anyone, as the client's does.
+-- The kit holds the mechanics: check / eq / done, strict globals, secrets,
+-- events checked against the pinned build, widgets that record every method
+-- called (Kit.checkMethods), protected frames refusing WoW.PROTECTED in combat
+-- (WoW.blocked), timers, print and its stray-| check, fire / tick. This file
+-- adds GlassRaidFrames' own client APIs and, on top of the kit, what the
+-- tests lean on (each with its reason below):
 -- - INSECURE handlers: every script the addon sets or hooks runs with
 --   WoW.secureCode off, whoever triggered it. Blizzard's header code setting a
 --   child's unit fires the addon's hook as insecure code, as in the client;
---   only the client's own header code (WoW.useClientHeaders) runs secure, and
---   it reads plain values where the addon would get secrets.
+--   only the client's own header code (WoW.useClientHeaders) runs secure: the
+--   kit's refusals skip it, and it reads plain values where the addon would
+--   get secrets.
+-- - PROTECTED: the kit's list plus the 70532 API docs' IsProtectedFunction
+--   methods this addon can reach (WoW.PROTECTED_METHODS, test_protected.lua);
+--   the state-driver, unit-watch and override-binding APIs are refused to
+--   insecure code in combat; the SecureHandler API errors in combat.
 -- - COMBAT order: WoW.enterCombat() turns the lockdown on BEFORE
 --   PLAYER_REGEN_DISABLED reaches a handler (Retail's order; FOREVER-PROBE
 --   item 18.1 measures it here), WoW.leaveCombat() off before PLAYER_REGEN_ENABLED.
--- - EVENT names: RegisterEvent throws on a name the API dump does not declare.
--- - METHOD calls: every widget method called is recorded (WoW.methodsCalled)
---   so test_methods.lua can check each against the dump's widget methods.
+-- - SecureGroupHeaderTemplate: a model of the client's header (or, with
+--   WoW.useClientHeaders, Forever's own SecureGroupHeaders.lua).
 
-WoW = {}
-local DUMP = os.getenv("GLASSRF_API_DUMP") or "C:/Projects/WoW/References/Forever/api/forever-api-1.60.1.70338.md"
-
---------------------------------------------------------------------------------
--- Secrets
---------------------------------------------------------------------------------
-
-local secrets = setmetatable({}, { __mode = "k" })
-
-function WoW.Secret(label)
-    local p = newproxy(true)
-    local mt = getmetatable(p)
-    local function boom() error("secret value touched in Lua: " .. label, 2) end
-    for _, k in ipairs({ "__tostring", "__concat", "__add", "__sub", "__mul", "__div", "__mod",
-                         "__pow", "__unm", "__lt", "__le", "__len", "__index", "__newindex", "__call" }) do
-        mt[k] = boom
-    end
-    secrets[p] = label
-    return p
-end
-
-function issecretvalue(v) return secrets[v] ~= nil end
-function WoW.IsSecret(v) return secrets[v] ~= nil end
-
---------------------------------------------------------------------------------
--- Known events (from the dump when present)
---------------------------------------------------------------------------------
-
-WoW.KNOWN_EVENTS = {}
-WoW.dumpAvailable = false
-do
-    local f = io.open(DUMP, "r")
-    if f then
-        local inEvents = false
-        for line in f:lines() do
-            if line:match("^## Documented events") then inEvents = true
-            elseif line:match("^## ") then inEvents = false
-            elseif inEvents then
-                local name = line:match("^([A-Z][A-Z0-9_]+)%s+%(")
-                if name then WoW.KNOWN_EVENTS[name] = true end
-            end
-        end
-        f:close()
-        WoW.dumpAvailable = next(WoW.KNOWN_EVENTS) ~= nil
-    end
-    if not WoW.dumpAvailable then
-        -- No dump (CI): the checked-in list generated from it, so validation
-        -- stays exactly as strict. test_toc fails if the two ever drift.
-        local fixture = io.open("tests/events-70338.txt", "r")
-        assert(fixture, "tests/events-70338.txt missing: event validation needs the dump or the fixture")
-        for line in fixture:lines() do
-            local name = line:match("^([A-Z][A-Z0-9_]+)%s*$")
-            if name then WoW.KNOWN_EVENTS[name] = true end
-        end
-        fixture:close()
-    end
-end
+dofile("tests/kit.lua")
+local Methods = WoW.Methods
+local secrets = WoW.secrets
+WoW.IsSecret = issecretvalue
 
 --------------------------------------------------------------------------------
 -- State
 --------------------------------------------------------------------------------
 
-function WoW.reset()
-    WoW.frames = {}
-    WoW.fontStrings = {}
+table.insert(WoW.onReset, function()
     WoW.auraSecrecy = {}
-    WoW.blocked = {}
-    WoW.chat = {}
-    WoW.timers = {}
     WoW.unitWatch = {}
     WoW.stateDrivers = {}   -- frame -> { state, values } (RegisterStateDriver)
-    WoW.methodsCalled = {}
-    WoW.combat = false
     WoW.secureCode = false   -- true only while the client's own header code runs
     WoW.shift = false
     WoW.alt = false
@@ -111,12 +49,9 @@ function WoW.reset()
     WoW.atlases = { ["UI-HUD-UnitFrame-Player-Rest-Flipbook"] = true }
     WoW.loadedAddOns = {}
     WoW.rangeTruth = setmetatable({}, { __mode = "k" })
-    WoW.templateSizes = WoW.templateSizes or {}
-    -- XML templates that inherit a secure one (their frames are protected).
-    WoW.secureTemplates = WoW.secureTemplates or {}
     rawset(_G, "EditModeManagerFrame", nil)
-    if UIParent then WoW.CreateBlizzardFrames() end
-end
+    WoW.CreateBlizzardFrames()
+end)
 
 -- Unit fields: exists, health, maxHealth, power, maxPower, powerToken, name,
 -- class, player, reaction, dead, connected, visible, tapDenied,
@@ -144,25 +79,19 @@ local function unitField(token, field)
 end
 
 --------------------------------------------------------------------------------
--- Widgets
+-- Widgets: what the tests lean on beyond the kit
 --------------------------------------------------------------------------------
 
-local Methods = {}   -- shared implementations, by method name
-
-local function record(w, name)
-    WoW.methodsCalled[w._type .. ":" .. name] = true
-end
-
-local function isProtected(w)
-    return w._protected == true
-end
-
-local function guard(w, what)
-    if WoW.combat and isProtected(w) and not WoW.secureCode then   -- the client's own secure code may
-        table.insert(WoW.blocked, (w._name or w._type) .. ":" .. what)
-        return false
-    end
-    return true
+-- The client's own secure code (the header's) may change a protected frame
+-- in combat: the kit's refusal skips it. The kit's Show, Hide, SetPoint,
+-- ClearAllPoints, SetAllPoints and SetAttribute refuse again with the kit's
+-- own check, which knows nothing of WoW.secureCode, so they are given again
+-- below without it (the dispatch has already refused an insecure call; the
+-- kit's MIGRATING, "Protected frames").
+local kitRefused = WoW.refused
+function WoW.refused(w, what)
+    if WoW.secureCode then return false end
+    return kitRefused(w, what)
 end
 
 -- The widget methods the client refuses to insecure code on a protected frame
@@ -172,13 +101,17 @@ end
 -- ScriptRegionResizing,Button}APIDocumentation.lua; tests/test_protected.lua
 -- checks each name against them). A modelled subset, not every flagged method.
 -- Not flagged, so not here: RegisterForDrag, SetMovable, SetAlpha.
--- SetAttribute is guarded on its own: not flagged, but measured to do nothing
+-- SetAttribute (in the kit's list) is not flagged, but measured to do nothing
 -- in combat (PORTING-TBC-TO-FOREVER.md, "Secure click-casting works").
+-- WowTestKit #83: the kit's WoW.PROTECTED holds what was measured; SetScale,
+-- SetFrameStrata, SetFrameLevel and EnableMouse were measured refused on
+-- 70959 (SetAlpha allowed). The rest of this list is the docs' flags.
 WoW.PROTECTED_METHODS = { "Show", "Hide", "SetShown", "SetParent", "SetPoint", "SetAllPoints", "ClearAllPoints",
     "ClearPoint", "SetWidth", "SetHeight", "SetSize", "SetScale", "SetFrameStrata", "SetFrameLevel",
     "SetFixedFrameStrata", "SetFixedFrameLevel", "SetToplevel", "SetHitRectInsets", "SetClampedToScreen",
     "EnableMouse", "EnableMouseWheel", "EnableKeyboard", "Raise", "Lower", "SetID", "StartMoving", "StartSizing",
     "StopMovingOrSizing", "RegisterForClicks", "Enable", "Disable", "SetEnabled", "ClearAttribute", "ClearAttributes" }
+for _, name in ipairs(WoW.PROTECTED_METHODS) do WoW.PROTECTED[name] = true end
 
 -- The FrameXML APIs that set attributes on the protected
 -- SecureStateDriverManager (SecureStateDriver.lua:8-50) and the protected
@@ -203,67 +136,32 @@ local function handlerApi(name)
     end
 end
 
-local widgetMT = {
-    __index = function(w, k)
-        if type(k) ~= "string" or not k:match("^%u") then return nil end  -- fields read as nil
-        return function(self, ...)
-            record(self, k)
-            local impl = Methods[k]
-            if impl then return impl(self, ...) end
-            return nil
-        end
-    end,
-}
-
-local function newWidget(wtype, parent, name)
-    local w = setmetatable({ _type = wtype, _parent = parent, _shown = true, _points = {},
-                             _attrs = {}, _scripts = {}, _events = {}, _unitEvents = {},
-                             _level = parent and parent._level and (parent._level + 1) or 1,
-                             _width = 0, _height = 0, _name = name }, widgetMT)
+-- The tests and the header model read a frame's attributes directly (w._attrs).
+local kitCreateFrame = CreateFrame
+function CreateFrame(...)
+    local w = kitCreateFrame(...)
+    w._attrs = w._attrs or {}
     return w
 end
 
-function CreateFrame(ftype, name, parent, template)
-    local w = newWidget(ftype, parent, name)
-    w._template = template
-    -- A template's <Size> (the client sizes a frame from its template).
-    local size = template and WoW.templateSizes and WoW.templateSizes[template]
-    if size then w._width, w._height = size[1], size[2] end
-    if template == "SecureGroupHeaderTemplate" or template == "SecureGroupPetHeaderTemplate" then
-        w._isHeader = true
-        w._isPetHeader = template == "SecureGroupPetHeaderTemplate"
-        if WoW.clientHeaders then WoW.clientHeaders.dress(w) end
-    end
-    if template and (template:find("Secure") or WoW.secureTemplates[template]) then
-        local p = w
-        while p do p._protected = true; p = p._parent end
-    end
-    if ftype == "StatusBar" then w._min, w._max, w._value = 0, 1, 0 end
-    table.insert(WoW.frames, w)
-    if name then rawset(_G, name, w) end
-    return w
+-- The secure templates the addon uses: explicitly protected (the kit makes
+-- every frame above one protected too).
+WoW.templates.SecureUnitButtonTemplate = function(w) w._protected = true end
+local function header(w, pet)
+    w._protected = true
+    w._isHeader = true
+    w._isPetHeader = pet
+    if WoW.clientHeaders then WoW.clientHeaders.dress(w) end
 end
+WoW.templates.SecureGroupHeaderTemplate = function(w) header(w, false) end
+WoW.templates.SecureGroupPetHeaderTemplate = function(w) header(w, true) end
 
--- Visibility / layout (guarded on protected frames).
-function Methods.Show(w)
-    local was = w._shown
-    w._shown = true
-    if not was and w._scripts.OnShow then w._scripts.OnShow(w) end   -- only on a hidden->shown change, as the client
-end
-function Methods.Hide(w)
-    local was = w._shown
-    w._shown = false
-    if was and w._scripts.OnHide then w._scripts.OnHide(w) end   -- the client fires it only on a visible->hidden change
-end
-function Methods.SetShown(w, v) if v then Methods.Show(w) else Methods.Hide(w) end end
-function Methods.IsShown(w) return w._shown end
-function Methods.IsVisible(w)
-    local p = w
-    while p do if not p._shown then return false end; p = p._parent end
-    return true
-end
+-- Visibility. Show and Hide as the kit's (scripts down the tree, on a change),
+-- without the kit's own refusal (above).
+function Methods.Show(w) WoW.setShown(w, true) end
+function Methods.Hide(w) WoW.setShown(w, false) end
 -- A point already set is replaced, as the client does (a frame keeps one
--- anchor per point).
+-- anchor per point). WowTestKit #92: the kit's SetPoint adds every anchor.
 function Methods.SetPoint(w, point, ...)
     for i = #w._points, 1, -1 do
         if w._points[i][1] == point then table.remove(w._points, i) end
@@ -271,115 +169,43 @@ function Methods.SetPoint(w, point, ...)
     table.insert(w._points, { point, ... })
 end
 function Methods.ClearAllPoints(w) w._points = {} end
+function Methods.SetAllPoints(w, rel) table.insert(w._points, { "ALL", rel }) end
 function Methods.ClearPoint(w, point)
     for i = #w._points, 1, -1 do
         if w._points[i][1] == point then table.remove(w._points, i) end
     end
 end
+-- WowTestKit #89: GetNumPoints, SetScale, the drag state.
 function Methods.GetNumPoints(w) return #w._points end
-function Methods.GetPoint(w, i)
-    local p = w._points[i or 1]
-    if not p then return nil end
-    local point, rel, relPoint, x, y = p[1], p[2], p[3], p[4], p[5]
-    if type(rel) ~= "table" and type(rel) ~= "string" then
-        -- SetPoint(point, x, y) short form is not used by the addon.
-    end
-    return point, rel, relPoint, x, y
-end
-function Methods.SetAllPoints(w, rel) table.insert(w._points, { "ALL", rel }) end
-function Methods.SetSize(w, x, y) w._width, w._height = x, y end
-function Methods.SetWidth(w, x) w._width = x end
-function Methods.SetHeight(w, y) w._height = y end
-function Methods.GetWidth(w) return w._width end
-function Methods.GetHeight(w) return w._height end
-function Methods.GetFrameLevel(w) return w._level end
-function Methods.SetFrameLevel(w, l) w._level = l end
-function Methods.GetEffectiveScale() return 0.64 end
--- The rest of the protected set (recorded; the addon calls them on insecure
--- frames only, so a call on a protected one in combat is what a test looks for).
 function Methods.SetScale(w, s) w._scale = s end
-function Methods.SetFrameStrata(w, s) w._strata = s end
-function Methods.SetFixedFrameStrata(w, v) w._fixedStrata = v end
-function Methods.SetFixedFrameLevel(w, v) w._fixedLevel = v end
-function Methods.SetToplevel(w, v) w._toplevel = v end
-function Methods.SetHitRectInsets(w, ...) w._hitInsets = { ... } end
-function Methods.SetClampedToScreen(w, v) w._clamped = v end
-function Methods.EnableMouse(w, v) w._mouse = v end
-function Methods.EnableMouseWheel(w, v) w._mouseWheel = v end
-function Methods.Raise(w) w._raised = true end
-function Methods.Lower(w) w._raised = false end
-function Methods.SetID(w, id) w._id = id end
+function Methods.StartMoving(w) w._moving = true end
 function Methods.StartSizing(w) w._sizing = true end
+function Methods.StopMovingOrSizing(w)
+    w._moving = false
+    w._points = { { "TOPLEFT", "UIParent", "BOTTOMLEFT", 111, 222 } }   -- where the drag "left" it
+end
 function Methods.ClearAttribute(w, k) w._attrs[k] = nil end
 function Methods.ClearAttributes(w) w._attrs = {} end
-
--- Scripts and events. An addon's handler is insecure code whoever calls it:
--- the client's secure header code setting a child's unit fires the addon's
--- OnAttributeChanged hook as insecure code, so a protected touch in it is
--- blocked in combat. Every handler the addon sets or hooks runs with
--- WoW.secureCode off, restored afterwards (after an error too).
-local function insecure(fn)
-    return function(...)
-        local was = WoW.secureCode
-        WoW.secureCode = false
-        local ok, err = pcall(fn, ...)
-        WoW.secureCode = was
-        if not ok then error(err, 0) end
-    end
-end
-function Methods.SetScript(w, name, fn) w._scripts[name] = fn and insecure(fn) or nil end
-function Methods.GetScript(w, name) return w._scripts[name] end
-function Methods.HookScript(w, name, fn)
-    local old, hook = w._scripts[name], insecure(fn)
-    w._scripts[name] = function(...) if old then old(...) end; hook(...) end
-end
-function Methods.RegisterEvent(w, e)
-    if not WoW.KNOWN_EVENTS[e] then error("Attempt to register unknown event \"" .. e .. "\"", 2) end
-    if WoW.refuseEvents and WoW.refuseEvents[e] then return false end   -- the client's refusal
-    w._events[e] = true
-    return true
-end
-function Methods.RegisterUnitEvent(w, e, unit)
-    if not WoW.KNOWN_EVENTS[e] then error("Attempt to register unknown event \"" .. e .. "\"", 2) end
-    w._unitEvents[e] = unit
-    return true
-end
-function Methods.UnregisterEvent(w, e) w._events[e] = nil; w._unitEvents[e] = nil end
-function Methods.UnregisterAllEvents(w) w._events = {}; w._unitEvents = {}; w._silenced = true end
-function Methods.SetParent(w, p) w._parent = p end
-function Methods.GetParent(w) return w._parent end
-function Methods.GetName(w) return w._name end
-function Methods.IsProtected(w) return w._protected == true, w._explicit == true end
-function Methods.GetChildren(w)
-    local kids = {}
-    for _, f in ipairs(WoW.frames) do if f._parent == w then kids[#kids + 1] = f end end
-    return unpack(kids)
-end
-function Methods.GetObjectType(w) return w._type end
-function Methods.SetClipsChildren(w, v) w._clips = v end
-
--- Secure attributes and clicks.
-function Methods.SetAttribute(w, k, v)
-    if not guard(w, "SetAttribute") then return end
-    w._attrs[k] = v
-    -- With the client's header code, every attribute change is heard, as in
-    -- the client (the model below calls the unit hooks itself).
-    if WoW.clientHeaders and w._scripts.OnAttributeChanged then w._scripts.OnAttributeChanged(w, k, v) end
-end
-function Methods.GetAttribute(w, k) return w._attrs[k] end
 function Methods.RegisterForClicks(w, ...) w._clicks = { ... } end
-function Methods.StartMoving(w) w._moving = true end
--- No real geometry in the stub: a test sets w._center = { x, y } where it matters.
-function Methods.GetCenter(w) if w._center then return w._center[1], w._center[2] end end
--- Edges from a test-set centre and the frame's size (no real layout here).
-local function edge(w, axis, sign)
-    if not (w._center and w._width and w._height) then return nil end
+
+-- Geometry. No real layout here: a test places a frame by its centre
+-- (w._center = { x, y }); edges come from it and the frame's size. A frame
+-- without one reads the kit's edges (w._left...).
+local kitEdges = { GetLeft = Methods.GetLeft, GetRight = Methods.GetRight, GetTop = Methods.GetTop,
+                   GetBottom = Methods.GetBottom, GetCenter = Methods.GetCenter }
+local function edge(w, axis, sign, kit)
+    if not (w._center and w._width and w._height) then return kitEdges[kit](w) end
     if axis == "x" then return w._center[1] + sign * w._width / 2 end
     return w._center[2] + sign * w._height / 2
 end
-function Methods.GetLeft(w) return edge(w, "x", -1) end
-function Methods.GetRight(w) return edge(w, "x", 1) end
-function Methods.GetBottom(w) return edge(w, "y", -1) end
+function Methods.GetLeft(w) return edge(w, "x", -1, "GetLeft") end
+function Methods.GetRight(w) return edge(w, "x", 1, "GetRight") end
+function Methods.GetBottom(w) return edge(w, "y", -1, "GetBottom") end
+function Methods.GetTop(w) return edge(w, "y", 1, "GetTop") end
+function Methods.GetCenter(w)
+    if w._center then return w._center[1], w._center[2] end
+    return kitEdges.GetCenter(w)
+end
 -- GetRect for a frame placed CENTER-on-UIParent-CENTER (the grid): left and
 -- bottom from UIParent's size, else from a test-set _center, else nil.
 function Methods.GetRect(w)
@@ -391,20 +217,43 @@ function Methods.GetRect(w)
     if w._center then return w._center[1] - W / 2, w._center[2] - H / 2, W, H end
     return nil
 end
-function Methods.GetTop(w) return edge(w, "y", 1) end
-function Methods.StopMovingOrSizing(w)
-    w._moving = false
-    w._points = { { "TOPLEFT", "UIParent", "BOTTOMLEFT", 111, 222 } }   -- where the drag "left" it
+
+-- Scripts and events. An addon's handler is insecure code whoever calls it:
+-- the client's secure header code setting a child's unit fires the addon's
+-- OnAttributeChanged hook as insecure code, so a protected touch in it is
+-- blocked in combat. Every handler the addon sets or hooks runs with
+-- WoW.secureCode off, restored afterwards (after an error too: the raw pcall,
+-- so an error the handler raises is passed on, not counted as swallowed).
+local function insecure(fn)
+    return function(...)
+        local was = WoW.secureCode
+        WoW.secureCode = false
+        local ok, err = WoW.rawpcall(fn, ...)
+        WoW.secureCode = was
+        if not ok then error(err, 0) end
+    end
+end
+function Methods.SetScript(w, name, fn) w._scripts[name] = fn and insecure(fn) or nil end
+function Methods.HookScript(w, name, fn)
+    local old, hook = w._scripts[name], insecure(fn)
+    w._scripts[name] = function(...) if old then old(...) end; hook(...) end
+end
+-- WowTestKit #79: the client refuses some registrations (returns false);
+-- WoW.refuseEvents names them.
+local kitRegisterEvent = Methods.RegisterEvent
+function Methods.RegisterEvent(w, e)
+    if WoW.KNOWN_EVENTS[e] and WoW.refuseEvents and WoW.refuseEvents[e] then return false end
+    return kitRegisterEvent(w, e)
 end
 
--- Regions.
-function Methods.CreateTexture(w) local t = newWidget("Texture", w); return t end
-function Methods.CreateMaskTexture(w) local t = newWidget("MaskTexture", w); return t end
-function Methods.CreateFontString(w)
-    local t = newWidget("FontString", w)
-    table.insert(WoW.fontStrings, t)   -- a test can find a page's texts
-    return t
+-- Secure attributes: the dispatch refuses an insecure call on a protected
+-- frame in combat. With the client's header code, every attribute change is
+-- heard, as in the client (the model below calls the unit hooks itself).
+function Methods.SetAttribute(w, k, v)
+    w._attrs[k] = v
+    if WoW.clientHeaders and w._scripts.OnAttributeChanged then w._scripts.OnAttributeChanged(w, k, v) end
 end
+
 -- A rough wrap: about 7 units a character, 14 a line, at the string's width.
 function Methods.GetStringHeight(fs)
     local w, text = fs._width, fs._text
@@ -416,40 +265,12 @@ function Methods.GetStringHeight(fs)
     end
     return lines * 14
 end
-function Methods.CreateAnimationGroup(w)
-    local ag = newWidget("AnimationGroup", w)
-    ag._plays = 0
-    return ag
-end
-function Methods.CreateAnimation(ag, atype) return newWidget(atype or "Animation", ag) end
-function Methods.Play(ag) ag._plays = (ag._plays or 0) + 1 end
-function Methods.SetTexture(t, file) t._file = file; return true end
-function Methods.SetColorTexture(t, r, g, b, a) t._color = { r, g, b, a } end
-function Methods.SetTextColor(fs, r, g, b, a) fs._textColor = { r, g, b, a } end
-function Methods.SetAlpha(w, a) w._alpha = a end
-function Methods.SetTexCoord(t, ...) t._texCoord = { ... } end
-function Methods.GetAlpha(w) return w._alpha or 1 end
-function Methods.SetVertexColor(t, r, g, b, a) t._vertex = { r, g, b, a } end
-function Methods.AddMaskTexture(t, m) t._masks = t._masks or {}; table.insert(t._masks, m) end
-function Methods.SetGradient(t, orientation, c1, c2)
-    assert(type(c1) == "table" and type(c2) == "table", "SetGradient takes color objects on this API")
-    t._gradient = { orientation, c1, c2 }
-end
+function Methods.SetWordWrap(fs, on) fs._wordWrap = on end
 function Methods.SetTextureSliceMargins(t, l, tp, r, b) t._slice = { l, tp, r, b } end
-
--- FontString: the client formats natively and accepts secrets. Model that:
--- with any secret argument, keep the arguments unformatted instead of calling
--- string.format (which would throw on the proxy).
-function Methods.SetText(fs, text) fs._text = text end
-function Methods.SetChecked(cb, v) cb._checked = v and true or false end
--- Buttons and edit boxes: enabled state (all in the dump's widget walk).
-function Methods.SetEnabled(w, on) w._enabled = on and true or false end
-function Methods.Enable(w) w._enabled = true end
-function Methods.Disable(w) w._enabled = false end
-function Methods.IsEnabled(w) return w._enabled ~= false end
-function Methods.GetChecked(cb) return cb._checked == true end
-function Methods.LockHighlight(b) b._highlightLocked = true end
+function Methods.SetTexCoord(t, ...) t._texCoord = { ... } end
+-- WowTestKit #89: scroll frames and edit box focus.
 function Methods.SetScrollChild(sf, child) sf._scrollChild = child end
+function Methods.GetScrollChild(sf) return sf._scrollChild end
 function Methods.SetVerticalScroll(sf, value)
     sf._verticalScroll = value
     if sf._scripts.OnVerticalScroll then sf._scripts.OnVerticalScroll(sf, value) end
@@ -464,58 +285,25 @@ function Methods.EnableKeyboard(f, value) f._keyboardEnabled = value end
 function Methods.SetFocus(e)
     if e._focus then return end
     e._focus = true
-    if e._scripts and e._scripts.OnEditFocusGained then e._scripts.OnEditFocusGained(e) end
+    if e._scripts.OnEditFocusGained then e._scripts.OnEditFocusGained(e) end
 end
 function Methods.ClearFocus(e)
     if not e._focus then return end
     e._focus = false
-    if e._scripts and e._scripts.OnEditFocusLost then e._scripts.OnEditFocusLost(e) end
+    if e._scripts.OnEditFocusLost then e._scripts.OnEditFocusLost(e) end
 end
 function Methods.HasFocus(e) return e._focus == true end
-function Methods.GetScrollChild(sf) return sf._scrollChild end
--- Button state textures: Set<State>Texture creates the texture, Get<State>Texture returns it.
-for _, state in ipairs({ "Normal", "Pushed", "Highlight", "Checked", "Disabled" }) do
-    Methods["Set" .. state .. "Texture"] = function(b, file)
-        local t = newWidget("Texture", b)
-        t._file = file
-        b["_" .. state] = t
-    end
-    Methods["Get" .. state .. "Texture"] = function(b) return b["_" .. state] end
-end
-function Methods.UnlockHighlight(b) b._highlightLocked = false end
-function Methods.GetText(fs) return fs._text end
-function Methods.SetFormattedText(fs, fmt, ...)
-    local n = select("#", ...)
-    for i = 1, n do
-        if secrets[(select(i, ...))] then fs._text = { secretFormat = fmt, n = n, args = { ... } }; return end
-    end
-    fs._text = string.format(fmt, ...)
-end
-function Methods.SetFont(fs, file, size, flags) fs._font = { file, size, flags }; return true end
-function Methods.GetFont(fs) if fs._font then return fs._font[1], fs._font[2], fs._font[3] end end
-function Methods.SetWordWrap(fs, on) fs._wordWrap = on end
+function Methods.SetClipsChildren(w, v) w._clips = v end
 
 -- StatusBar: takes values (secret or not) without inspecting them.
 function Methods.SetMinMaxValues(b, lo, hi, interp) b._min, b._max, b._minMaxInterp = lo, hi, interp end
-function Methods.GetMinMaxValues(b) return b._min, b._max end
-function Methods.SetValue(b, v, interp)
-    b._value = v; b._interp = interp
-    -- The client fires OnValueChanged for programmatic changes too (userInput false).
-    if b._scripts and b._scripts.OnValueChanged then b._scripts.OnValueChanged(b, v, false) end
-end
-function Methods.GetValue(b) return b._value end
-function Methods.SetStatusBarTexture(b, file)
-    b._fill = b._fill or newWidget("Texture", b)
-    b._fill._file = file
-    return true
-end
-function Methods.GetStatusBarTexture(b) return b._fill end
-function Methods.SetStatusBarColor(b, r, g, bl) b._color = { r, g, bl } end
+function Methods.GetMinMaxValues(b) return b._min, b._max end   -- WowTestKit #89
 function Methods.SetTimerDuration(b, d, interp, dir) b._timer = { duration = d, interp = interp, dir = dir } end
 
 -- PlayerModel (and the aura container: both take a unit).
 local function seq(w, what) w._seq = w._seq or {}; table.insert(w._seq, what) end
 function Methods.SetUnit(m, unit) m._modelUnit = unit; seq(m, "SetUnit"); return true end
+function Methods.ClearModel(m) m._modelUnit = nil end
 
 -- Blizzard's managed aura container (Blizzard_AuraContainer; not in the API
 -- dump, shipped by DinoUF on Forever). It records its groups and, as the
@@ -527,7 +315,7 @@ function Methods.AddAuraGroup(c, name, filter, spec)
     c._groups[name] = g
     seq(c, "AddAuraGroup")
     for i = 1, 10 do
-        local frame = newWidget("Button", c)
+        local frame = WoW.newWidget("Button", c)
         g.frames[i] = frame
         if spec and spec.initializeFrame then spec.initializeFrame(frame) end
     end
@@ -541,7 +329,7 @@ function Methods.AddAuraSlot(c, key, filter, spec)
     c._slots = c._slots or {}
     assert(not c._slots[key], "aura slot '" .. tostring(key) .. "' already exists")
     if WoW.combat then table.insert(WoW.blocked, "AddAuraSlot") end
-    local frame = newWidget("Button", c)
+    local frame = WoW.newWidget("Button", c)
     c._slots[key] = { filter = filter, spec = spec, enabled = true, frame = frame }
     seq(c, "AddAuraSlot")
     if spec and spec.initializeFrame then spec.initializeFrame(frame) end
@@ -568,20 +356,10 @@ function Methods.SetIcon(b, t) b._icon = t end
 function Methods.SetDurationCooldown(b, cd) b._cooldown = cd end
 function Methods.SetDurationText(b, fs) b._durationText = fs end
 function Methods.SetApplicationCount(b, fs) b._countText = fs end
-function Methods.ClearModel(m) m._modelUnit = nil end
 
 --------------------------------------------------------------------------------
 -- Globals
 --------------------------------------------------------------------------------
-
-UIParent = newWidget("Frame", nil, "UIParent")
-UIParent._level = 0
-
-function print(...)
-    local parts = {}
-    for i = 1, select("#", ...) do parts[#parts + 1] = tostring((select(i, ...))) end
-    table.insert(WoW.chat, table.concat(parts, " "))
-end
 
 SlashCmdList = {}
 Enum = {
@@ -599,11 +377,11 @@ C_Secrets = {
 AnchorUtil = { FlowDirection = { Left = -1, Right = 1, Up = 1, Down = -1 } }   -- FrameXML (dump _G walk)
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 function GetBuildInfo() return "1.60.1", "70338", "Sep 23 2026", 16001 end
-function InCombatLockdown() return WoW.combat end
 function IsShiftKeyDown() return WoW.shift end
 function IsAltKeyDown() return WoW.alt == true end
 -- FrameXML's SecureStateDriver.lua: recorded, not evaluated; refused to
--- insecure code in combat (secureApi above).
+-- insecure code in combat (secureApi above). WowTestKit #77: the kit has no
+-- state drivers.
 function RegisterUnitWatch(frame) if secureApi("RegisterUnitWatch") then WoW.unitWatch[frame] = true end end
 function UnregisterUnitWatch(frame)
     if secureApi("UnregisterUnitWatch") then WoW.unitWatch[frame] = nil; frame._unwatched = true end
@@ -620,7 +398,10 @@ function UnregisterAttributeDriver(frame, attribute)
 end
 -- Blizzard_RestrictedAddOnEnvironment/SecureHandlers.lua:602. The snippet is
 -- recorded, not run: a test runs it with its own handle stubs. In combat the
--- API errors for anyone (handlerApi above).
+-- API errors for anyone (handlerApi above). WowTestKit #93: the kit's
+-- SecureHandlerWrapScript wraps OnClick only, and the hover keys wrap OnEnter,
+-- OnLeave and OnHide; the tests read these records (frame._wraps,
+-- _executed, _refs).
 function SecureHandlerWrapScript(frame, script, header, preBody, postBody)
     handlerApi("SecureHandlerWrapScript")
     assert(type(script) == "string" and type(preBody) == "string", "Invalid wrap")
@@ -647,16 +428,6 @@ function ClearOverrideBindings(owner) secureApi("ClearOverrideBindings") end
 function SetOverrideBindingClick(owner, isPriority, key, buttonName, mouseClick) secureApi("SetOverrideBindingClick") end
 function SetOverrideBinding(owner, isPriority, key, command) secureApi("SetOverrideBinding") end
 
--- Post-hook a method, as the client does: the original runs first.
-function hooksecurefunc(t, name, fn)
-    local orig = t[name]
-    rawset(t, name, function(self, ...)
-        local r = orig(self, ...)
-        fn(self, ...)
-        return r
-    end)
-end
-
 -- Blizzard's own unit frames: secure (protected) buttons under UIParent,
 -- watched by the client. EditModeManagerFrame stays absent unless a test
 -- opens Edit Mode with WoW.SetEditMode.
@@ -675,23 +446,15 @@ function WoW.CreateBlizzardFrames()
             f._attrs.unit = spec[2]
             WoW.unitWatch[f] = true
         end
-        f:RegisterEvent("PLAYER_ENTERING_WORLD")
+        Methods.RegisterEvent(f, "PLAYER_ENTERING_WORLD")   -- Blizzard's call, not recorded
     end
-    UIParent._protected = nil   -- the client's UIParent is not protected by its children
 end
 function WoW.SetEditMode(open)
     if open and not rawget(_G, "EditModeManagerFrame") then
-        rawset(_G, "EditModeManagerFrame", newWidget("Frame", UIParent, "EditModeManagerFrame"))
+        rawset(_G, "EditModeManagerFrame", WoW.newWidget("Frame", UIParent, "EditModeManagerFrame"))
     end
     local em = rawget(_G, "EditModeManagerFrame")
     if em then em._shown = open end
-end
-
-C_Timer = { After = function(s, fn) table.insert(WoW.timers, fn) end }
-function WoW.flushTimers()
-    local run = WoW.timers
-    WoW.timers = {}
-    for _, fn in ipairs(run) do fn() end
 end
 
 C_ClassColor = { GetClassColor = function(cls)
@@ -866,8 +629,6 @@ Settings = {
     OpenToCategory = function(id) WoW.settings.opened = id end,
 }
 C_Texture = { GetAtlasExists = function(name) return WoW.atlases[name] == true end }
-function Methods.SetAtlas(t, name) t._atlas = name; return true end
-function Methods.Stop(ag) ag._stops = (ag._stops or 0) + 1 end
 C_AddOns = {
     IsAddOnLoaded = function(name) return WoW.loadedAddOns[name] == true, WoW.loadedAddOns[name] == true end,
     LoadAddOn = function(name) WoW.loadedAddOns[name] = true; return true end,
@@ -930,7 +691,7 @@ end
 -- of them), exposed as "child<n>" attributes; WoW.layoutHeaders() assigns units
 -- (the client does it on roster changes, in combat too) and fires each child's
 -- OnAttributeChanged("unit", ...) when its unit changes.
--- WoW.templateSizes[template] = { w, h } stands in for the XML <Size>.
+-- The child template's size is its XML <Size> (harness.lua's xmlTemplates).
 --------------------------------------------------------------------------------
 
 -- Pets as Forever's SecureGroupPetHeader_Update finds them (GetPetUnit):
@@ -989,12 +750,7 @@ end
 
 -- The client's header (or unit watch) shows or hides a frame securely: its
 -- OnShow/OnHide fire, the addon's hooks among them (insecure, see HookScript).
-local function secureShown(w, shown)
-    local was = w._shown
-    w._shown = shown
-    if shown and not was and w._scripts.OnShow then w._scripts.OnShow(w) end
-    if was and not shown and w._scripts.OnHide then w._scripts.OnHide(w) end
-end
+local function secureShown(w, shown) WoW.setShown(w, shown) end
 
 function WoW.layoutHeader(h)
     if WoW.clientHeaders then return WoW.clientHeaders.update(h) end
@@ -1032,10 +788,7 @@ function Methods.Show(w)
         local n = 0
         while w._attrs["child" .. (n + 1)] do n = n + 1 end
         for i = n + 1, want do
-            local child = CreateFrame(w._attrs.templateType or "Button", nil, w, w._attrs.template)
-            local size = WoW.templateSizes[w._attrs.template]
-            if size then child._width, child._height = size[1], size[2] end
-            w._attrs["child" .. i] = child
+            w._attrs["child" .. i] = CreateFrame(w._attrs.templateType or "Button", nil, w, w._attrs.template)
         end
     end
     WoW.layoutHeader(w)
@@ -1067,7 +820,7 @@ function WoW.useClientHeaders(file)
     local function secure(fn, ...)
         local was = WoW.secureCode
         WoW.secureCode = true
-        local ok, err = pcall(fn, ...)
+        local ok, err = WoW.rawpcall(fn, ...)
         WoW.secureCode = was
         if not ok then error(err, 0) end
     end
@@ -1086,18 +839,6 @@ function WoW.useClientHeaders(file)
         end,
     }
     return true
-end
-
--- Protected methods: one guard for the list (WoW.PROTECTED_METHODS) around
--- every implementation, after the last Methods.* definition (the header's
--- Show included): an insecure call on a protected frame in combat is recorded
--- in WoW.blocked and skipped.
-for _, name in ipairs(WoW.PROTECTED_METHODS) do
-    local impl = Methods[name]
-    Methods[name] = function(w, ...)
-        if not guard(w, name) then return end
-        if impl then return impl(w, ...) end
-    end
 end
 
 local function durationFor(u, channel)
@@ -1145,49 +886,34 @@ end
 -- Driving
 --------------------------------------------------------------------------------
 
--- Fire an event at every frame registered for it, the way the client does.
--- Unit events reach a RegisterUnitEvent frame only for its unit. Errors are
--- NOT caught: a handler that throws fails the test.
-function WoW.fire(event, ...)
-    local unit = ...
-    for _, w in ipairs(WoW.frames) do
-        local handler = w._scripts.OnEvent
-        if handler then
-            if w._events[event] then handler(w, event, ...)
-            elseif w._unitEvents[event] ~= nil and w._unitEvents[event] == unit then handler(w, event, ...) end
-        end
-    end
-end
-
 -- Combat as the client orders it (Retail; FOREVER-PROBE item 18.1 measures
 -- it on Forever): the lockdown is on before PLAYER_REGEN_DISABLED reaches a
 -- handler, and off before PLAYER_REGEN_ENABLED does.
 function WoW.enterCombat() WoW.combat = true; WoW.fire("PLAYER_REGEN_DISABLED") end
 function WoW.leaveCombat() WoW.combat = false; WoW.fire("PLAYER_REGEN_ENABLED") end
 
--- Every event any frame registered, fired for every modelled unit.
+-- Every event any frame registered, fired for every modelled unit and for
+-- "player", sorted. WowTestKit #94: the kit fires a plain registration once
+-- with no payload, and the engine registers its unit events with
+-- RegisterEvent (one frame for every token, Engine.lua), so its handler would
+-- get no unit and paint nothing: the combat and secrets tests' "everything
+-- fires" would no longer reach the painters. On the client a plainly
+-- registered unit event arrives once per unit, with that unit.
 function WoW.fireAllRegistered()
     local seen = {}
     for _, w in ipairs(WoW.frames) do
         for e in pairs(w._events) do seen[e] = true end
         for e in pairs(w._unitEvents) do seen[e] = true end
     end
-    for e in pairs(seen) do
-        for u in pairs(WoW.units) do WoW.fire(e, u) end
+    local list, units = {}, {}
+    for e in pairs(seen) do list[#list + 1] = e end
+    for u in pairs(WoW.units) do units[#units + 1] = u end
+    table.sort(list); table.sort(units)
+    for _, e in ipairs(list) do
+        for _, u in ipairs(units) do WoW.fire(e, u) end
         WoW.fire(e, "player")
     end
-    return seen
-end
-
--- One rendered frame: OnUpdate on every visible frame.
-function WoW.tick(elapsed)
-    elapsed = elapsed or 0.02
-    local list = {}
-    for _, w in ipairs(WoW.frames) do list[#list + 1] = w end
-    for _, w in ipairs(list) do
-        local fn = w._scripts.OnUpdate
-        if fn and Methods.IsVisible(w) then fn(w, elapsed) end
-    end
+    return list
 end
 
 -- The client's unit watch: show/hide watched frames by UnitExists.
@@ -1197,16 +923,9 @@ function WoW.applyUnitWatch()
     end
 end
 
--- Client string alias (in the dump's _G walk); LibStub's version check uses it.
-strmatch = string.match
-
 WoW.reset()
 
 -- Strict globals: any read of an undefined global is an error, except the
 -- addon's own globals that are legitimately nil before first assignment.
 -- LibStub: the embedded library's own loader reads _G.LibStub before creating it.
-local allowNil = { GlassRaidFrames = true, GlassRaidFramesDB = true, GlassRaidFramesCharDB = true, LibStub = true }
-setmetatable(_G, { __index = function(_, k)
-    if allowNil[k] then return nil end
-    error("read of undefined global '" .. tostring(k) .. "' (not stubbed: is it in the API dump?)", 2)
-end })
+Kit.strict({ GlassRaidFrames = true, GlassRaidFramesDB = true, GlassRaidFramesCharDB = true, LibStub = true })

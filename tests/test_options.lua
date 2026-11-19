@@ -9,9 +9,9 @@ O.panel._scripts.OnShow(O.panel)
 
 -- Every text placed in the page's one column (anchored to the content frame).
 local texts = {}
-for _, fs in ipairs(WoW.fontStrings) do
+for _, fs in ipairs(WoW.widgets) do
     local p = fs._points[1]
-    if p and p[1] == "TOPLEFT" and p[2] == fs._parent and type(fs._text) == "string"
+    if fs._type == "FontString" and p and p[1] == "TOPLEFT" and p[2] == fs._parent and type(fs._text) == "string"
         and fs._parent == O.content then
         texts[#texts + 1] = fs
     end
